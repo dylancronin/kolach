@@ -8,9 +8,12 @@ targets = []
 if "eggnog" in SELECTED_DBS:
     EGGNOG_DIR = str(DB_DIR / "eggnog")
     targets.append(f"{EGGNOG_DIR}/.download_complete")
-    # Import rules from rules/download_eggnog.smk relative to this file.
-    # Inherits global workflow scope (EGGNOG_DIR, config).
     include: "rules/download_eggnog.smk"
+
+if "kofam" in SELECTED_DBS:
+    KOFAM_DIR = str(DB_DIR / "kofam")
+    targets.append(f"{KOFAM_DIR}/.download_complete")
+    include: "rules/download_kofam.smk"
 
 rule all:
     input:

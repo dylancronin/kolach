@@ -38,16 +38,13 @@ def main():
     download_parser.add_argument(
         "--databases",
         nargs="+",
-        choices=["eggnog"],
+        choices=["eggnog", "kofam"],
         required=True,
         help="Databases to download.",
     )
+
     # ------------------------------------------------------
-    # end of download subcommand
-    # ------------------------------------------------------
-    
-    # ------------------------------------------------------
-    # annotate subcommand
+    # Annotate subcommand
     # ------------------------------------------------------
     annotate_parser = subparsers.add_parser(
         "annotate",
@@ -58,7 +55,7 @@ def main():
         "--protein-fasta",
         type=str,
         required=True,
-        help="Path to the input protein FASTA file (or stdout).",
+        help="Path to the input protein FASTA file.",
     )
 
     annotate_parser.add_argument(
@@ -68,43 +65,77 @@ def main():
         help="Path to the directory containing databases.",
     )
 
-    # annotate_parser.add_argument(
-    #     "--hmm-evalue",
-    #     type=float,
-    #     default=1e-3,
-    #     help="E-value threshold for HMMER (default: 1e-3).",
-    # )
+    annotate_parser.add_argument(
+        "--databases",
+        nargs="+",
+        choices=["kofam", "eggnog"],
+        default=["kofam"],
+        help="Databases to use for annotation (default: kofam).",
+    )
 
     annotate_parser.add_argument(
-        "--output",
+        "--output-dir",
         type=str,
-        default=None,
-        help="Output file path (or stdout if not provided).",
+        default="kolach_output",
+        help="Directory where output files will be written (default: kolach_output).",
     )
-    # ------------------------------------------------------
-    # end of annotate subcommand
-    # ------------------------------------------------------
 
+    annotate_parser.add_argument(
+        "--threads",
+        type=int,
+        default=1,
+        help="Number of CPU threads to use (default: 1).",
+    )
+
+    annotate_parser.add_argument(
+        "--skip-bitscore-heuristic",
+        action="store_true",
+        help="Skip the 75% bitscore relaxation heuristic for KOfam.",
+    )
+
+    annotate_parser.add_argument(
+        "--no-hmmer-prefiltering",
+        action="store_true",
+        help="Disable HMMER e-value prefiltering for large datasets.",
+    )
 
     args = parser.parse_args()
 
     if args.command == "download":
         snakefile_path = Path(__file__).parent / "workflows" / "download.smk"
-
-        # Format config arguments for Snakemake CLI
         db_list_repr = f"[{','.join(repr(db) for db in args.databases)}]"
         config_args = [
             f"database_dir={args.database_dir}",
             f"databases={db_list_repr}",
         ]
-
         cmd = [
             "snakemake",
             "-s", str(snakefile_path),
             "--cores", "1",
             "--config", *config_args,
         ]
+        result = subprocess.run(cmd)
+        if result.returncode != 0:
+            sys.exit(result.returncode)
 
+    elif args.command == "annotate":
+        snakefile_path = Path(__file__).parent / "workflows" / "annotate.smk"
+        db_list_repr = f"[{','.join(repr(db) for db in args.databases)}]"
+        config_args = [
+            f"database_dir={args.database_dir}",
+            f"protein_fasta={args.protein_fasta}",
+            f"output_dir={args.output_dir}",
+            f"databases={db_list_repr}",
+            f"threads={args.threads}",
+            f"skip_bitscore_heuristic={args.skip_bitscore_heuristic}",
+            f"no_hmmer_prefiltering={args.no_hmmer_prefiltering}",
+        ]
+        cmd = [
+            "snakemake",
+            "-s", str(snakefile_path),
+            "--cores", str(args.threads),
+            "--config", *config_args,
+        ]
         result = subprocess.run(cmd)
         if result.returncode != 0:
             sys.exit(result.returncode)
