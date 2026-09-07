@@ -1,0 +1,34 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python packaging & build artifacts
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+*.whl
+
+# Snakemake temporary files & logs
+.snakemake/
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local databases and test run outputs
+*.db
+kolach-db/
+test_output/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
