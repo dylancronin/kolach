@@ -15,6 +15,11 @@ if "kofam" in SELECTED_DBS:
     targets.append(f"{KOFAM_DIR}/.download_complete")
     include: "rules/download_kofam.smk"
 
+if "deepkoala" in SELECTED_DBS:
+    DEEPKOALA_DIR = str(DB_DIR / "deepkoala")
+    targets.append(f"{DEEPKOALA_DIR}/.download_complete")
+    include: "rules/download_deepkoala.smk"
+
 rule all:
     input:
         targets

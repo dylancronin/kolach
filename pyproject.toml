@@ -7,6 +7,11 @@ name = "kolach"
 version = "0.0.0"
 description = "Assign KEGG Orthology identifiers to proteins."
 requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.0.0",
+    "pandas>=2.0.0",
+    "tqdm>=4.60.0",
+]
 
 [project.scripts]
 kolach = "kolach.cli:main"

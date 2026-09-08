@@ -12,6 +12,11 @@ if "kofam" in SELECTED_DBS:
     targets.append(f"{OUTDIR}/kofam_annotations.tsv")
     include: "rules/annotate_kofam.smk"
 
+if "deepkoala" in SELECTED_DBS:
+    DEEPKOALA_DIR = str(DB_DIR / "deepkoala")
+    targets.append(f"{OUTDIR}/deepkoala_annotations.tsv")
+    include: "rules/annotate_deepkoala.smk"
+
 rule all:
     input:
         targets

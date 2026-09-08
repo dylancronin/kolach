@@ -38,9 +38,16 @@ def main():
     download_parser.add_argument(
         "--databases",
         nargs="+",
-        choices=["eggnog", "kofam"],
+        choices=["eggnog", "kofam", "deepkoala"],
         required=True,
         help="Databases to download.",
+    )
+
+    download_parser.add_argument(
+        "--deepkoala-release",
+        type=str,
+        default="latest",
+        help="DeepKOALA model release date (e.g. 202608 or latest, default: latest).",
     )
 
     # ------------------------------------------------------
@@ -68,7 +75,7 @@ def main():
     annotate_parser.add_argument(
         "--databases",
         nargs="+",
-        choices=["kofam", "eggnog"],
+        choices=["kofam", "eggnog", "deepkoala"],
         default=["kofam"],
         help="Databases to use for annotation (default: kofam).",
     )
@@ -99,6 +106,40 @@ def main():
         help="Disable HMMER e-value prefiltering for large datasets.",
     )
 
+    annotate_parser.add_argument(
+        "--deepkoala-model",
+        choices=["full", "frag"],
+        default="full",
+        help="DeepKOALA model variant (full or frag, default: full).",
+    )
+
+    annotate_parser.add_argument(
+        "--deepkoala-release",
+        type=str,
+        default="latest",
+        help="DeepKOALA model release date (e.g. 202608 or latest, default: latest).",
+    )
+
+    annotate_parser.add_argument(
+        "--device",
+        choices=["auto", "cpu", "cuda"],
+        default="auto",
+        help="Inference device for deep learning methods (default: auto).",
+    )
+
+    annotate_parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=64,
+        help="Batch size for DeepKOALA inference (default: 64).",
+    )
+
+    annotate_parser.add_argument(
+        "--detail",
+        action="store_true",
+        help="Include detailed probabilities, thresholds, and marks in DeepKOALA output.",
+    )
+
     args = parser.parse_args()
 
     if args.command == "download":
@@ -107,6 +148,7 @@ def main():
         config_args = [
             f"database_dir={args.database_dir}",
             f"databases={db_list_repr}",
+            f"deepkoala_release={args.deepkoala_release}",
         ]
         cmd = [
             "snakemake",
@@ -129,6 +171,11 @@ def main():
             f"threads={args.threads}",
             f"skip_bitscore_heuristic={args.skip_bitscore_heuristic}",
             f"no_hmmer_prefiltering={args.no_hmmer_prefiltering}",
+            f"deepkoala_model={args.deepkoala_model}",
+            f"deepkoala_release={args.deepkoala_release}",
+            f"device={args.device}",
+            f"batch_size={args.batch_size}",
+            f"detail={args.detail}",
         ]
         cmd = [
             "snakemake",
