@@ -17,6 +17,11 @@ if "deepkoala" in SELECTED_DBS:
     targets.append(f"{OUTDIR}/deepkoala_annotations.tsv")
     include: "rules/annotate_deepkoala.smk"
 
+if "eggnog" in SELECTED_DBS:
+    EGGNOG_DIR = str(DB_DIR / "eggnog")
+    targets.append(f"{OUTDIR}/eggnog_annotations.tsv")
+    include: "rules/annotate_eggnog.smk"
+
 rule all:
     input:
         targets

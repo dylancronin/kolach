@@ -38,7 +38,7 @@ Annotate a protein FASTA file with chosen methods:
 kolach annotate \
     --protein-fasta proteins.faa \
     --database-dir /path/to/databases \
-    --databases deepkoala kofam \
+    --databases deepkoala kofam eggnog \
     --output-dir kolach_output \
     --threads 8
 ```
@@ -49,3 +49,8 @@ DeepKOALA-specific options:
 - `--device`: Compute device (`auto`, `cpu`, or `cuda`; default: `auto`).
 - `--batch-size`: Batch size for inference (default: `64`).
 - `--detail`: Emit detailed probabilities, thresholds, and boundary marks.
+
+eggNOG-specific options:
+- `--eggnog-mode`: Search mode (`diamond` or `mmseqs`, default: `diamond`).
+- `--eggnog-sensmode`: Diamond sensitivity mode (`default`, `fast`, `mid-sensitive`, `sensitive`, `more-sensitive`, `very-sensitive`, `ultra-sensitive`; default: `default`).
+- `--eggnog-dbmem`: Load eggNOG diamond database into memory for faster search.

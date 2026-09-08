@@ -140,6 +140,26 @@ def main():
         help="Include detailed probabilities, thresholds, and marks in DeepKOALA output.",
     )
 
+    annotate_parser.add_argument(
+        "--eggnog-mode",
+        choices=["diamond", "mmseqs"],
+        default="diamond",
+        help="Search mode for eggNOG-mapper (diamond or mmseqs, default: diamond).",
+    )
+
+    annotate_parser.add_argument(
+        "--eggnog-sensmode",
+        choices=["default", "fast", "mid-sensitive", "sensitive", "more-sensitive", "very-sensitive", "ultra-sensitive"],
+        default="default",
+        help="Diamond sensitivity mode for eggNOG-mapper (default: default).",
+    )
+
+    annotate_parser.add_argument(
+        "--eggnog-dbmem",
+        action="store_true",
+        help="Load eggNOG diamond database into memory for faster execution.",
+    )
+
     args = parser.parse_args()
 
     if args.command == "download":
@@ -176,6 +196,9 @@ def main():
             f"device={args.device}",
             f"batch_size={args.batch_size}",
             f"detail={args.detail}",
+            f"eggnog_mode={args.eggnog_mode}",
+            f"eggnog_sensmode={args.eggnog_sensmode}",
+            f"eggnog_dbmem={args.eggnog_dbmem}",
         ]
         cmd = [
             "snakemake",
