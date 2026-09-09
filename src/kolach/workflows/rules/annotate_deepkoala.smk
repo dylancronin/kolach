@@ -17,6 +17,6 @@ rule annotate_deepkoala:
             deepkoala_release=config.get("deepkoala_release", "latest"),
             device=config.get("device", "auto"),
             batch_size=int(config.get("batch_size", 64)),
-            detail=config.get("detail", False),
+            detail=str(config.get("detail", True)).lower() in ("true", "1"),
         )
         annotate(args, output.tsv)

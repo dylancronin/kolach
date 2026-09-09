@@ -150,7 +150,7 @@ def annotate(args, output):
         raise ValueError("Threads must be at least 1")
     with tempfile.TemporaryDirectory(prefix="kolach-kofam-") as tmp:
         table = Path(tmp) / "hits.tbl"
-        cmd = ["hmmsearch", "--cpu", str(threads), "-o", str(Path(tmp) / "search.log"),
+        cmd = ["hmmsearch", "--cpu", str(threads), "--noali", "-o", "/dev/null",
                "--tblout", str(table), "-Z", str(count), "--domZ", str(count)]
         if getattr(args, "no_hmmer_prefiltering", False):
             cmd.extend(["-T", "-20", "--domT", "-20"])

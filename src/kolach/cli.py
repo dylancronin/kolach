@@ -97,7 +97,7 @@ def main():
     annotate_parser.add_argument(
         "--skip-bitscore-heuristic",
         action="store_true",
-        help="Skip the 75% bitscore relaxation heuristic for KOfam.",
+        help="Skip the 75 percent bitscore relaxation heuristic for KOfam.",
     )
 
     annotate_parser.add_argument(
@@ -136,8 +136,9 @@ def main():
 
     annotate_parser.add_argument(
         "--detail",
-        action="store_true",
-        help="Include detailed probabilities, thresholds, and marks in DeepKOALA output.",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Include detailed probabilities, thresholds, and marks in DeepKOALA output (default: True).",
     )
 
     annotate_parser.add_argument(

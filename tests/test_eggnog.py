@@ -113,9 +113,8 @@ class TestEggNOGIntegration(unittest.TestCase):
             self.assertIn("diamond", call_cmd)
             self.assertIn("--cpu", call_cmd)
             self.assertIn("4", call_cmd)
-            self.assertIn("--sensmode", call_cmd)
+            self.assertIn("--dmnd_sensmode", call_cmd)
             self.assertIn("sensitive", call_cmd)
-            self.assertIn("--dbmem", call_cmd)
 
     @patch("kolach.methods.eggnog.shutil.which", return_value="/fake/emapper.py")
     @patch("kolach.methods.eggnog.subprocess.run")

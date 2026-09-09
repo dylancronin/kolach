@@ -69,22 +69,13 @@ def annotate(args, output_file):
             "--override",
         ]
 
-        if dbmem:
-            cmd.append("--dbmem")
-
-        if sensmode and sensmode != "default":
-            cmd.extend(["--sensmode", sensmode])
+        if mode == "diamond" and sensmode and sensmode != "default":
+            cmd.extend(["--dmnd_sensmode", sensmode])
 
         env = os.environ.copy()
         env["EGGNOG_DATA_DIR"] = str(db_dir)
 
-        result = subprocess.run(cmd, env=env, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"emapper.py failed with returncode {result.returncode}:\n"
-                f"STDOUT: {result.stdout}\n"
-                f"STDERR: {result.stderr}"
-            )
+        subprocess.run(cmd, env=env, check=True)
 
         annotations_file = tmp_dir_path / f"{output_prefix}.emapper.annotations"
         if not annotations_file.exists():

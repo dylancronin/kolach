@@ -172,14 +172,14 @@ def annotate(args, output_file):
             date=resolved_release,
             batch_size=getattr(args, "batch_size", 64),
             num_workers=num_workers,
-            detail=getattr(args, "detail", False),
+            detail=getattr(args, "detail", True),
             device=getattr(args, "device", "auto"),
         )
 
         # Convert CSV product to TSV format for kolach standard
         with open(tmp_csv, "r", encoding="utf-8") as in_f, open(output_path, "w", encoding="utf-8", newline="") as out_f:
             reader = csv.reader(in_f)
-            writer = csv.writer(out_f, delimiter="\t")
+            writer = csv.writer(out_f, delimiter="\t", lineterminator="\n")
             for row in reader:
                 writer.writerow(row)
 
