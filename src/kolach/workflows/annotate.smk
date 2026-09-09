@@ -22,6 +22,12 @@ if "eggnog" in SELECTED_DBS:
     targets.append(f"{OUTDIR}/eggnog_annotations.tsv")
     include: "rules/annotate_eggnog.smk"
 
+if targets:
+    include: "rules/integrate.smk"
+    all_targets = targets + [f"{OUTDIR}/kolach_annotations.tsv"]
+else:
+    all_targets = []
+
 rule all:
     input:
-        targets
+        all_targets

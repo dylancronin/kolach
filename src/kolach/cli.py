@@ -196,6 +196,98 @@ def main():
         help="Number of chunks for processing DIAMOND seed index (--dmnd_index_chunks). If unspecified, upstream automatic tuning is used.",
     )
 
+    annotate_parser.add_argument(
+        "--eggnog-min-bitscore",
+        type=float,
+        default=60.0,
+        help="Minimum eggNOG bit score to retain KO assignment during integration (default: 60.0).",
+    )
+
+    annotate_parser.add_argument(
+        "--eggnog-filter-multi",
+        choices=["disambiguate", "strict", "none"],
+        default="disambiguate",
+        help="eggNOG multi-KO filtering strategy: disambiguate against other tools (default), strict (drop unresolved), or none.",
+    )
+
+    annotate_parser.add_argument(
+        "--conflict-strategy",
+        choices=["multiple", "priority", "drop", "union"],
+        default="multiple",
+        help="Consensus conflict strategy when active tools predict disjoint KOs: multiple (report as conflict and list all KOs, default), priority, or drop.",
+    )
+
+    # ------------------------------------------------------
+    # Integrate subcommand
+    # ------------------------------------------------------
+    integrate_parser = subparsers.add_parser(
+        "integrate",
+        help="Integrate annotation tables into a unified consensus table.",
+    )
+
+    integrate_parser.add_argument(
+        "--protein-fasta",
+        type=str,
+        default=None,
+        help="Path to the input protein FASTA file (preserves gene order and full gene inventory).",
+    )
+
+    integrate_parser.add_argument(
+        "--kofam-table",
+        type=str,
+        default=None,
+        help="Path to KOfam annotations TSV.",
+    )
+
+    integrate_parser.add_argument(
+        "--deepkoala-table",
+        type=str,
+        default=None,
+        help="Path to DeepKOALA annotations TSV.",
+    )
+
+    integrate_parser.add_argument(
+        "--eggnog-table",
+        type=str,
+        default=None,
+        help="Path to eggNOG annotations TSV.",
+    )
+
+    integrate_parser.add_argument(
+        "--output-file",
+        type=str,
+        required=True,
+        help="Path for integrated output TSV.",
+    )
+
+    integrate_parser.add_argument(
+        "--database-dir",
+        type=str,
+        default=None,
+        help="Path to database directory (to load KO definitions from ko_list).",
+    )
+
+    integrate_parser.add_argument(
+        "--eggnog-min-bitscore",
+        type=float,
+        default=60.0,
+        help="Minimum eggNOG bit score for orthology retention (default: 60.0).",
+    )
+
+    integrate_parser.add_argument(
+        "--eggnog-filter-multi",
+        choices=["disambiguate", "strict", "none"],
+        default="disambiguate",
+        help="eggNOG multi-KO disambiguation strategy (default: disambiguate).",
+    )
+
+    integrate_parser.add_argument(
+        "--conflict-strategy",
+        choices=["multiple", "priority", "drop", "union"],
+        default="multiple",
+        help="Conflict strategy for disjoint calls: multiple (report as conflict and list all KOs, default), priority, or drop.",
+    )
+
     args = parser.parse_args()
 
     if args.command == "download":
@@ -233,6 +325,9 @@ def main():
             f"batch_size={args.batch_size}",
             f"detail={args.detail}",
             f"eggnog_mode={args.eggnog_mode}",
+            f"eggnog_min_bitscore={args.eggnog_min_bitscore}",
+            f"eggnog_filter_multi={args.eggnog_filter_multi}",
+            f"conflict_strategy={args.conflict_strategy}",
         ]
         if args.eggnog_sensmode is not None:
             config_args.append(f"eggnog_sensmode={args.eggnog_sensmode}")
@@ -251,6 +346,21 @@ def main():
         result = subprocess.run(cmd)
         if result.returncode != 0:
             sys.exit(result.returncode)
+
+    elif args.command == "integrate":
+        from kolach.integrate import integrate_annotations
+
+        integrate_annotations(
+            protein_fasta=args.protein_fasta,
+            kofam_tsv=args.kofam_table,
+            deepkoala_tsv=args.deepkoala_table,
+            eggnog_tsv=args.eggnog_table,
+            output_tsv=args.output_file,
+            database_dir=args.database_dir,
+            eggnog_min_bitscore=args.eggnog_min_bitscore,
+            eggnog_filter_multi=args.eggnog_filter_multi,
+            conflict_strategy=args.conflict_strategy,
+        )
 
 
 if __name__ == "__main__":
