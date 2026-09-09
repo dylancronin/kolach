@@ -387,7 +387,7 @@ class TestEggNOGIntegration(unittest.TestCase):
             with self.assertRaises(ValueError):
                 annotate(args_invalid_chunks, f"{tmp}/out.tsv")
 
-    def test_cli_deprecated_dbmem_raises_error(self):
+    def test_cli_dbmem_removed_raises_error(self):
         test_args = [
             "annotate",
             "--protein-fasta", "dummy.faa",

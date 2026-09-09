@@ -196,20 +196,7 @@ def main():
         help="Number of chunks for processing DIAMOND seed index (--dmnd_index_chunks). If unspecified, upstream automatic tuning is used.",
     )
 
-    annotate_parser.add_argument(
-        "--eggnog-dbmem",
-        action="store_true",
-        help="[Deprecated] Previously used to load database into memory. In eggNOG-mapper v3, memory mapping is managed automatically and this flag is unsupported.",
-    )
-
     args = parser.parse_args()
-
-    if getattr(args, "eggnog_dbmem", False):
-        parser.error(
-            "--eggnog-dbmem is deprecated and unsupported in eggNOG-mapper v3. "
-            "eggNOG-mapper v3 manages database memory mapping automatically. "
-            "Please remove this flag."
-        )
 
     if args.command == "download":
         snakefile_path = Path(__file__).parent / "workflows" / "download.smk"
