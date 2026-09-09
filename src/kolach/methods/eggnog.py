@@ -21,8 +21,10 @@ def annotate(args, output_file):
             - protein_fasta: Input protein FASTA file
             - threads: Number of CPUs / threads
             - eggnog_mode: Search mode (diamond, mmseqs)
-            - eggnog_sensmode: Sensitivity mode for diamond
-            - eggnog_dbmem: Whether to load database into memory
+            - eggnog_sensmode: Sensitivity mode for diamond (or None for eggNOG default)
+            - eggnog_temp_dir: Base directory for temporary files (or None for system default)
+            - eggnog_dmnd_block_size: DIAMOND block size in billions of sequence letters (or None)
+            - eggnog_dmnd_index_chunks: Number of chunks for processing DIAMOND seed index (or None)
         output_file: Path to destination TSV output file.
     """
     if not shutil.which("emapper.py"):
@@ -48,14 +50,38 @@ def annotate(args, output_file):
     output_path = Path(output_file).expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(prefix="kolach_eggnog_") as tmp_dir:
+    base_tmp_dir = getattr(args, "eggnog_temp_dir", None)
+    if str(base_tmp_dir).lower() in ("none", ""):
+        base_tmp_dir = None
+    if base_tmp_dir is not None:
+        base_tmp_dir = str(Path(base_tmp_dir).expanduser().resolve())
+        Path(base_tmp_dir).mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix="kolach_eggnog_", dir=base_tmp_dir) as tmp_dir:
         tmp_dir_path = Path(tmp_dir)
         output_prefix = "eggnog_res"
 
         threads = getattr(args, "threads", 1)
         mode = getattr(args, "eggnog_mode", "diamond")
-        sensmode = getattr(args, "eggnog_sensmode", "default")
-        dbmem = getattr(args, "eggnog_dbmem", False)
+        sensmode = getattr(args, "eggnog_sensmode", None)
+        if str(sensmode).lower() in ("none", ""):
+            sensmode = None
+
+        block_size = getattr(args, "eggnog_dmnd_block_size", None)
+        if str(block_size).lower() in ("none", ""):
+            block_size = None
+        if block_size is not None:
+            block_size = float(block_size)
+            if block_size <= 0:
+                raise ValueError(f"eggnog_dmnd_block_size must be positive, got {block_size}")
+
+        index_chunks = getattr(args, "eggnog_dmnd_index_chunks", None)
+        if str(index_chunks).lower() in ("none", ""):
+            index_chunks = None
+        if index_chunks is not None:
+            index_chunks = int(index_chunks)
+            if index_chunks <= 0:
+                raise ValueError(f"eggnog_dmnd_index_chunks must be a positive integer, got {index_chunks}")
 
         cmd = [
             "emapper.py",
@@ -66,16 +92,24 @@ def annotate(args, output_file):
             "--cpu", str(threads),
             "-o", output_prefix,
             "--output_dir", str(tmp_dir_path),
+            "--temp_dir", str(tmp_dir_path),
             "--override",
         ]
 
-        if mode == "diamond" and sensmode and sensmode != "default":
-            cmd.extend(["--dmnd_sensmode", sensmode])
+        if mode == "diamond":
+            if sensmode is not None:
+                cmd.extend(["--dmnd_sensmode", str(sensmode)])
+            if block_size is not None:
+                cmd.extend(["--dmnd_block_size", str(block_size)])
+            if index_chunks is not None:
+                cmd.extend(["--dmnd_index_chunks", str(index_chunks)])
 
         env = os.environ.copy()
         env["EGGNOG_DATA_DIR"] = str(db_dir)
 
-        subprocess.run(cmd, env=env, check=True)
+        result = subprocess.run(cmd, env=env)
+        if result.returncode != 0:
+            raise RuntimeError(f"emapper.py failed with return code {result.returncode}")
 
         annotations_file = tmp_dir_path / f"{output_prefix}.emapper.annotations"
         if not annotations_file.exists():

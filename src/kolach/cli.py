@@ -4,6 +4,26 @@ import subprocess
 import sys
 
 
+def positive_float(value: str) -> float:
+    try:
+        val = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid float value: '{value}'")
+    if val <= 0:
+        raise argparse.ArgumentTypeError(f"Value must be positive (> 0), got {value}")
+    return val
+
+
+def positive_int(value: str) -> int:
+    try:
+        val = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid integer value: '{value}'")
+    if val <= 0:
+        raise argparse.ArgumentTypeError(f"Value must be a positive integer (> 0), got {value}")
+    return val
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="kolach",
@@ -151,17 +171,45 @@ def main():
     annotate_parser.add_argument(
         "--eggnog-sensmode",
         choices=["default", "fast", "mid-sensitive", "sensitive", "more-sensitive", "very-sensitive", "ultra-sensitive"],
-        default="default",
-        help="Diamond sensitivity mode for eggNOG-mapper (default: default).",
+        default=None,
+        help="Diamond sensitivity mode for eggNOG-mapper. If unspecified, eggNOG-mapper's default (sensitive, iterative) is used. Selecting 'default' explicitly requests DIAMOND's default sensitivity mode.",
+    )
+
+    annotate_parser.add_argument(
+        "--eggnog-temp-dir",
+        type=str,
+        default=None,
+        help="Base directory for eggNOG temporary files and DIAMOND scratch space (default: system temporary directory).",
+    )
+
+    annotate_parser.add_argument(
+        "--eggnog-dmnd-block-size",
+        type=positive_float,
+        default=None,
+        help="DIAMOND block size in billions of sequence letters (--dmnd_block_size). If unspecified, upstream automatic tuning based on host RAM is used. Note: host RAM tuning may exceed allocated memory in Slurm jobs.",
+    )
+
+    annotate_parser.add_argument(
+        "--eggnog-dmnd-index-chunks",
+        type=positive_int,
+        default=None,
+        help="Number of chunks for processing DIAMOND seed index (--dmnd_index_chunks). If unspecified, upstream automatic tuning is used.",
     )
 
     annotate_parser.add_argument(
         "--eggnog-dbmem",
         action="store_true",
-        help="Load eggNOG diamond database into memory for faster execution.",
+        help="[Deprecated] Previously used to load database into memory. In eggNOG-mapper v3, memory mapping is managed automatically and this flag is unsupported.",
     )
 
     args = parser.parse_args()
+
+    if getattr(args, "eggnog_dbmem", False):
+        parser.error(
+            "--eggnog-dbmem is deprecated and unsupported in eggNOG-mapper v3. "
+            "eggNOG-mapper v3 manages database memory mapping automatically. "
+            "Please remove this flag."
+        )
 
     if args.command == "download":
         snakefile_path = Path(__file__).parent / "workflows" / "download.smk"
@@ -198,9 +246,15 @@ def main():
             f"batch_size={args.batch_size}",
             f"detail={args.detail}",
             f"eggnog_mode={args.eggnog_mode}",
-            f"eggnog_sensmode={args.eggnog_sensmode}",
-            f"eggnog_dbmem={args.eggnog_dbmem}",
         ]
+        if args.eggnog_sensmode is not None:
+            config_args.append(f"eggnog_sensmode={args.eggnog_sensmode}")
+        if args.eggnog_temp_dir is not None:
+            config_args.append(f"eggnog_temp_dir={args.eggnog_temp_dir}")
+        if args.eggnog_dmnd_block_size is not None:
+            config_args.append(f"eggnog_dmnd_block_size={args.eggnog_dmnd_block_size}")
+        if args.eggnog_dmnd_index_chunks is not None:
+            config_args.append(f"eggnog_dmnd_index_chunks={args.eggnog_dmnd_index_chunks}")
         cmd = [
             "snakemake",
             "-s", str(snakefile_path),
