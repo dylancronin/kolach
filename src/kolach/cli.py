@@ -204,6 +204,13 @@ def main():
     )
 
     annotate_parser.add_argument(
+        "--eggnog-max-evalue",
+        type=float,
+        default=1e-5,
+        help="Maximum eggNOG e-value to retain KO assignment during integration (default: 1e-5).",
+    )
+
+    annotate_parser.add_argument(
         "--eggnog-filter-multi",
         choices=["disambiguate", "strict", "none"],
         default="disambiguate",
@@ -214,7 +221,12 @@ def main():
         "--conflict-strategy",
         choices=["multiple", "priority", "drop", "union"],
         default="multiple",
-        help="Consensus conflict strategy when active tools predict disjoint KOs: multiple (report as conflict and list all KOs, default), priority, or drop.",
+        help=(
+            "Consensus conflict strategy for disjoint calls: multiple (default: sets accepted_ko and ko to '-', "
+            "records conflicting alternatives in alternative_kos; recommended for downstream pathway tools to avoid "
+            "false multifunctional enzyme inference), priority (selects top method in hierarchy), or drop (discards "
+            "conflicting calls, setting accepted_ko and ko to '-', retaining alternatives in alternative_kos)."
+        ),
     )
 
     # ------------------------------------------------------
@@ -261,6 +273,13 @@ def main():
     )
 
     integrate_parser.add_argument(
+        "--evidence-file",
+        type=str,
+        default=None,
+        help="Path for long-form evidence output TSV (default: kolach_evidence.tsv alongside output-file).",
+    )
+
+    integrate_parser.add_argument(
         "--database-dir",
         type=str,
         default=None,
@@ -275,6 +294,13 @@ def main():
     )
 
     integrate_parser.add_argument(
+        "--eggnog-max-evalue",
+        type=float,
+        default=1e-5,
+        help="Maximum eggNOG e-value for orthology retention (default: 1e-5).",
+    )
+
+    integrate_parser.add_argument(
         "--eggnog-filter-multi",
         choices=["disambiguate", "strict", "none"],
         default="disambiguate",
@@ -285,7 +311,12 @@ def main():
         "--conflict-strategy",
         choices=["multiple", "priority", "drop", "union"],
         default="multiple",
-        help="Conflict strategy for disjoint calls: multiple (report as conflict and list all KOs, default), priority, or drop.",
+        help=(
+            "Consensus conflict strategy for disjoint calls: multiple (default: sets accepted_ko and ko to '-', "
+            "records conflicting alternatives in alternative_kos; recommended for downstream pathway tools to avoid "
+            "false multifunctional enzyme inference), priority (selects top method in hierarchy), or drop (discards "
+            "conflicting calls, setting accepted_ko and ko to '-', retaining alternatives in alternative_kos)."
+        ),
     )
 
     args = parser.parse_args()
@@ -326,6 +357,7 @@ def main():
             f"detail={args.detail}",
             f"eggnog_mode={args.eggnog_mode}",
             f"eggnog_min_bitscore={args.eggnog_min_bitscore}",
+            f"eggnog_max_evalue={args.eggnog_max_evalue}",
             f"eggnog_filter_multi={args.eggnog_filter_multi}",
             f"conflict_strategy={args.conflict_strategy}",
         ]
@@ -356,8 +388,10 @@ def main():
             deepkoala_tsv=args.deepkoala_table,
             eggnog_tsv=args.eggnog_table,
             output_tsv=args.output_file,
+            evidence_tsv=args.evidence_file,
             database_dir=args.database_dir,
             eggnog_min_bitscore=args.eggnog_min_bitscore,
+            eggnog_max_evalue=args.eggnog_max_evalue,
             eggnog_filter_multi=args.eggnog_filter_multi,
             conflict_strategy=args.conflict_strategy,
         )

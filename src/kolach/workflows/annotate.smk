@@ -24,7 +24,7 @@ if "eggnog" in SELECTED_DBS:
 
 if targets:
     include: "rules/integrate.smk"
-    all_targets = targets + [f"{OUTDIR}/kolach_annotations.tsv"]
+    all_targets = targets + [f"{OUTDIR}/kolach_annotations.tsv", f"{OUTDIR}/kolach_evidence.tsv"]
 else:
     all_targets = []
 
