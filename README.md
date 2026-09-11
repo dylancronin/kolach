@@ -106,14 +106,14 @@ flowchart TD
     AgreeAll -->|"Yes"| Unanimous["unanimous<br/>(All active methods agree)"]
     AgreeAll -->|"No"| AgreePair{"Do at least 2<br/>methods agree?"}
     AgreePair -->|"Yes"| Majority["majority<br/>(≥ 2 methods agree)"]
-    AgreePair -->|"No (zero overlap)"| Conflict["conflict<br/>(Disjoint predictions)"]
+    AgreePair -->|"No"| Conflict["conflict<br/>(Disjoint predictions)"]
 
     Count -->|"Exactly 1 method"| CheckCandidate{"Corroborated by another<br/>method's sub-threshold candidate?"}
     CheckCandidate -->|"Yes"| MajorityRescued["majority_rescued<br/>(Validated by candidate)"]
     CheckCandidate -->|"No"| SingleTool["single_tool<br/>(1 confident method)"]
 
     Count -->|"0 methods"| CheckDual{"Do 2 sub-threshold candidates<br/>independently agree on same KO?"}
-    CheckDual -->|"Yes"| RescuedDual["rescued_dual_candidate<br/>(Orthogonal candidate agreement)"]
+    CheckDual -->|"Yes"| RescuedDual["rescued_dual_candidate<br/>"]
     CheckDual -->|"No"| Unannotated["unannotated<br/>(No consensus KO)"]
 ```
 
