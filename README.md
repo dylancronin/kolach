@@ -85,7 +85,7 @@ Sub-threshold candidate predictions provide corroborating evidence without being
 
 #### 4. Conflict Adjudication & Separation of Accepted KOs
 To protect downstream metabolic pathway reconstruction and completeness tools (e.g. MinPath, DRAM, KEGGDecoder) from failing or misinterpreting comma-separated strings as multifunctional enzymes, **`accepted_ko` strictly contains single hits only**:
-- When a single KO is accepted (e.g. unanimous/majority/single_tool consensus on 1 KO): `accepted_ko` contains that single KO, and `ko` mirrors `accepted_ko`. If other tools disambiguated an eggNOG multi-KO hit down to that single KO, the other candidate hits eggNOG proposed are preserved in **`alternative_kos`** (e.g. `K00375`) with their definitions in `alternative_definition`. If no sibling candidates were dropped, `alternative_kos` is `-`.
+- When a single KO is accepted (e.g. unanimous/majority/single_tool consensus on 1 KO): `accepted_ko` contains that single KO, and `ko` mirrors `accepted_ko`. Unselected confident calls from minority methods (e.g. KOfam calling `K00001` when DeepKOALA and eggNOG agree on `K00002`) and dropped eggNOG candidates from disambiguation are preserved in **`alternative_kos`** with their definitions in `alternative_definition`. Retaining minority alternatives preserves auditability without converting an otherwise valid majority consensus into a conflict. If no alternative candidates exist, `alternative_kos` is `-`.
 - When multiple KO predictions exist without cross-tool overlap (e.g. unresolved multi-KO hits from an eggNOG orthology group or multidomain KOfam call): `accepted_ko` and `ko` are set to `-`, while the candidate KOs are placed in **`alternative_kos`** (e.g. `K01447,K01448`), and their definitions are placed in `alternative_definition`.
 - When active methods produce disjoint predictions with zero KO overlap:
   - `multiple` *(default)*: Labeled as `consensus_level = conflict`. **`accepted_ko` is set to `-`** (and `ko` is set to `-`), while conflicting alternatives are listed in **`alternative_kos`** (e.g. `K00004,K00005,K00006`). Functional definitions for accepted KOs are set to `-`, while alternative definitions are recorded in `alternative_definition`.
@@ -93,10 +93,11 @@ To protect downstream metabolic pathway reconstruction and completeness tools (e
   - `drop`: Discards the conflicting call (`accepted_ko = -`, `ko = -`), retaining conflicting alternatives in `alternative_kos` for auditability, labeled `conflict_dropped`.
 
 #### 5. Functional Definition Resolution
-The `definition` column is populated using a multi-tier lookup:
-1. **Master Dictionary (`ko_list`)**: If `--database-dir` is provided, `kolach` queries the master `kofam/ko_list` table containing official definitions and EC numbers for all ~28,388 KEGG Orthologies. This works even for KOs called solely by DeepKOALA.
-2. **KOfam Table**: Falls back to the `definition` column from `kofam_annotations.tsv`.
-3. **eggNOG Table**: Falls back to the `Description` column from `eggnog_annotations.tsv`.
+The `definition` and `alternative_definition` columns are populated strictly by matching the specific KO being defined:
+1. **Master Dictionary (`ko_list`)**: Primary source. If `--database-dir` is provided, `kolach` queries the master `kofam/ko_list` table containing official definitions for all ~28,388 KEGG Orthologies.
+2. **Matching KOfam Evidence**: If not in `ko_list`, resolves from the KO-specific profile definition in KOfam evidence records for that exact KO. Losing KOfam KO definitions are never attached to winning KOs from other methods.
+3. **Absence of KO Definition**: Generic seed-hit descriptions from eggNOG are preserved separately as source metadata (`eggnog_description`) and are not used as authoritative KO-specific definitions. If no matching KO definition is found, `definition` returns `-`.
+4. **Alternative Definitions**: Multi-KO alternatives in `alternative_kos` preserve an unambiguous mapping between each KO and its definition (e.g. `K00001: def1; K00003: def3`), or `-` if none are available.
 
 ---
 

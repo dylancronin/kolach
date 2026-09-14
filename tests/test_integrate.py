@@ -10,9 +10,13 @@ from kolach.integrate import (
     parse_kos,
     format_kos,
     read_fasta_ids,
+    load_ko_definitions,
     load_kofam,
     load_deepkoala,
     load_eggnog,
+    extract_kofam_records,
+    extract_deepkoala_records,
+    extract_eggnog_records,
     filter_and_disambiguate_eggnog,
     adjudicate_consensus,
     integrate_annotations,
@@ -82,7 +86,7 @@ class TestIntegrate(unittest.TestCase):
         row2 = df[df["gene_id"] == "gene2"].iloc[0]
         self.assertEqual(row2["deepkoala_ko"], "-")
 
-        # gene3 has K05565 but probability 0.6004 < threshold 0.8674 -> must not be trusted!
+        # gene3 has K05565 but probability 0.6004 < threshold 0.8674 -> below threshold candidate
         row3 = df[df["gene_id"] == "gene3"].iloc[0]
         self.assertEqual(row3["deepkoala_ko"], "-")
         self.assertEqual(row3["deepkoala_candidate_ko"], "K05565")
@@ -145,17 +149,18 @@ class TestIntegrate(unittest.TestCase):
 
         active_tools = ["kofam", "deepkoala", "eggnog"]
 
-        # 1. Multiple strategy (default: accepted_ko and ko set to '-', alternative_kos lists conflicting KOs)
+        # 1. Multiple strategy (default)
         res_m = adjudicate_consensus(data.copy(), active_tools, conflict_strategy="multiple")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_unanimous", "consensus_level"].values[0], "unanimous")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_unanimous", "accepted_ko"].values[0], "K00001")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_unanimous", "ko"].values[0], "K00001")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_unanimous", "alternative_kos"].values[0], "-")
 
+        # g_majority has eggNOG calling K00099, so K00099 is preserved in alternative_kos
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_majority", "consensus_level"].values[0], "majority")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_majority", "accepted_ko"].values[0], "K00002")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_majority", "ko"].values[0], "K00002")
-        self.assertEqual(res_m.loc[res_m["gene_id"] == "g_majority", "alternative_kos"].values[0], "-")
+        self.assertEqual(res_m.loc[res_m["gene_id"] == "g_majority", "alternative_kos"].values[0], "K00099")
 
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_single", "consensus_level"].values[0], "single_tool")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_single", "accepted_ko"].values[0], "K00003")
@@ -376,6 +381,295 @@ class TestIntegrate(unittest.TestCase):
             en_k2 = ev_df[(ev_df["ko"] == "K00002") & (ev_df["method"] == "eggnog")]
             self.assertEqual(len(en_k2), 0)
 
+    # -------------------------------------------------------------------------
+    # Focused Tests for 4 Integration Requirements & Regression Cases
+    # -------------------------------------------------------------------------
+
+    def test_definition_resolution_winning_differs_from_kofam_regression(self):
+        """Regression case: KOfam calls K00001 ('Function A'); DeepKOALA and eggNOG call K00002.
+
+        Winning KO K00002 must never receive Function A merely because KOfam supplied that description.
+        Minority call K00001 must be preserved in alternative_kos.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            kf = tmp / "kofam.tsv"
+            kf.write_text(
+                "gene_id\tko\tassignment\tscore_type\tthreshold\tbit_score\te_value\tdomain_bit_score\tdomain_e_value\tdefinition\n"
+                "g1\tK00001\tthreshold\tfull\t100.0\t200.0\t1e-50\t200.0\t1e-50\tFunction A\n"
+            )
+            dk = tmp / "deepkoala.tsv"
+            dk.write_text(
+                "name\tpredict_label\tprobability\tthreshold\tannotate\n"
+                "g1\tK00002\t0.990\t0.500\t*\n"
+            )
+            en = tmp / "eggnog.tsv"
+            en.write_text(
+                "query\tseed\tevalue\tscore\tKEGG_ko\tDescription\n"
+                "g1\ts1\t1e-50\t150.0\tK00002\teggnog seed description\n"
+            )
+            out_tsv = tmp / "out.tsv"
+            ev_tsv = tmp / "ev.tsv"
+
+            df = integrate_annotations(
+                kofam_tsv=kf,
+                deepkoala_tsv=dk,
+                eggnog_tsv=en,
+                output_tsv=out_tsv,
+                evidence_tsv=ev_tsv,
+            )
+
+            row = df[df["gene_id"] == "g1"].iloc[0]
+            self.assertEqual(row["accepted_ko"], "K00002")
+            self.assertEqual(row["ko"], "K00002")
+            self.assertEqual(row["alternative_kos"], "K00001")
+            self.assertEqual(row["consensus_level"], "majority")
+
+            # Definition of winning K00002 must NOT be Function A!
+            self.assertNotEqual(row["definition"], "Function A")
+            self.assertEqual(row["definition"], "-")
+
+            # Alternative definition for K00001 must be Function A
+            self.assertEqual(row["alternative_definition"], "Function A")
+
+    def test_missing_ko_specific_definitions_return_dash(self):
+        """When no matching KO definition is found in ko_list or evidence records, definition is '-'."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            dk = tmp / "deepkoala.tsv"
+            dk.write_text(
+                "name\tpredict_label\tprobability\tthreshold\tannotate\n"
+                "g1\tK99999\t0.950\t0.500\t*\n"
+            )
+            out_tsv = tmp / "out.tsv"
+
+            df = integrate_annotations(
+                deepkoala_tsv=dk,
+                output_tsv=out_tsv,
+            )
+
+            row = df[df["gene_id"] == "g1"].iloc[0]
+            self.assertEqual(row["accepted_ko"], "K99999")
+            self.assertEqual(row["definition"], "-")
+            self.assertEqual(row["alternative_definition"], "-")
+
+    def test_master_ko_list_definition_preferred_when_available(self):
+        """Master ko_list definition takes precedence."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            db_dir = tmp / "databases"
+            kofam_db = db_dir / "kofam"
+            kofam_db.mkdir(parents=True)
+            ko_list = kofam_db / "ko_list"
+            ko_list.write_text("K00002\t100.0\tMaster Definition For K00002\n")
+
+            dk = tmp / "deepkoala.tsv"
+            dk.write_text(
+                "name\tpredict_label\tprobability\tthreshold\tannotate\n"
+                "g1\tK00002\t0.950\t0.500\t*\n"
+            )
+            en = tmp / "eggnog.tsv"
+            en.write_text(
+                "query\tseed\tevalue\tscore\tKEGG_ko\tDescription\n"
+                "g1\ts1\t1e-50\t150.0\tK00002\teggnog seed description\n"
+            )
+            out_tsv = tmp / "out.tsv"
+
+            df = integrate_annotations(
+                deepkoala_tsv=dk,
+                eggnog_tsv=en,
+                database_dir=db_dir,
+                output_tsv=out_tsv,
+            )
+
+            row = df[df["gene_id"] == "g1"].iloc[0]
+            self.assertEqual(row["accepted_ko"], "K00002")
+            self.assertEqual(row["definition"], "Master Definition For K00002")
+
+    def test_missing_and_unknown_acceptance_status(self):
+        """Missing or unrecognized status information must not default to threshold_passing.
+
+        Unknown evidence must not count as a confident vote or silently enter candidate rescue.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            # DeepKOALA with missing score and threshold, empty annotate
+            dk = tmp / "deepkoala.tsv"
+            dk.write_text(
+                "name\tpredict_label\tprobability\tthreshold\tannotate\n"
+                "g_unknown\tK00001\t\t\t\n"
+            )
+            # KOfam with missing assignment and missing scores
+            kf = tmp / "kofam.tsv"
+            kf.write_text(
+                "gene_id\tko\tassignment\tscore_type\tthreshold\tbit_score\te_value\tdomain_bit_score\tdomain_e_value\tdefinition\n"
+                "g_unknown\tK00001\t-\t-\t\t\t\t\t\t-\n"
+            )
+            out_tsv = tmp / "out.tsv"
+            ev_tsv = tmp / "ev.tsv"
+
+            df = integrate_annotations(
+                kofam_tsv=kf,
+                deepkoala_tsv=dk,
+                output_tsv=out_tsv,
+                evidence_tsv=ev_tsv,
+            )
+
+            row = df[df["gene_id"] == "g_unknown"].iloc[0]
+            self.assertEqual(row["accepted_ko"], "-")
+            self.assertEqual(row["ko"], "-")
+            self.assertEqual(row["consensus_level"], "unannotated")
+            self.assertEqual(row["evidence"], "-")
+
+            ev_df = pd.read_csv(ev_tsv, sep="\t", dtype=str)
+            self.assertEqual(len(ev_df), 2)
+            for _, ev_row in ev_df.iterrows():
+                self.assertEqual(ev_row["original_status"], "unknown")
+                self.assertEqual(ev_row["cross_method_status"], "unknown")
+
+    def test_mixed_complete_and_missing_score_rows(self):
+        """DeepKOALA and eggNOG tables with mixed complete and missing score rows evaluate each row correctly."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            dk = tmp / "deepkoala.tsv"
+            dk.write_text(
+                "name\tpredict_label\tprobability\tthreshold\tannotate\n"
+                "g1\tK00001\t0.950\t0.500\t*\n"
+                "g2\tK00002\t0.300\t0.500\t\n"
+                "g3\tK00003\t\t\t\n"
+            )
+            en = tmp / "eggnog.tsv"
+            en.write_text(
+                "query\tseed\tevalue\tscore\tKEGG_ko\tDescription\n"
+                "g1\ts1\t1e-50\t150.0\tK00001\tdef1\n"
+                "g2\ts2\t1e-02\t40.0\tK00002\tdef2\n"
+                "g3\ts3\t\t\tK00003\tdef3\n"
+            )
+            out_tsv = tmp / "out.tsv"
+            ev_tsv = tmp / "ev.tsv"
+
+            df = integrate_annotations(
+                deepkoala_tsv=dk,
+                eggnog_tsv=en,
+                output_tsv=out_tsv,
+                evidence_tsv=ev_tsv,
+            )
+
+            ev_df = pd.read_csv(ev_tsv, sep="\t", dtype=str)
+
+            # g1: both methods threshold_passing -> unanimous
+            g1_dk = ev_df[(ev_df["gene_id"] == "g1") & (ev_df["method"] == "deepkoala")].iloc[0]
+            g1_en = ev_df[(ev_df["gene_id"] == "g1") & (ev_df["method"] == "eggnog")].iloc[0]
+            self.assertEqual(g1_dk["original_status"], "threshold_passing")
+            self.assertEqual(g1_en["original_status"], "threshold_passing")
+            self.assertEqual(df[df["gene_id"] == "g1"].iloc[0]["consensus_level"], "unanimous")
+
+            # g2: both below_threshold -> orthogonal_dual_candidate
+            g2_dk = ev_df[(ev_df["gene_id"] == "g2") & (ev_df["method"] == "deepkoala")].iloc[0]
+            g2_en = ev_df[(ev_df["gene_id"] == "g2") & (ev_df["method"] == "eggnog")].iloc[0]
+            self.assertEqual(g2_dk["original_status"], "below_threshold")
+            self.assertEqual(g2_en["original_status"], "below_threshold")
+            self.assertEqual(df[df["gene_id"] == "g2"].iloc[0]["consensus_level"], "orthogonal_dual_candidate")
+
+            # g3: both missing scores -> unknown -> unannotated
+            g3_dk = ev_df[(ev_df["gene_id"] == "g3") & (ev_df["method"] == "deepkoala")].iloc[0]
+            g3_en = ev_df[(ev_df["gene_id"] == "g3") & (ev_df["method"] == "eggnog")].iloc[0]
+            self.assertEqual(g3_dk["original_status"], "unknown")
+            self.assertEqual(g3_en["original_status"], "unknown")
+            self.assertEqual(df[df["gene_id"] == "g3"].iloc[0]["consensus_level"], "unannotated")
+
+    def test_minority_alternatives_retained_from_every_method(self):
+        """Unselected threshold-passing calls from every method are preserved in alternative_kos."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+
+            # Test A: DeepKOALA minority
+            kf = tmp / "kf.tsv"
+            kf.write_text(
+                "gene_id\tko\tassignment\tscore_type\tthreshold\tbit_score\te_value\tdomain_bit_score\tdomain_e_value\tdefinition\n"
+                "gA\tK00001\tthreshold\tfull\t100.0\t200.0\t1e-50\t200.0\t1e-50\tdefA\n"
+            )
+            dk = tmp / "dk.tsv"
+            dk.write_text(
+                "name\tpredict_label\tprobability\tthreshold\tannotate\n"
+                "gA\tK00003\t0.950\t0.500\t*\n"
+            )
+            en = tmp / "en.tsv"
+            en.write_text(
+                "query\tseed\tevalue\tscore\tKEGG_ko\tDescription\n"
+                "gA\ts1\t1e-50\t150.0\tK00001\tdefA\n"
+            )
+            out_tsv = tmp / "outA.tsv"
+
+            df = integrate_annotations(
+                kofam_tsv=kf,
+                deepkoala_tsv=dk,
+                eggnog_tsv=en,
+                output_tsv=out_tsv,
+            )
+            rowA = df[df["gene_id"] == "gA"].iloc[0]
+            self.assertEqual(rowA["accepted_ko"], "K00001")
+            self.assertEqual(rowA["consensus_level"], "majority")
+            # DeepKOALA minority K00003 preserved in alternative_kos
+            self.assertEqual(rowA["alternative_kos"], "K00003")
+
+    def test_one_resolved_accepted_ko_with_different_alternatives(self):
+        """One resolved accepted KO with minority call and disambiguated dropped candidate."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            kf = tmp / "kf.tsv"
+            kf.write_text(
+                "gene_id\tko\tassignment\tscore_type\tthreshold\tbit_score\te_value\tdomain_bit_score\tdomain_e_value\tdefinition\n"
+                "g1\tK00001\tthreshold\tfull\t100.0\t200.0\t1e-50\t200.0\t1e-50\tdef1\n"
+            )
+            dk = tmp / "dk.tsv"
+            dk.write_text(
+                "name\tpredict_label\tprobability\tthreshold\tannotate\n"
+                "g1\tK00002\t0.950\t0.500\t*\n"
+            )
+            en = tmp / "en.tsv"
+            en.write_text(
+                "query\tseed\tevalue\tscore\tKEGG_ko\tDescription\n"
+                "g1\ts1\t1e-50\t150.0\tK00002,K00003\tdef_multi\n"
+            )
+            out_tsv = tmp / "out.tsv"
+
+            df = integrate_annotations(
+                kofam_tsv=kf,
+                deepkoala_tsv=dk,
+                eggnog_tsv=en,
+                output_tsv=out_tsv,
+            )
+            row = df[df["gene_id"] == "g1"].iloc[0]
+            # K00002 agreed by DeepKOALA and eggNOG -> majority
+            self.assertEqual(row["accepted_ko"], "K00002")
+            self.assertEqual(row["consensus_level"], "majority")
+            # Both minority KOfam hit (K00001) and dropped eggNOG hit (K00003) in alternative_kos
+            self.assertEqual(row["alternative_kos"], "K00001,K00003")
+
+    def test_unresolved_multiple_candidates_produce_dash_accepted_ko(self):
+        """Unresolved multi-KO calls produce accepted_ko = '-' and candidates in alternative_kos."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            # Solitary multi-KO eggNOG hit
+            en = tmp / "en.tsv"
+            en.write_text(
+                "query\tseed\tevalue\tscore\tKEGG_ko\tDescription\n"
+                "g1\ts1\t1e-50\t150.0\tK01447,K01448\tN-acetylmuramoyl-L-alanine amidase\n"
+            )
+            out_tsv = tmp / "out.tsv"
+
+            df = integrate_annotations(
+                eggnog_tsv=en,
+                output_tsv=out_tsv,
+            )
+            row = df[df["gene_id"] == "g1"].iloc[0]
+            self.assertEqual(row["accepted_ko"], "-")
+            self.assertEqual(row["ko"], "-")
+            self.assertEqual(row["alternative_kos"], "K01447,K01448")
+            self.assertEqual(row["definition"], "-")
+            self.assertEqual(row["alternative_definition"], "-")
+
     def test_annotation_and_standalone_integration_produce_evidence_table(self):
         """Verify kolach_evidence.tsv is automatically created alongside annotations."""
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -504,7 +798,8 @@ class TestIntegrate(unittest.TestCase):
             self.assertEqual(g4["alternative_kos"], "K01447,K01448")
             self.assertEqual(g4["consensus_level"], "single_tool")
             self.assertEqual(g4["definition"], "-")
-            self.assertIn("N-acetylmuramoyl-L-alanine amidase", g4["alternative_definition"])
+            # eggNOG generic description is NOT authoritative KO definition for multi-KO
+            self.assertEqual(g4["alternative_definition"], "-")
 
             # Read exported TSV directly to check formatting
             tsv_read = pd.read_csv(out_tsv, sep="\t", dtype=str)
