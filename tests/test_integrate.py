@@ -21,6 +21,7 @@ from kolach.integrate import (
     filter_and_disambiguate_eggnog,
     adjudicate_consensus,
     integrate_annotations,
+    read_eggnog_tsv,
     EVIDENCE_COLUMNS,
 )
 
@@ -114,6 +115,7 @@ class TestIntegrate(unittest.TestCase):
         base = pd.DataFrame({
             "gene_id": ["gene1", "gene2", "gene3"],
             "kofam_ko": ["K00001", "-", "K00010"],
+            "kofam_assignment": ["threshold", "-", "threshold"],
             "deepkoala_ko": ["-", "-", "-"],
         })
 
@@ -143,6 +145,7 @@ class TestIntegrate(unittest.TestCase):
         data = pd.DataFrame({
             "gene_id": ["g_unanimous", "g_majority", "g_single", "g_conflict", "g_unannotated", "g_multi_eggnog", "g_disambiguated"],
             "kofam_ko": ["K00001", "K00002", "K00003", "K00004", "-", "-", "K07979"],
+            "kofam_assignment": ["threshold", "threshold", "threshold", "threshold", "-", "-", "threshold"],
             "deepkoala_ko": ["K00001", "K00002", "-", "K00005", "-", "-", "-"],
             "eggnog_ko": ["K00001", "K00099", "-", "K00006", "-", "K01447,K01448", "K07979"],
             "eggnog_candidate_ko": ["K00001", "K00099", "-", "K00006", "-", "K01447,K01448", "K00375,K07979"],
@@ -378,7 +381,7 @@ class TestIntegrate(unittest.TestCase):
             # K00001 has eggNOG candidate row
             en_k1 = ev_df[(ev_df["ko"] == "K00001") & (ev_df["method"] == "eggnog")]
             self.assertEqual(len(en_k1), 1)
-            self.assertEqual(en_k1.iloc[0]["cross_method_status"], "rescued")
+            self.assertEqual(en_k1.iloc[0]["cross_method_status"], "below_threshold_unrescued")
 
             # K00002 has NO eggNOG row
             en_k2 = ev_df[(ev_df["ko"] == "K00002") & (ev_df["method"] == "eggnog")]
