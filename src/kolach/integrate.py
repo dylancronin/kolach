@@ -23,17 +23,19 @@ EVIDENCE_COLUMNS = [
     "gene_id",
     "ko",
     "method",
-    "original_status",
     "bit_score",
     "e_value",
     "domain_bit_score",
     "domain_e_value",
     "score_type",
-    "threshold",
+    "bit_score_threshold",
+    "e_value_threshold",
     "deepkoala_probability",
     "deepkoala_threshold",
-    "shared_seed_hit",
+    "eggnog_shared_seed_hit",
+    "original_status",
     "cross_method_status",
+    "consensus_level",
     "supporting_methods",
 ]
 
@@ -237,6 +239,14 @@ def extract_kofam_records(tsv_path: Union[str, Path]) -> list[dict]:
         if definition in ("", "-"):
             definition = "-"
 
+        # Determine bit_score_threshold and e_value_threshold
+        if orig_status == "heuristic_rescued":
+            bs_thresh = round(0.75 * thresh, 2) if (pd.notna(thresh) and np.isfinite(thresh)) else np.nan
+            ev_thresh = 1e-5
+        else:
+            bs_thresh = thresh
+            ev_thresh = np.nan
+
         records.append({
             "gene_id": row["gene_id"],
             "ko": row["ko"],
@@ -248,8 +258,11 @@ def extract_kofam_records(tsv_path: Union[str, Path]) -> list[dict]:
             "domain_e_value": dev,
             "score_type": score_type if score_type else "-",
             "threshold": thresh,
+            "bit_score_threshold": bs_thresh,
+            "e_value_threshold": ev_thresh,
             "deepkoala_probability": np.nan,
             "deepkoala_threshold": np.nan,
+            "eggnog_shared_seed_hit": False,
             "shared_seed_hit": False,
             "definition": definition,
             "assignment": assign_raw if assign_raw else "-",
@@ -458,8 +471,11 @@ def extract_deepkoala_records(tsv_path: Union[str, Path]) -> list[dict]:
             "domain_e_value": np.nan,
             "score_type": row["score_type"],
             "threshold": np.nan,
+            "bit_score_threshold": np.nan,
+            "e_value_threshold": np.nan,
             "deepkoala_probability": row["deepkoala_score"],
             "deepkoala_threshold": row["deepkoala_threshold"],
+            "eggnog_shared_seed_hit": False,
             "shared_seed_hit": False,
             "definition": "-",
         })
@@ -640,6 +656,7 @@ def extract_eggnog_records(
                 "ko": ko,
                 "bit_score": bs,
                 "e_value": ev,
+                "eggnog_shared_seed_hit": is_multi,
                 "shared_seed_hit": is_multi,
                 "original_status": orig_status,
                 "eggnog_description": str(row["eggnog_description"]).strip() if pd.notna(row["eggnog_description"]) else "-",
@@ -661,6 +678,7 @@ def extract_eggnog_records(
 
     records = []
     for _, row in exp_df.iterrows():
+        is_shared = bool(row.get("eggnog_shared_seed_hit", row.get("shared_seed_hit", False)))
         records.append({
             "gene_id": row["gene_id"],
             "ko": row["ko"],
@@ -672,9 +690,12 @@ def extract_eggnog_records(
             "domain_e_value": np.nan,
             "score_type": "seed_hit",
             "threshold": min_bitscore,
+            "bit_score_threshold": min_bitscore,
+            "e_value_threshold": max_evalue,
             "deepkoala_probability": np.nan,
             "deepkoala_threshold": np.nan,
-            "shared_seed_hit": bool(row["shared_seed_hit"]),
+            "eggnog_shared_seed_hit": is_shared,
+            "shared_seed_hit": is_shared,
             "definition": "-",  # generic seed description is NOT authoritative KO definition
             "eggnog_description": row["eggnog_description"],
         })
@@ -1167,7 +1188,6 @@ def adjudicate_consensus(
             alt_definitions.append(_resolve_definition(all_alts, row, ko_definitions))
 
     merged_df["accepted_ko"] = accepted_kos
-    merged_df["ko"] = accepted_kos  # Compatibility alias
     merged_df["alternative_kos"] = alternative_kos_list
     merged_df["definition"] = definitions
     merged_df["alternative_definition"] = alt_definitions
@@ -1313,7 +1333,7 @@ def integrate_annotations(
 
         if "eggnog" in active_tools and en_agreed:
             # Check if any eggNOG record is multi-KO
-            has_multi = any(r.get("shared_seed_hit", False) for r in tool_recs.get("eggnog", []))
+            has_multi = any(r.get("eggnog_shared_seed_hit", r.get("shared_seed_hit", False)) for r in tool_recs.get("eggnog", []))
             if has_multi:
                 trusted_other = set().union(*[confident_kos.get(t, set()) for t in active_tools if t != "eggnog"])
                 cand_other = set().union(*[rescued_kos.get(t, set()) | candidate_kos.get(t, set()) for t in active_tools if t != "eggnog"])
@@ -1584,7 +1604,6 @@ def integrate_annotations(
         gene_summary_rows.append({
             "gene_id": gid,
             "accepted_ko": accepted_ko,
-            "ko": accepted_ko,
             "alternative_kos": alternative_kos,
             "definition": definition,
             "alternative_definition": alternative_definition,
@@ -1637,7 +1656,7 @@ def integrate_annotations(
                 cross_status = "disambiguated_dropped"
             elif ko in accepted_set:
                 if orig_status == "threshold_passing":
-                    if method == "eggnog" and r.get("shared_seed_hit", False):
+                    if method == "eggnog" and r.get("eggnog_shared_seed_hit", r.get("shared_seed_hit", False)):
                         cross_status = "disambiguated_retained"
                     else:
                         cross_status = "accepted"
@@ -1650,7 +1669,7 @@ def integrate_annotations(
             elif ko in alt_set:
                 if consensus_level.startswith("conflict"):
                     cross_status = "conflict"
-                elif r.get("shared_seed_hit", False) and len(alt_set) > 1 and accepted_ko == "-":
+                elif r.get("eggnog_shared_seed_hit", r.get("shared_seed_hit", False)) and len(alt_set) > 1 and accepted_ko == "-":
                     cross_status = "unresolved_multi_ko"
                 elif orig_status == "threshold_passing":
                     cross_status = "alternative"
@@ -1675,16 +1694,18 @@ def integrate_annotations(
                 "gene_id": gid,
                 "ko": ko,
                 "method": method,
+                "consensus_level": consensus_level,
                 "original_status": orig_status,
                 "bit_score": r.get("bit_score", np.nan),
                 "e_value": r.get("e_value", np.nan),
                 "domain_bit_score": r.get("domain_bit_score", np.nan),
                 "domain_e_value": r.get("domain_e_value", np.nan),
                 "score_type": r.get("score_type", "-"),
-                "threshold": r.get("threshold", np.nan),
+                "bit_score_threshold": r.get("bit_score_threshold", r.get("threshold", np.nan)),
+                "e_value_threshold": r.get("e_value_threshold", np.nan),
                 "deepkoala_probability": r.get("deepkoala_probability", np.nan),
                 "deepkoala_threshold": r.get("deepkoala_threshold", np.nan),
-                "shared_seed_hit": bool(r.get("shared_seed_hit", False)),
+                "eggnog_shared_seed_hit": bool(r.get("eggnog_shared_seed_hit", r.get("shared_seed_hit", False))),
                 "cross_method_status": cross_status,
                 "supporting_methods": supp_str,
             })
@@ -1700,7 +1721,6 @@ def integrate_annotations(
     final_cols = [
         "gene_id",
         "accepted_ko",
-        "ko",
         "alternative_kos",
         "definition",
         "alternative_definition",
@@ -1792,13 +1812,12 @@ def main():
     )
     parser.add_argument(
         "--conflict-strategy",
-        choices=["multiple", "priority", "drop", "union"],
+        choices=["multiple", "priority", "union"],
         default="multiple",
         help=(
             "Consensus conflict strategy for disjoint calls: multiple (default: sets accepted_ko and ko to '-', "
             "records conflicting alternatives in alternative_kos; recommended for downstream pathway tools to avoid "
-            "false multifunctional enzyme inference), priority (selects top method in hierarchy), or drop (discards "
-            "conflicting calls, setting accepted_ko and ko to '-', retaining alternatives in alternative_kos)."
+            "false multifunctional enzyme inference) or priority (selects top method in hierarchy: kofam > eggnog > deepkoala)."
         ),
     )
 

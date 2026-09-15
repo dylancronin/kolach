@@ -140,7 +140,6 @@ flowchart TD
 | :--- | :--- |
 | `gene_id` | Protein identifier from FASTA (preserves input order). |
 | `accepted_ko` | Accepted single KEGG Orthology identifier (`-` when unannotated, conflicting, or multi-KO). |
-| `ko` | Compatibility alias for `accepted_ko`. |
 | `alternative_kos` | Unresolved multi-KO or conflicting candidate KOs. |
 | `definition` | Official KEGG functional definition for `accepted_ko`. |
 | `alternative_definition` | Functional definitions corresponding to `alternative_kos`. |
@@ -170,15 +169,17 @@ Long-form table with one row per gene $\times$ KO $\times$ method, preserving fu
 | `gene_id` | Protein identifier. |
 | `ko` | Specific KEGG Orthology identifier. |
 | `method` | Annotation method (`kofam`, `deepkoala`, or `eggnog`). |
-| `original_status` | Pre-consensus status (`threshold_passing`, `heuristic_rescued`, `below_threshold`, `unknown`). |
 | `bit_score` | Full-sequence alignment bit score. |
 | `e_value` | Full-sequence alignment E-value. |
 | `domain_bit_score` | Domain bit score for HMM methods. |
 | `domain_e_value` | Domain E-value for HMM methods. |
 | `score_type` | Threshold score type (`full`, `domain`, or `seed_hit`). |
-| `threshold` | Bit score threshold for method. |
+| `bit_score_threshold` | Bit score cutoff for method (`0.75 * threshold` for rescued KOfam, profile cutoff for primary KOfam, min bitscore for eggNOG, `-` for DeepKOALA). |
+| `e_value_threshold` | E-value cutoff for method (`1e-5` for rescued KOfam and eggNOG, `-` for primary KOfam and DeepKOALA). |
 | `deepkoala_probability` | DeepKOALA prediction probability score. |
 | `deepkoala_threshold` | DeepKOALA confidence threshold. |
-| `shared_seed_hit` | Boolean indicating whether multi-KO metrics originate from a single seed hit. |
+| `eggnog_shared_seed_hit` | Boolean indicating whether eggNOG alignment metrics are shared across multiple candidate KOs (`True` for multi-KO eggNOG rows, `False` otherwise). |
+| `original_status` | Pre-consensus status (`threshold_passing`, `heuristic_rescued`, `below_threshold`, `unknown`). |
 | `cross_method_status` | Integration outcome (`accepted`, `heuristic_rescued`, `rescued`, `disambiguated_retained`, `disambiguated_dropped`, `alternative`, `conflict`, `unresolved_multi_ko`, `below_threshold_unrescued`, `unselected`). |
+| `consensus_level` | Overall consensus classification for the gene (`unanimous`, `majority`, `single_tool`, etc.). |
 | `supporting_methods` | Other methods corroborating this specific KO. |

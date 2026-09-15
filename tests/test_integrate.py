@@ -159,52 +159,44 @@ class TestIntegrate(unittest.TestCase):
         res_m = adjudicate_consensus(data.copy(), active_tools, conflict_strategy="multiple")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_unanimous", "consensus_level"].values[0], "unanimous")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_unanimous", "accepted_ko"].values[0], "K00001")
-        self.assertEqual(res_m.loc[res_m["gene_id"] == "g_unanimous", "ko"].values[0], "K00001")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_unanimous", "alternative_kos"].values[0], "-")
 
         # g_majority has eggNOG calling K00099, so K00099 is preserved in alternative_kos
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_majority", "consensus_level"].values[0], "majority")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_majority", "accepted_ko"].values[0], "K00002")
-        self.assertEqual(res_m.loc[res_m["gene_id"] == "g_majority", "ko"].values[0], "K00002")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_majority", "alternative_kos"].values[0], "K00099")
 
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_single", "consensus_level"].values[0], "single_tool")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_single", "accepted_ko"].values[0], "K00003")
-        self.assertEqual(res_m.loc[res_m["gene_id"] == "g_single", "ko"].values[0], "K00003")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_single", "alternative_kos"].values[0], "-")
 
         # Solitary multi-KO hit: accepted_ko is strictly single-hit only ('-'), candidates in alternative_kos
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_multi_eggnog", "consensus_level"].values[0], "single_tool")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_multi_eggnog", "accepted_ko"].values[0], "-")
-        self.assertEqual(res_m.loc[res_m["gene_id"] == "g_multi_eggnog", "ko"].values[0], "-")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_multi_eggnog", "alternative_kos"].values[0], "K01447,K01448")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_multi_eggnog", "definition"].values[0], "-")
 
         # Disambiguated eggNOG multi-hit: accepted_ko has the agreed single KO ('K07979'), dropped eggNOG hit ('K00375') in alternative_kos
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_disambiguated", "consensus_level"].values[0], "majority")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_disambiguated", "accepted_ko"].values[0], "K07979")
-        self.assertEqual(res_m.loc[res_m["gene_id"] == "g_disambiguated", "ko"].values[0], "K07979")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_disambiguated", "alternative_kos"].values[0], "K00375")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_disambiguated", "definition"].values[0], "GntR regulator")
 
         # Conflict under default multiple: accepted_ko is '-', alternative_kos has sorted KOs
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_conflict", "consensus_level"].values[0], "conflict")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_conflict", "accepted_ko"].values[0], "-")
-        self.assertEqual(res_m.loc[res_m["gene_id"] == "g_conflict", "ko"].values[0], "-")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_conflict", "alternative_kos"].values[0], "K00004,K00005,K00006")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_conflict", "definition"].values[0], "-")
         self.assertIn("Def 4", res_m.loc[res_m["gene_id"] == "g_conflict", "alternative_definition"].values[0])
 
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_unannotated", "consensus_level"].values[0], "unannotated")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_unannotated", "accepted_ko"].values[0], "-")
-        self.assertEqual(res_m.loc[res_m["gene_id"] == "g_unannotated", "ko"].values[0], "-")
         self.assertEqual(res_m.loc[res_m["gene_id"] == "g_unannotated", "alternative_kos"].values[0], "-")
 
         # 2. Priority strategy
         res_p = adjudicate_consensus(data.copy(), active_tools, conflict_strategy="priority")
         self.assertEqual(res_p.loc[res_p["gene_id"] == "g_conflict", "consensus_level"].values[0], "conflict_priority")
         self.assertEqual(res_p.loc[res_p["gene_id"] == "g_conflict", "accepted_ko"].values[0], "K00004")
-        self.assertEqual(res_p.loc[res_p["gene_id"] == "g_conflict", "ko"].values[0], "K00004")
         self.assertEqual(res_p.loc[res_p["gene_id"] == "g_conflict", "alternative_kos"].values[0], "K00005,K00006")
         self.assertEqual(res_p.loc[res_p["gene_id"] == "g_conflict", "definition"].values[0], "Def 4")
 
@@ -250,7 +242,6 @@ class TestIntegrate(unittest.TestCase):
 
             row = df[df["gene_id"] == "g1"].iloc[0]
             self.assertEqual(row["accepted_ko"], "K00001")
-            self.assertEqual(row["ko"], "K00001")
             self.assertNotEqual(row["consensus_level"], "majority")
             self.assertNotEqual(row["consensus_level"], "unanimous")
             self.assertEqual(row["consensus_level"], "single_tool_with_candidate")
@@ -324,7 +315,6 @@ class TestIntegrate(unittest.TestCase):
             row = df[df["gene_id"] == "g1"].iloc[0]
             self.assertEqual(row["consensus_level"], "unanimous")
             self.assertEqual(row["accepted_ko"], "K00001")
-            self.assertEqual(row["ko"], "K00001")
 
     def test_gene_with_threshold_and_heuristic_kofam_retains_separate_scores_and_statuses(self):
         """A gene with one threshold-passing KOfam KO and one heuristic-rescued KO retains separate scores and statuses."""
@@ -434,7 +424,6 @@ class TestIntegrate(unittest.TestCase):
 
             row = df[df["gene_id"] == "g1"].iloc[0]
             self.assertEqual(row["accepted_ko"], "K00002")
-            self.assertEqual(row["ko"], "K00002")
             self.assertEqual(row["alternative_kos"], "K00001")
             self.assertEqual(row["consensus_level"], "majority")
 
@@ -530,7 +519,6 @@ class TestIntegrate(unittest.TestCase):
 
             row = df[df["gene_id"] == "g_unknown"].iloc[0]
             self.assertEqual(row["accepted_ko"], "-")
-            self.assertEqual(row["ko"], "-")
             self.assertEqual(row["consensus_level"], "unannotated")
             self.assertEqual(row["evidence"], "-")
 
@@ -678,7 +666,6 @@ class TestIntegrate(unittest.TestCase):
             )
             row = df[df["gene_id"] == "g1"].iloc[0]
             self.assertEqual(row["accepted_ko"], "-")
-            self.assertEqual(row["ko"], "-")
             self.assertEqual(row["alternative_kos"], "K01447,K01448")
             self.assertEqual(row["definition"], "-")
             self.assertEqual(row["alternative_definition"], "-")
@@ -710,7 +697,11 @@ class TestIntegrate(unittest.TestCase):
             self.assertEqual(ev_df.iloc[0]["gene_id"], "g1")
             self.assertEqual(ev_df.iloc[0]["ko"], "K01783")
             self.assertEqual(ev_df.iloc[0]["method"], "kofam")
+            self.assertEqual(ev_df.iloc[0]["consensus_level"], "single_tool")
             self.assertEqual(ev_df.iloc[0]["original_status"], "threshold_passing")
+            self.assertEqual(ev_df.iloc[0]["bit_score_threshold"], "248.0")
+            self.assertEqual(ev_df.iloc[0]["e_value_threshold"], "-")
+            self.assertEqual(ev_df.iloc[0]["eggnog_shared_seed_hit"], "False")
             self.assertEqual(ev_df.iloc[0]["cross_method_status"], "accepted")
 
     def test_missing_methods_and_empty_results_handled_consistently(self):
@@ -776,9 +767,9 @@ class TestIntegrate(unittest.TestCase):
             self.assertTrue(out_tsv.exists())
             self.assertEqual(len(df), 4)
 
-            # Check that new and legacy columns exist
+            # Check that new columns exist and redundant ko is absent
             self.assertIn("accepted_ko", df.columns)
-            self.assertIn("ko", df.columns)
+            self.assertNotIn("ko", df.columns)
             self.assertIn("alternative_kos", df.columns)
             self.assertIn("alternative_definition", df.columns)
             self.assertIn("kofam_score_type", df.columns)
@@ -794,7 +785,6 @@ class TestIntegrate(unittest.TestCase):
 
             g1 = df[df["gene_id"] == "g1"].iloc[0]
             self.assertEqual(g1["accepted_ko"], "K01783")
-            self.assertEqual(g1["ko"], "K01783")
             self.assertEqual(g1["alternative_kos"], "-")
             self.assertEqual(g1["consensus_level"], "unanimous")
             self.assertEqual(g1["deepkoala_candidate_ko"], "K01783")
@@ -809,7 +799,6 @@ class TestIntegrate(unittest.TestCase):
             # Check g4 (multi-KO hit): accepted_ko must be strictly single-hit ('-'), candidates in alternative_kos
             g4 = df[df["gene_id"] == "g4"].iloc[0]
             self.assertEqual(g4["accepted_ko"], "-")
-            self.assertEqual(g4["ko"], "-")
             self.assertEqual(g4["alternative_kos"], "K01447,K01448")
             self.assertEqual(g4["consensus_level"], "single_tool")
             self.assertEqual(g4["definition"], "-")
@@ -822,7 +811,6 @@ class TestIntegrate(unittest.TestCase):
             # Check g3 is unannotated
             g3_row = tsv_read[tsv_read["gene_id"] == "g3"].iloc[0]
             self.assertEqual(g3_row["accepted_ko"], "-")
-            self.assertEqual(g3_row["ko"], "-")
             self.assertEqual(g3_row["alternative_kos"], "-")
             self.assertEqual(g3_row["consensus_level"], "unannotated")
             self.assertEqual(g3_row["kofam_bit_score"], "-")
@@ -957,6 +945,14 @@ class TestIntegrate(unittest.TestCase):
             self.assertTrue(math.isclose(row["kofam_evalue"], 5e-12, rel_tol=1e-12, abs_tol=0.0))
             self.assertEqual(row["consensus_level"], "single_tool")
             self.assertEqual(row["evidence"], "kofam(rescued)")
+
+            ev_df = pd.read_csv(ev_tsv, sep="\t", dtype=str)
+            self.assertEqual(len(ev_df), 1)
+            self.assertEqual(ev_df.iloc[0]["consensus_level"], "single_tool")
+            self.assertEqual(ev_df.iloc[0]["original_status"], "heuristic_rescued")
+            self.assertEqual(ev_df.iloc[0]["bit_score_threshold"], "90.0")  # 0.75 * 120.0
+            self.assertEqual(float(ev_df.iloc[0]["e_value_threshold"]), 1e-5)
+            self.assertEqual(ev_df.iloc[0]["eggnog_shared_seed_hit"], "False")
 
     def test_regression_6_native_and_normalized_eggnog_produce_identical_records(self):
         """6. Native and normalized eggNOG files producing identical records, retaining the first protein."""
@@ -1110,7 +1106,6 @@ class TestIntegrate(unittest.TestCase):
             df = integrate_annotations(eggnog_tsv=en_tsv)
             row = df[df["gene_id"] == "g_multi"].iloc[0]
             self.assertEqual(row["accepted_ko"], "-")
-            self.assertEqual(row["ko"], "-")
             self.assertEqual(row["alternative_kos"], "K01447,K01448")
 
             # Conflicting calls: KOfam calls K00001, DeepKOALA calls K00002
@@ -1227,6 +1222,99 @@ class TestIntegrate(unittest.TestCase):
             df_norm = read_eggnog_tsv(norm_tsv)
             self.assertEqual(len(df_norm), 1)
             self.assertEqual(df_norm.iloc[0]["query"], "prot1")
+
+    def test_evidence_table_full_schema_and_values(self):
+        """Verify kolach_evidence.tsv contains consensus_level, correct thresholds, and eggnog_shared_seed_hit."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            kf = tmp / "kofam.tsv"
+            kf.write_text(
+                "gene_id\tko\tassignment\tscore_type\tthreshold\tbit_score\te_value\tdomain_bit_score\tdomain_e_value\tdefinition\n"
+                "g1\tK00001\tthreshold\tfull\t200.0\t250.0\t1e-60\t250.0\t1e-60\talcohol dehydrogenase\n"
+                "g2\tK00002\trescued\tfull\t100.0\t80.0\t1e-6\t80.0\t1e-6\talcohol dehydrogenase (NADP+)\n"
+            )
+            dk = tmp / "deepkoala.tsv"
+            dk.write_text(
+                "gene_id\tko\tdeepkoala_score\tdeepkoala_threshold\tannotate\n"
+                "g1\tK00001\t0.85\t0.50\t*\n"
+            )
+            en = tmp / "eggnog.tsv"
+            en.write_text(
+                "#query\tseed_ortholog\tevalue\tscore\tKEGG_ko\tDescription\n"
+                "g1\ts1\t1e-40\t150.0\tko:K00001,ko:K00009\tADH complex\n"
+                "g3\ts3\t1e-20\t120.0\tko:K00003\thomoserine dehydrogenase\n"
+            )
+            out_tsv = tmp / "kolach_annotations.tsv"
+            ev_tsv = tmp / "kolach_evidence.tsv"
+
+            integrate_annotations(
+                kofam_tsv=kf,
+                deepkoala_tsv=dk,
+                eggnog_tsv=en,
+                output_tsv=out_tsv,
+                evidence_tsv=ev_tsv,
+            )
+
+            self.assertTrue(ev_tsv.exists())
+            ev_df = pd.read_csv(ev_tsv, sep="\t", dtype=str)
+
+            for col in EVIDENCE_COLUMNS:
+                self.assertIn(col, ev_df.columns)
+
+            # Check g1 KOfam primary hit
+            row_g1_kf = ev_df[(ev_df["gene_id"] == "g1") & (ev_df["method"] == "kofam")].iloc[0]
+            self.assertEqual(row_g1_kf["consensus_level"], "unanimous")
+            self.assertEqual(row_g1_kf["original_status"], "threshold_passing")
+            self.assertEqual(row_g1_kf["bit_score_threshold"], "200.0")
+            self.assertEqual(row_g1_kf["e_value_threshold"], "-")
+            self.assertEqual(row_g1_kf["eggnog_shared_seed_hit"], "False")
+            self.assertEqual(row_g1_kf["cross_method_status"], "accepted")
+
+            # Check g1 DeepKOALA hit
+            row_g1_dk = ev_df[(ev_df["gene_id"] == "g1") & (ev_df["method"] == "deepkoala")].iloc[0]
+            self.assertEqual(row_g1_dk["consensus_level"], "unanimous")
+            self.assertEqual(row_g1_dk["original_status"], "threshold_passing")
+            self.assertEqual(row_g1_dk["bit_score_threshold"], "-")
+            self.assertEqual(row_g1_dk["e_value_threshold"], "-")
+            self.assertEqual(row_g1_dk["deepkoala_probability"], "0.85")
+            self.assertEqual(row_g1_dk["deepkoala_threshold"], "0.5")
+            self.assertEqual(row_g1_dk["eggnog_shared_seed_hit"], "False")
+            self.assertEqual(row_g1_dk["cross_method_status"], "accepted")
+
+            # Check g1 eggNOG multi-KO retained hit
+            row_g1_en1 = ev_df[(ev_df["gene_id"] == "g1") & (ev_df["method"] == "eggnog") & (ev_df["ko"] == "K00001")].iloc[0]
+            self.assertEqual(row_g1_en1["consensus_level"], "unanimous")
+            self.assertEqual(row_g1_en1["original_status"], "threshold_passing")
+            self.assertEqual(row_g1_en1["bit_score_threshold"], "60.0")
+            self.assertEqual(float(row_g1_en1["e_value_threshold"]), 1e-5)
+            self.assertEqual(row_g1_en1["eggnog_shared_seed_hit"], "True")
+            self.assertEqual(row_g1_en1["cross_method_status"], "disambiguated_retained")
+
+            # Check g1 eggNOG multi-KO dropped hit
+            row_g1_en2 = ev_df[(ev_df["gene_id"] == "g1") & (ev_df["method"] == "eggnog") & (ev_df["ko"] == "K00009")].iloc[0]
+            self.assertEqual(row_g1_en2["consensus_level"], "unanimous")
+            self.assertEqual(row_g1_en2["bit_score_threshold"], "60.0")
+            self.assertEqual(float(row_g1_en2["e_value_threshold"]), 1e-5)
+            self.assertEqual(row_g1_en2["eggnog_shared_seed_hit"], "True")
+            self.assertEqual(row_g1_en2["cross_method_status"], "disambiguated_dropped")
+
+            # Check g2 KOfam rescued hit
+            row_g2_kf = ev_df[(ev_df["gene_id"] == "g2") & (ev_df["method"] == "kofam")].iloc[0]
+            self.assertEqual(row_g2_kf["consensus_level"], "single_tool")
+            self.assertEqual(row_g2_kf["original_status"], "heuristic_rescued")
+            self.assertEqual(row_g2_kf["bit_score_threshold"], "75.0")  # 0.75 * 100.0
+            self.assertEqual(float(row_g2_kf["e_value_threshold"]), 1e-5)
+            self.assertEqual(row_g2_kf["eggnog_shared_seed_hit"], "False")
+            self.assertEqual(row_g2_kf["cross_method_status"], "heuristic_rescued")
+
+            # Check g3 eggNOG single-KO hit
+            row_g3_en = ev_df[(ev_df["gene_id"] == "g3") & (ev_df["method"] == "eggnog")].iloc[0]
+            self.assertEqual(row_g3_en["consensus_level"], "single_tool")
+            self.assertEqual(row_g3_en["original_status"], "threshold_passing")
+            self.assertEqual(row_g3_en["bit_score_threshold"], "60.0")
+            self.assertEqual(float(row_g3_en["e_value_threshold"]), 1e-5)
+            self.assertEqual(row_g3_en["eggnog_shared_seed_hit"], "False")
+            self.assertEqual(row_g3_en["cross_method_status"], "accepted")
 
 
 if __name__ == "__main__":
