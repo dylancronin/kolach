@@ -219,13 +219,12 @@ def main():
 
     annotate_parser.add_argument(
         "--conflict-strategy",
-        choices=["multiple", "priority", "drop", "union"],
+        choices=["multiple", "priority", "union"],
         default="multiple",
         help=(
             "Consensus conflict strategy for disjoint calls: multiple (default: sets accepted_ko and ko to '-', "
             "records conflicting alternatives in alternative_kos; recommended for downstream pathway tools to avoid "
-            "false multifunctional enzyme inference), priority (selects top method in hierarchy), or drop (discards "
-            "conflicting calls, setting accepted_ko and ko to '-', retaining alternatives in alternative_kos)."
+            "false multifunctional enzyme inference) or priority (selects top method in hierarchy: kofam > eggnog > deepkoala)."
         ),
     )
 
@@ -309,13 +308,12 @@ def main():
 
     integrate_parser.add_argument(
         "--conflict-strategy",
-        choices=["multiple", "priority", "drop", "union"],
+        choices=["multiple", "priority", "union"],
         default="multiple",
         help=(
             "Consensus conflict strategy for disjoint calls: multiple (default: sets accepted_ko and ko to '-', "
             "records conflicting alternatives in alternative_kos; recommended for downstream pathway tools to avoid "
-            "false multifunctional enzyme inference), priority (selects top method in hierarchy), or drop (discards "
-            "conflicting calls, setting accepted_ko and ko to '-', retaining alternatives in alternative_kos)."
+            "false multifunctional enzyme inference) or priority (selects top method in hierarchy: kofam > eggnog > deepkoala)."
         ),
     )
 

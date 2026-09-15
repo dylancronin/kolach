@@ -48,7 +48,7 @@ Key options:
 - `--eggnog-sensmode`: DIAMOND sensitivity mode (default: upstream sensitive iterative search).
 - `--eggnog-min-bitscore` / `--eggnog-max-evalue`: eggNOG retention thresholds (default: `60.0` / `1e-5`).
 - `--eggnog-filter-multi`: Resolve multi-KO orthology groups (`disambiguate` [default], `strict`, or `none`).
-- `--conflict-strategy`: Adjudication for disjoint tool calls (`multiple` [default], `priority`, or `drop`).
+- `--conflict-strategy`: Adjudication for disjoint tool calls (`multiple` [default] or `priority`).
 
 ### 3. Standalone Table Integration
 
@@ -81,8 +81,7 @@ kolach integrate \
    - **0 Confident Calls**: 2 independent sub-threshold candidates agree $\rightarrow$ `orthogonal_dual_candidate`. KOfam heuristic rescue $\rightarrow$ `single_tool` (`evidence = kofam(rescued)`). Otherwise $\rightarrow$ `unannotated`.
 3. **Conflict Resolution (`--conflict-strategy`)**:
    - `multiple` *(default)*: Assigns `consensus_level = conflict`, sets `accepted_ko = '-'`, and records all conflicting KOs in `alternative_kos`.
-   - `priority`: Assigns `consensus_level = conflict_priority`, selecting the top tool's KO (`kofam > deepkoala > eggnog`) for `accepted_ko` and moving unselected KOs to `alternative_kos`.
-   - `drop`: Assigns `consensus_level = conflict_dropped`, setting `accepted_ko = '-'` and saving all conflicting KOs in `alternative_kos`.
+   - `priority`: Assigns `consensus_level = conflict_priority`, selecting the top tool's KO (`kofam > eggnog > deepkoala`) for `accepted_ko` and moving unselected KOs to `alternative_kos`.
 4. **Strict Single-KO Policy**: Downstream pathway tools require single-KO calls. `accepted_ko` strictly contains exactly one KO (or `-` if unannotated, multi-KO, or conflicting). All minority, dropped, or conflicting KOs are retained in `alternative_kos`.
 
 ### Workflow Diagram
@@ -104,8 +103,7 @@ flowchart TD
 
     %% Conflict resolution
     Conflict -->|"multiple (default)"| ConfM["consensus_level: conflict<br/>(accepted_ko = '-', all to alternative_kos)"]
-    Conflict -->|"priority"| ConfP["consensus_level: conflict_priority<br/>(accept top tool: kofam > deepkoala > eggnog)"]
-    Conflict -->|"drop"| ConfD["consensus_level: conflict_dropped<br/>(accepted_ko = '-')"]
+    Conflict -->|"priority"| ConfP["consensus_level: conflict_priority<br/>(accept top tool: kofam > eggnog > deepkoala)"]
 
     %% 1 call
     Count -->|"1 call"| C1{"Candidate support<br/>from other tool?"}
@@ -130,7 +128,6 @@ flowchart TD
 | `orthogonal_dual_candidate` | Sub-threshold candidates from 2 methods agree on the same KO. | `accepted_ko` = agreed KO |
 | `conflict` | Disjoint calls under `multiple` (default). | `accepted_ko` = `-` (`alternative_kos` = all conflicting KOs) |
 | `conflict_priority` | Disjoint calls resolved by method hierarchy. | `accepted_ko` = top tool KO (`alternative_kos` = unselected KOs) |
-| `conflict_dropped` | Disjoint calls discarded under `drop`. | `accepted_ko` = `-` (`alternative_kos` = all conflicting KOs) |
 | `unannotated` | No method produced a confident or corroborated assignment. | `accepted_ko` = `-` (`alternative_kos` = `-`) |
 
 ---

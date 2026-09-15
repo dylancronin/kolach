@@ -991,7 +991,7 @@ def adjudicate_consensus(
     definitions = []
     alt_definitions = []
 
-    priority_order = [t for t in ["kofam", "deepkoala", "eggnog"] if t in active_tools]
+    priority_order = [t for t in ["kofam", "eggnog", "deepkoala"] if t in active_tools]
 
     for _, row in merged_df.iterrows():
         # Identify confident threshold-passing calls per tool
@@ -1140,14 +1140,7 @@ def adjudicate_consensus(
         dropped_en = (en_raw - union_kos) if (len(en_raw) > 1 and bool(union_kos & en_raw)) else set()
         all_alts = union_kos | dropped_en
 
-        if conflict_strategy == "drop":
-            accepted_kos.append("-")
-            alternative_kos_list.append(format_kos(all_alts))
-            consensus_levels.append("conflict_dropped")
-            evidence_list.append("-")
-            definitions.append("-")
-            alt_definitions.append(_resolve_definition(all_alts, row, ko_definitions))
-        elif conflict_strategy == "priority":
+        if conflict_strategy == "priority":
             top_tool = next((t for t in priority_order if t in tool_calls), tools_list[0])
             top_kos = tool_calls[top_tool]
             unselected = union_kos - top_kos
@@ -1284,7 +1277,7 @@ def integrate_annotations(
     gene_summary_rows = []
     adjudicated_records = []
 
-    priority_order = [t for t in ["kofam", "deepkoala", "eggnog"] if t in active_tools]
+    priority_order = [t for t in ["kofam", "eggnog", "deepkoala"] if t in active_tools]
 
     for gid in all_gene_ids:
         recs = records_by_gene.get(gid, [])
@@ -1480,12 +1473,7 @@ def integrate_annotations(
                 else:
                     # Disjoint conflict
                     all_alts = union_all_calls | en_dropped
-                    if conflict_strategy == "drop":
-                        accepted_ko = "-"
-                        alt_set = all_alts
-                        consensus_level = "conflict_dropped"
-                        evidence_str = "-"
-                    elif conflict_strategy == "priority":
+                    if conflict_strategy == "priority":
                         top_tool = next((t for t in priority_order if t in tool_calls), tools_list[0])
                         top_kos = tool_calls[top_tool]
                         dropped_en_top = (en_raw_cands - top_kos) if (len(en_raw_cands) > 1 and bool(top_kos & en_raw_cands)) else en_dropped

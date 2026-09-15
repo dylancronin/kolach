@@ -208,13 +208,20 @@ class TestIntegrate(unittest.TestCase):
         self.assertEqual(res_p.loc[res_p["gene_id"] == "g_conflict", "alternative_kos"].values[0], "K00005,K00006")
         self.assertEqual(res_p.loc[res_p["gene_id"] == "g_conflict", "definition"].values[0], "Def 4")
 
-        # 3. Drop conflict strategy
-        res_d = adjudicate_consensus(data.copy(), active_tools, conflict_strategy="drop")
-        self.assertEqual(res_d.loc[res_d["gene_id"] == "g_conflict", "consensus_level"].values[0], "conflict_dropped")
-        self.assertEqual(res_d.loc[res_d["gene_id"] == "g_conflict", "accepted_ko"].values[0], "-")
-        self.assertEqual(res_d.loc[res_d["gene_id"] == "g_conflict", "ko"].values[0], "-")
-        self.assertEqual(res_d.loc[res_d["gene_id"] == "g_conflict", "alternative_kos"].values[0], "K00004,K00005,K00006")
-        self.assertEqual(res_d.loc[res_d["gene_id"] == "g_conflict", "definition"].values[0], "-")
+    def test_priority_strategy_eggnog_over_deepkoala(self):
+        """When KOfam is absent, priority strategy selects eggNOG over DeepKOALA."""
+        data = pd.DataFrame({
+            "gene_id": ["g1"],
+            "kofam_ko": ["-"],
+            "deepkoala_ko": ["K00002"],
+            "eggnog_ko": ["K00003"],
+            "eggnog_candidate_ko": ["K00003"],
+        })
+        active_tools = ["deepkoala", "eggnog"]
+        res = adjudicate_consensus(data, active_tools, conflict_strategy="priority")
+        self.assertEqual(res.loc[res["gene_id"] == "g1", "consensus_level"].values[0], "conflict_priority")
+        self.assertEqual(res.loc[res["gene_id"] == "g1", "accepted_ko"].values[0], "K00003")
+        self.assertEqual(res.loc[res["gene_id"] == "g1", "alternative_kos"].values[0], "K00002")
 
     def test_kofam_confident_plus_subthreshold_eggnog_does_not_become_majority_or_unanimous(self):
         """A confident KOfam call plus matching below-threshold eggNOG evidence must remain single_tool_with_candidate."""
