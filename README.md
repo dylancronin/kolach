@@ -69,82 +69,69 @@ kolach integrate \
 
 ## Consensus & Integration Workflow
 
-`kolach` integrates multi-tool predictions into `{output_dir}/kolach_annotations.tsv` (gene-level summary) and `{output_dir}/kolach_evidence.tsv` (long-form provenance) following these core principles:
+`kolach` reconciles multi-tool outputs into `{output_dir}/kolach_annotations.tsv` (gene-level summary) and `{output_dir}/kolach_evidence.tsv` (long-form provenance).
 
-1. **Confidence Gating**: Only hits passing independent thresholds count as confident votes (KOfam `threshold`, DeepKOALA `prob >= thresh`, eggNOG `bitscore >= 60` and `evalue <= 1e-5`). Sub-threshold calls are tracked as candidates.
-2. **Multi-KO Disambiguation**: eggNOG multi-KO groups are resolved against confident or candidate calls from other tools (`disambiguate`).
-3. **Candidate Corroboration**: Sub-threshold candidates provide supporting evidence without being counted as multi-tool confident consensus (`single_tool_with_candidate` or `orthogonal_dual_candidate`).
-4. **Strict Single-KO Output**: To avoid misinterpretation by downstream metabolic reconstruction tools, `accepted_ko` strictly contains a single KO (or `-` if unannotated, multi-KO, or conflicting). Disjoint and minority calls are preserved in `alternative_kos`.
-5. **Exact Definition Resolution**: Functional definitions strictly match the target KO using the master `kofam/ko_list` dictionary or matching KOfam evidence.
+### Integration Logic
+
+1. **Confidence Gating & Disambiguation**: Hits must meet method thresholds to count as confident votes (KOfam bit score $\ge$ profile threshold, DeepKOALA probability $\ge$ threshold, eggNOG bit score $\ge$ 60 and E-value $\le$ 1e-5). Sub-threshold predictions are tracked as candidates. eggNOG multi-KO hits are disambiguated against other tools' predictions.
+2. **Consensus by Confident Call Count (3, 2, 1, 0)**:
+   - **3 Confident Calls**: All 3 agree $\rightarrow$ `unanimous`. Exactly 2 agree $\rightarrow$ `majority` (the 3rd unselected call is preserved in `alternative_kos`). All 3 differ $\rightarrow$ disjoint conflict.
+   - **2 Confident Calls**: Both agree $\rightarrow$ `majority` (or `unanimous` if only 2 tools were run). Disagree $\rightarrow$ disjoint conflict.
+   - **1 Confident Call**: Supported by another tool's sub-threshold candidate $\rightarrow$ `single_tool_with_candidate`; sole call $\rightarrow$ `single_tool`.
+   - **0 Confident Calls**: 2 independent sub-threshold candidates agree $\rightarrow$ `orthogonal_dual_candidate`. KOfam heuristic rescue $\rightarrow$ `single_tool` (`evidence = kofam(rescued)`). Otherwise $\rightarrow$ `unannotated`.
+3. **Conflict Resolution (`--conflict-strategy`)**:
+   - `multiple` *(default)*: Assigns `consensus_level = conflict`, sets `accepted_ko = '-'`, and records all conflicting KOs in `alternative_kos`.
+   - `priority`: Assigns `consensus_level = conflict_priority`, selecting the top tool's KO (`kofam > deepkoala > eggnog`) for `accepted_ko` and moving unselected KOs to `alternative_kos`.
+   - `drop`: Assigns `consensus_level = conflict_dropped`, setting `accepted_ko = '-'` and saving all conflicting KOs in `alternative_kos`.
+4. **Strict Single-KO Policy**: Downstream pathway tools require single-KO calls. `accepted_ko` strictly contains exactly one KO (or `-` if unannotated, multi-KO, or conflicting). All minority, dropped, or conflicting KOs are retained in `alternative_kos`.
 
 ### Workflow Diagram
 
 ```mermaid
 flowchart TD
-    Start["Input Protein Annotations<br/>(KOfam, DeepKOALA, eggNOG)"] --> Filter["Confidence Gating & Disambiguation<br/>• KOfam: threshold_passing vs heuristic_rescued<br/>• DeepKOALA: probability ≥ threshold<br/>• eggNOG: bitscore ≥ 60 & evalue ≤ 1e-5 (multi-KOs disambiguated)"]
+    Start["Gene Predictions<br/>(KOfam, DeepKOALA, eggNOG)"] --> Count{"Confident calls<br/>meeting thresholds?"}
 
-    Filter --> Count{"Number of confident methods<br/>meeting thresholds?"}
+    %% 3 calls
+    Count -->|"3 calls"| C3{"Agreement?"}
+    C3 -->|"3 agree"| Unanimous["consensus_level: unanimous"]
+    C3 -->|"2 agree"| Majority["consensus_level: majority<br/>(3rd KO → alternative_kos)"]
+    C3 -->|"0 agree"| Conflict{"--conflict-strategy"}
 
-    %% 3 Methods
-    Count -->|"3 methods"| ThreeAgree{"Do all 3 agree?"}
-    ThreeAgree -->|"Yes (3/3)"| Unanimous3["consensus_level = unanimous"]
-    ThreeAgree -->|"No"| TwoAgree3{"Do 2 of 3 agree?"}
-    TwoAgree3 -->|"Yes (2/3)"| Majority3["consensus_level = majority<br/>(unselected KO to alternative_kos)"]
-    TwoAgree3 -->|"No (all differ)"| Conflict3{"--conflict-strategy"}
-
-    %% 2 Methods
-    Count -->|"2 methods"| TwoAgree{"Do both agree?"}
-    TwoAgree -->|"Yes"| Agreed2["consensus_level = unanimous (if 2 active)<br/>or majority (if 3 active)"]
-    TwoAgree -->|"No (disjoint)"| Conflict2{"--conflict-strategy"}
+    %% 2 calls
+    Count -->|"2 calls"| C2{"Agreement?"}
+    C2 -->|"2 agree"| Maj2["consensus_level: majority<br/>(unanimous if 2 tools run)"]
+    C2 -->|"0 agree"| Conflict
 
     %% Conflict resolution
-    Conflict3 -->|"multiple (default)"| ConfMult["consensus_level = conflict<br/>accepted_ko = '-'<br/>alternative_kos = all conflicting KOs"]
-    Conflict3 -->|"priority"| ConfPri["consensus_level = conflict_priority<br/>accepted_ko = top tool (kofam > deepkoala > eggnog)<br/>alternative_kos = unselected conflicting KOs"]
-    Conflict3 -->|"drop"| ConfDrop["consensus_level = conflict_dropped<br/>accepted_ko = '-'<br/>alternative_kos = all conflicting KOs"]
+    Conflict -->|"multiple (default)"| ConfM["consensus_level: conflict<br/>(accepted_ko = '-', all to alternative_kos)"]
+    Conflict -->|"priority"| ConfP["consensus_level: conflict_priority<br/>(accept top tool: kofam > deepkoala > eggnog)"]
+    Conflict -->|"drop"| ConfD["consensus_level: conflict_dropped<br/>(accepted_ko = '-')"]
 
-    Conflict2 -->|"multiple (default)"| ConfMult
-    Conflict2 -->|"priority"| ConfPri
-    Conflict2 -->|"drop"| ConfDrop
+    %% 1 call
+    Count -->|"1 call"| C1{"Candidate support<br/>from other tool?"}
+    C1 -->|"Yes"| SingleCand["consensus_level: single_tool_with_candidate"]
+    C1 -->|"No"| Single["consensus_level: single_tool"]
 
-    %% 1 Method
-    Count -->|"1 method"| CheckCand{"Corroborated by sub-threshold<br/>candidate from other method?"}
-    CheckCand -->|"Yes"| SingleCand["consensus_level = single_tool_with_candidate"]
-    CheckCand -->|"No"| Single1["consensus_level = single_tool"]
-
-    %% 0 Methods
-    Count -->|"0 methods"| CheckDual{"Do 2 sub-threshold candidates<br/>independently agree on same KO?"}
-    CheckDual -->|"Yes"| DualCand["consensus_level = orthogonal_dual_candidate"]
-    CheckDual -->|"No"| CheckRescued{"KOfam heuristic rescue<br/>(rescued hit)?"}
-    CheckRescued -->|"Yes"| Rescued["consensus_level = single_tool<br/>evidence = kofam(rescued)"]
-    CheckRescued -->|"No"| Unannotated["consensus_level = unannotated<br/>accepted_ko = '-'<br/>alternative_kos = '-'"]
-
-    %% Final Routing
-    Unanimous3 --> FinalRouting
-    Majority3 --> FinalRouting
-    Agreed2 --> FinalRouting
-    SingleCand --> FinalRouting
-    Single1 --> FinalRouting
-    DualCand --> FinalRouting
-    Rescued --> FinalRouting
-
-    FinalRouting{"Candidate KO count<br/>for winning consensus?"}
-    FinalRouting -->|"Exactly 1 KO"| SingleKO["accepted_ko = single KO<br/>ko = single KO<br/>alternative_kos = minority / dropped KOs (or '-')"]
-    FinalRouting -->|"Multiple KOs (unresolved multi-hit)"| MultiKO["accepted_ko = '-'<br/>ko = '-'<br/>alternative_kos = comma-separated KOs"]
+    %% 0 calls
+    Count -->|"0 calls"| C0{"Sub-threshold / Rescue?"}
+    C0 -->|"2 candidates agree"| DualCand["consensus_level: orthogonal_dual_candidate"]
+    C0 -->|"KOfam rescued"| Rescued["consensus_level: single_tool<br/>(evidence: kofam(rescued))"]
+    C0 -->|"None"| Unannotated["consensus_level: unannotated<br/>(accepted_ko = '-')"]
 ```
 
 ### Consensus Categories (`consensus_level`)
 
-| Level | Description |
-| :--- | :--- |
-| `unanimous` | All active methods confidently agree on the KO. |
-| `majority` | At least 2 active methods confidently agree on the KO. |
-| `single_tool_with_candidate` | 1 confident method call corroborated by a sub-threshold candidate from another tool. |
-| `orthogonal_dual_candidate` | Sub-threshold candidates from 2 independent methods agree on the same KO. |
-| `single_tool` | Exactly 1 method produced a confident call (or KOfam heuristic rescue) without corroboration. |
-| `conflict` | Active methods produced disjoint confident calls (`accepted_ko = '-'`, candidates in `alternative_kos`). |
-| `conflict_priority` | Disjoint calls resolved by method priority hierarchy (`kofam > deepkoala > eggnog`). |
-| `conflict_dropped` | Disjoint calls dropped (`accepted_ko = '-'`, all candidates in `alternative_kos`). |
-| `unannotated` | No method produced a confident or corroborated KO assignment. |
+| Level | Description | Output Routing |
+| :--- | :--- | :--- |
+| `unanimous` | All active methods confidently agree on the KO. | `accepted_ko` = single KO |
+| `majority` | At least 2 methods confidently agree on the KO. | `accepted_ko` = agreed KO (`alternative_kos` = unselected 3rd KO) |
+| `single_tool_with_candidate` | 1 confident call corroborated by another tool's candidate. | `accepted_ko` = single KO |
+| `single_tool` | Exactly 1 confident method (or KOfam rescue) without corroboration. | `accepted_ko` = single KO |
+| `orthogonal_dual_candidate` | Sub-threshold candidates from 2 methods agree on the same KO. | `accepted_ko` = agreed KO |
+| `conflict` | Disjoint calls under `multiple` (default). | `accepted_ko` = `-` (`alternative_kos` = all conflicting KOs) |
+| `conflict_priority` | Disjoint calls resolved by method hierarchy. | `accepted_ko` = top tool KO (`alternative_kos` = unselected KOs) |
+| `conflict_dropped` | Disjoint calls discarded under `drop`. | `accepted_ko` = `-` (`alternative_kos` = all conflicting KOs) |
+| `unannotated` | No method produced a confident or corroborated assignment. | `accepted_ko` = `-` (`alternative_kos` = `-`) |
 
 ---
 
