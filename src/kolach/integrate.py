@@ -6,6 +6,7 @@ method-specific metrics (bit scores, E-values, probabilities, and thresholds)
 and evidence provenance.
 """
 import argparse
+import gzip
 from pathlib import Path
 import re
 from typing import Optional, Union
@@ -13,7 +14,7 @@ from typing import Optional, Union
 import numpy as np
 import pandas as pd
 
-KO_REGEX = re.compile(r"K\d{5}")
+KO_REGEX = re.compile(r"\bK\d{5}\b")
 
 EVIDENCE_COLUMNS = [
     "gene_id",
@@ -63,10 +64,19 @@ def read_fasta_ids(fasta_path: Union[str, Path]) -> list[str]:
     """Read all protein IDs from FASTA in original sequence order."""
     fasta_path = Path(fasta_path).expanduser().resolve()
     gene_ids = []
-    with open(fasta_path, "r", encoding="utf-8") as f:
+    is_gz = fasta_path.suffix.lower() in (".gz", ".gzip") or str(fasta_path).endswith((".fasta.gz", ".faa.gz", ".fa.gz"))
+    open_fn = (
+        (lambda p: gzip.open(p, "rt", encoding="utf-8", errors="replace"))
+        if is_gz
+        else (lambda p: open(p, "r", encoding="utf-8", errors="replace"))
+    )
+
+    with open_fn(fasta_path) as f:
         for line in f:
             if line.startswith(">"):
-                gene_ids.append(line[1:].split()[0])
+                parts = line[1:].split()
+                if parts:
+                    gene_ids.append(parts[0])
     return gene_ids
 
 
@@ -83,10 +93,11 @@ def load_ko_definitions(ko_list_path: Optional[Union[str, Path]]) -> dict[str, s
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
                 parts = line.rstrip("\r\n").split("\t")
-                if len(parts) >= 2 and parts[0].startswith("K"):
+                if len(parts) >= 2:
                     ko = parts[0].strip()
-                    definition = parts[-1].strip() if len(parts) > 1 else ""
-                    definitions[ko] = definition
+                    if KO_REGEX.fullmatch(ko):
+                        definition = parts[-1].strip() if len(parts) > 1 else ""
+                        definitions[ko] = definition
     except Exception:
         pass
     return definitions
@@ -131,7 +142,7 @@ def extract_kofam_records(tsv_path: Union[str, Path]) -> list[dict]:
         df["assignment"] = "-"
 
     # Filter to valid K-numbers
-    df = df[df["ko"].str.match(r"^K\d{5}$", na=False)].copy()
+    df = df[df["ko"].str.fullmatch(KO_REGEX, na=False)].copy()
     if df.empty:
         return []
 
