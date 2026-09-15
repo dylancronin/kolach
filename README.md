@@ -81,43 +81,55 @@ kolach integrate \
 
 ```mermaid
 flowchart TD
-    Start["Protein Predictions<br/>(KOfam, DeepKOALA, eggNOG)"] --> Gating["Confidence Gating & Disambiguation<br/>• KOfam: threshold vs rescued<br/>• DeepKOALA: prob ≥ threshold vs candidate<br/>• eggNOG: bitscore ≥ 60, evalue ≤ 1e-5 (disambiguate multi-KOs)"]
+    Start["Input Protein Annotations<br/>(KOfam, DeepKOALA, eggNOG)"] --> Filter["Confidence Gating & Disambiguation<br/>• KOfam: threshold_passing vs heuristic_rescued<br/>• DeepKOALA: probability ≥ threshold<br/>• eggNOG: bitscore ≥ 60 & evalue ≤ 1e-5 (multi-KOs disambiguated)"]
 
-    Gating --> Count{"Confident calls<br/>meeting thresholds?"}
+    Filter --> Count{"Number of confident methods<br/>meeting thresholds?"}
 
-    Count -->|"≥ 2 methods"| AgreeAll{"Do all active<br/>methods agree?"}
-    AgreeAll -->|"Yes"| Unanimous["unanimous"]
-    AgreeAll -->|"No"| AgreePair{"Do ≥ 2 methods<br/>agree?"}
-    AgreePair -->|"Yes"| Majority["majority"]
-    AgreePair -->|"No (disjoint)"| ConflictStrat{"--conflict-strategy"}
-    ConflictStrat -->|"multiple (default)"| Conflict["conflict<br/>(accepted_ko = '-')"]
-    ConflictStrat -->|"priority"| ConflictPri["conflict_priority<br/>(kofam > deepkoala > eggnog)"]
-    ConflictStrat -->|"drop"| ConflictDrop["conflict_dropped<br/>(accepted_ko = '-')"]
+    %% 3 Methods
+    Count -->|"3 methods"| ThreeAgree{"Do all 3 agree?"}
+    ThreeAgree -->|"Yes (3/3)"| Unanimous3["consensus_level = unanimous"]
+    ThreeAgree -->|"No"| TwoAgree3{"Do 2 of 3 agree?"}
+    TwoAgree3 -->|"Yes (2/3)"| Majority3["consensus_level = majority<br/>(unselected KO to alternative_kos)"]
+    TwoAgree3 -->|"No (all differ)"| Conflict3{"--conflict-strategy"}
 
-    Count -->|"1 method"| CheckCand{"Corroborated by sub-threshold<br/>candidate from other tool?"}
-    CheckCand -->|"Yes"| SingleCand["single_tool_with_candidate"]
-    CheckCand -->|"No"| Single["single_tool"]
+    %% 2 Methods
+    Count -->|"2 methods"| TwoAgree{"Do both agree?"}
+    TwoAgree -->|"Yes"| Agreed2["consensus_level = unanimous (if 2 active)<br/>or majority (if 3 active)"]
+    TwoAgree -->|"No (disjoint)"| Conflict2{"--conflict-strategy"}
 
-    Count -->|"0 methods"| CheckDual{"Do 2 sub-threshold candidates<br/>agree on same KO?"}
-    CheckDual -->|"Yes"| DualCand["orthogonal_dual_candidate"]
-    CheckDual -->|"No"| CheckRescued{"KOfam heuristic<br/>rescued hit?"}
-    CheckRescued -->|"Yes"| Rescued["single_tool<br/>(evidence: kofam(rescued))"]
-    CheckRescued -->|"No"| Unannotated["unannotated"]
+    %% Conflict resolution
+    Conflict3 -->|"multiple (default)"| ConfMult["consensus_level = conflict<br/>accepted_ko = '-'<br/>alternative_kos = all conflicting KOs"]
+    Conflict3 -->|"priority"| ConfPri["consensus_level = conflict_priority<br/>accepted_ko = top tool (kofam > deepkoala > eggnog)<br/>alternative_kos = unselected conflicting KOs"]
+    Conflict3 -->|"drop"| ConfDrop["consensus_level = conflict_dropped<br/>accepted_ko = '-'<br/>alternative_kos = all conflicting KOs"]
 
-    Unanimous --> OutputAssign
-    Majority --> OutputAssign
-    Conflict --> OutputAssign
-    ConflictPri --> OutputAssign
-    ConflictDrop --> OutputAssign
-    SingleCand --> OutputAssign
-    Single --> OutputAssign
-    DualCand --> OutputAssign
-    Rescued --> OutputAssign
-    Unannotated --> OutputAssign
+    Conflict2 -->|"multiple (default)"| ConfMult
+    Conflict2 -->|"priority"| ConfPri
+    Conflict2 -->|"drop"| ConfDrop
 
-    OutputAssign{"Single KO call?"}
-    OutputAssign -->|"Yes (unambiguous)"| AcceptedOut["accepted_ko = Kxxxxx<br/>ko = Kxxxxx"]
-    OutputAssign -->|"No (multi-KO / conflict / unannotated)"| AltOut["accepted_ko = '-'<br/>alternative_kos = Kxxxxx,..."]
+    %% 1 Method
+    Count -->|"1 method"| CheckCand{"Corroborated by sub-threshold<br/>candidate from other method?"}
+    CheckCand -->|"Yes"| SingleCand["consensus_level = single_tool_with_candidate"]
+    CheckCand -->|"No"| Single1["consensus_level = single_tool"]
+
+    %% 0 Methods
+    Count -->|"0 methods"| CheckDual{"Do 2 sub-threshold candidates<br/>independently agree on same KO?"}
+    CheckDual -->|"Yes"| DualCand["consensus_level = orthogonal_dual_candidate"]
+    CheckDual -->|"No"| CheckRescued{"KOfam heuristic rescue<br/>(rescued hit)?"}
+    CheckRescued -->|"Yes"| Rescued["consensus_level = single_tool<br/>evidence = kofam(rescued)"]
+    CheckRescued -->|"No"| Unannotated["consensus_level = unannotated<br/>accepted_ko = '-'<br/>alternative_kos = '-'"]
+
+    %% Final Routing
+    Unanimous3 --> FinalRouting
+    Majority3 --> FinalRouting
+    Agreed2 --> FinalRouting
+    SingleCand --> FinalRouting
+    Single1 --> FinalRouting
+    DualCand --> FinalRouting
+    Rescued --> FinalRouting
+
+    FinalRouting{"Candidate KO count<br/>for winning consensus?"}
+    FinalRouting -->|"Exactly 1 KO"| SingleKO["accepted_ko = single KO<br/>ko = single KO<br/>alternative_kos = minority / dropped KOs (or '-')"]
+    FinalRouting -->|"Multiple KOs (unresolved multi-hit)"| MultiKO["accepted_ko = '-'<br/>ko = '-'<br/>alternative_kos = comma-separated KOs"]
 ```
 
 ### Consensus Categories (`consensus_level`)
