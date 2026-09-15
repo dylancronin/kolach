@@ -1,4 +1,5 @@
 """Tests for the pandas-based annotation integration module in kolach."""
+import math
 from pathlib import Path
 import tempfile
 import unittest
@@ -50,14 +51,16 @@ class TestIntegrate(unittest.TestCase):
         self.assertEqual(len(df), 2)
         row1 = df[df["gene_id"] == "gene1"].iloc[0]
         self.assertEqual(row1["kofam_ko"], "K00001")
+        self.assertEqual(row1["kofam_score_type"], "full")
         self.assertEqual(row1["kofam_bit_score"], 250.5)
-        self.assertEqual(row1["kofam_evalue"], 1e-50)
+        self.assertTrue(math.isclose(row1["kofam_evalue"], 1e-50, rel_tol=1e-12, abs_tol=0.0))
         self.assertEqual(row1["kofam_assignment"], "threshold")
         self.assertEqual(row1["kofam_threshold"], 100.0)
 
         # Multi-hit aggregation for gene2 preserves separate scores and statuses
         row2 = df[df["gene_id"] == "gene2"].iloc[0]
         self.assertEqual(row2["kofam_ko"], "K00002,K00003")
+        self.assertEqual(row2["kofam_score_type"], "domain,domain")
         self.assertIn("K00002:rescued", row2["kofam_assignment"])
         self.assertIn("K00003:threshold", row2["kofam_assignment"])
         self.assertIn("K00002:70.0", str(row2["kofam_bit_score"]))
@@ -121,7 +124,7 @@ class TestIntegrate(unittest.TestCase):
         row1 = filtered[filtered["gene_id"] == "gene1"].iloc[0]
         self.assertEqual(row1["eggnog_ko"], "K00001")
         self.assertEqual(row1["eggnog_bit_score"], 150.0)
-        self.assertEqual(row1["eggnog_evalue"], 1e-40)
+        self.assertTrue(math.isclose(row1["eggnog_evalue"], 1e-40, rel_tol=1e-12, abs_tol=0.0))
 
         # gene2 has bitscore 45 < 60 -> filtered to '-' (never promoted)
         row2 = filtered[filtered["gene_id"] == "gene2"].iloc[0]
@@ -768,6 +771,7 @@ class TestIntegrate(unittest.TestCase):
             self.assertIn("ko", df.columns)
             self.assertIn("alternative_kos", df.columns)
             self.assertIn("alternative_definition", df.columns)
+            self.assertIn("kofam_score_type", df.columns)
             self.assertIn("kofam_bit_score", df.columns)
             self.assertIn("kofam_evalue", df.columns)
             self.assertIn("deepkoala_ko", df.columns)
@@ -785,11 +789,12 @@ class TestIntegrate(unittest.TestCase):
             self.assertEqual(g1["consensus_level"], "unanimous")
             self.assertEqual(g1["deepkoala_candidate_ko"], "K01783")
             self.assertEqual(g1["eggnog_candidate_ko"], "K01783")
+            self.assertEqual(g1["kofam_score_type"], "full")
             self.assertEqual(g1["kofam_bit_score"], 316.8)
-            self.assertEqual(g1["kofam_evalue"], 4.1e-95)
+            self.assertTrue(math.isclose(g1["kofam_evalue"], 4.1e-95, rel_tol=1e-12, abs_tol=0.0))
             self.assertAlmostEqual(g1["deepkoala_score"], 0.991)
             self.assertEqual(g1["eggnog_bit_score"], 250.0)
-            self.assertEqual(g1["eggnog_evalue"], 1e-80)
+            self.assertTrue(math.isclose(g1["eggnog_evalue"], 1e-80, rel_tol=1e-12, abs_tol=0.0))
 
             # Check g4 (multi-KO hit): accepted_ko must be strictly single-hit ('-'), candidates in alternative_kos
             g4 = df[df["gene_id"] == "g4"].iloc[0]
@@ -818,6 +823,402 @@ class TestIntegrate(unittest.TestCase):
             ev_file = tmp / "kolach_evidence.tsv"
             self.assertTrue(ev_file.exists())
 
+    # =========================================================================
+    # Targeted Regression Tests (Requirements 1-11)
+    # =========================================================================
+
+    def test_regression_1_full_and_domain_profiles_differ_substantially(self):
+        """1. Full and domain profiles whose full/domain scores differ substantially."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            kf = tmp / "kofam.tsv"
+            kf.write_text(
+                "gene_id\tko\tassignment\tscore_type\tthreshold\tbit_score\te_value\tdomain_bit_score\tdomain_e_value\tdefinition\n"
+                "g_full\tK00001\t-\tfull\t100.0\t250.0\t1e-50\t40.0\t1e-03\talcohol dehydrogenase\n"
+                "g_domain\tK00002\t-\tdomain\t120.0\t350.0\t1e-80\t80.0\t1e-10\talcohol dehydrogenase (NADP+)\n"
+            )
+            records = extract_kofam_records(kf)
+            self.assertEqual(len(records), 2)
+
+            r_full = next(r for r in records if r["gene_id"] == "g_full")
+            self.assertEqual(r_full["score_type"], "full")
+            self.assertEqual(r_full["original_status"], "threshold_passing")
+            self.assertEqual(r_full["bit_score"], 250.0)
+            self.assertEqual(r_full["domain_bit_score"], 40.0)
+
+            r_dom = next(r for r in records if r["gene_id"] == "g_domain")
+            self.assertEqual(r_dom["score_type"], "domain")
+            self.assertEqual(r_dom["original_status"], "below_threshold")
+            self.assertEqual(r_dom["bit_score"], 350.0)
+            self.assertEqual(r_dom["domain_bit_score"], 80.0)
+
+    def test_regression_2_domain_profile_missing_domain_score_remains_unknown(self):
+        """2. A domain profile with a missing domain score and a high full score remains unknown when status is inferred."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            kf = tmp / "kofam.tsv"
+            kf.write_text(
+                "gene_id\tko\tassignment\tscore_type\tthreshold\tbit_score\te_value\tdomain_bit_score\tdomain_e_value\tdefinition\n"
+                "g1\tK00001\t-\tdomain\t100.0\t450.0\t1e-90\t\t\tmissing domain score profile\n"
+            )
+            records = extract_kofam_records(kf)
+            self.assertEqual(len(records), 1)
+            r = records[0]
+            self.assertEqual(r["original_status"], "unknown")
+            self.assertEqual(r["bit_score"], 450.0)
+            self.assertTrue(pd.isna(r["domain_bit_score"]))
+
+    def test_regression_3_duplicate_domain_hits_selected_by_domain_score(self):
+        """3. Duplicate domain hits being selected by domain score rather than full score."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            kf = tmp / "kofam.tsv"
+            # Hit 1 has higher full score (400 > 200), but Hit 2 has higher domain score (180 > 90).
+            # For domain profile, Hit 2 must be selected.
+            kf.write_text(
+                "gene_id\tko\tassignment\tscore_type\tthreshold\tbit_score\te_value\tdomain_bit_score\tdomain_e_value\tdefinition\n"
+                "g1\tK00001\tthreshold\tdomain\t100.0\t400.0\t1e-80\t90.0\t1e-15\thit1\n"
+                "g1\tK00001\tthreshold\tdomain\t100.0\t200.0\t1e-40\t180.0\t1e-35\thit2\n"
+            )
+            records = extract_kofam_records(kf)
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["definition"], "hit2")
+            self.assertEqual(records[0]["domain_bit_score"], 180.0)
+
+    def test_regression_4_summary_scores_follow_score_type_evidence_unchanged(self):
+        """4. Summary scores and E-values following score_type, while original evidence metrics remain unchanged."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            kf = tmp / "kofam.tsv"
+            kf.write_text(
+                "gene_id\tko\tassignment\tscore_type\tthreshold\tbit_score\te_value\tdomain_bit_score\tdomain_e_value\tdefinition\n"
+                "g_dom\tK00001\tthreshold\tdomain\t100.0\t350.0\t1e-90\t150.5\t2.5e-30\tdomain protein\n"
+            )
+            out_tsv = tmp / "out.tsv"
+            ev_tsv = tmp / "ev.tsv"
+
+            df = integrate_annotations(
+                kofam_tsv=kf,
+                output_tsv=out_tsv,
+                evidence_tsv=ev_tsv,
+            )
+
+            # Summary table asserts
+            self.assertIn("kofam_score_type", df.columns)
+            row = df[df["gene_id"] == "g_dom"].iloc[0]
+            self.assertEqual(row["kofam_score_type"], "domain")
+            self.assertEqual(row["kofam_bit_score"], 150.5)
+            self.assertTrue(math.isclose(row["kofam_evalue"], 2.5e-30, rel_tol=1e-12, abs_tol=0.0))
+            self.assertEqual(row["kofam_threshold"], 100.0)
+
+            # Evidence table asserts: original full and domain metrics are unchanged
+            ev_df = pd.read_csv(ev_tsv, sep="\t", dtype=str)
+            ev_row = ev_df[ev_df["gene_id"] == "g_dom"].iloc[0]
+            self.assertEqual(float(ev_row["bit_score"]), 350.0)
+            self.assertTrue(math.isclose(float(ev_row["e_value"]), 1e-90, rel_tol=1e-12, abs_tol=0.0))
+            self.assertEqual(float(ev_row["domain_bit_score"]), 150.5)
+            self.assertTrue(math.isclose(float(ev_row["domain_e_value"]), 2.5e-30, rel_tol=1e-12, abs_tol=0.0))
+            self.assertEqual(ev_row["score_type"], "domain")
+
+    def test_regression_5_rescued_domain_hit_retains_threshold_and_label_displays_domain_score(self):
+        """5. A rescued domain hit retaining its original KO threshold and rescued label while displaying its domain score."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            kf = tmp / "kofam.tsv"
+            kf.write_text(
+                "gene_id\tko\tassignment\tscore_type\tthreshold\tbit_score\te_value\tdomain_bit_score\tdomain_e_value\tdefinition\n"
+                "g1\tK00002\trescued\tdomain\t120.0\t180.0\t1e-25\t95.0\t5e-12\trescued domain KO\n"
+            )
+            out_tsv = tmp / "out.tsv"
+            ev_tsv = tmp / "ev.tsv"
+
+            df = integrate_annotations(
+                kofam_tsv=kf,
+                output_tsv=out_tsv,
+                evidence_tsv=ev_tsv,
+            )
+
+            row = df[df["gene_id"] == "g1"].iloc[0]
+            self.assertEqual(row["accepted_ko"], "K00002")
+            self.assertEqual(row["kofam_assignment"], "rescued")
+            self.assertEqual(row["kofam_threshold"], 120.0)
+            self.assertEqual(row["kofam_score_type"], "domain")
+            self.assertEqual(row["kofam_bit_score"], 95.0)
+            self.assertTrue(math.isclose(row["kofam_evalue"], 5e-12, rel_tol=1e-12, abs_tol=0.0))
+            self.assertEqual(row["consensus_level"], "single_tool")
+            self.assertEqual(row["evidence"], "kofam(rescued)")
+
+    def test_regression_6_native_and_normalized_eggnog_produce_identical_records(self):
+        """6. Native and normalized eggNOG files producing identical records, retaining the first protein."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            native_file = tmp / "test.emapper.annotations"
+            native_file.write_text(
+                "## emapper-2.1.12\n"
+                "## Command: emapper.py -i input.fa ...\n"
+                "#query\tseed_ortholog\tevalue\tscore\tKEGG_ko\tDescription\n"
+                "first_prot\ts1\t1e-50\t180.0\tko:K00001\tfirst description\n"
+                "second_prot\ts2\t1e-30\t120.0\tko:K00002\tsecond description\n"
+            )
+            normalized_file = tmp / "normalized.tsv"
+            normalized_file.write_text(
+                "query\tseed_ortholog\tevalue\tscore\tKEGG_ko\tDescription\n"
+                "first_prot\ts1\t1e-50\t180.0\tko:K00001\tfirst description\n"
+                "second_prot\ts2\t1e-30\t120.0\tko:K00002\tsecond description\n"
+            )
+
+            rec_native = extract_eggnog_records(native_file)
+            rec_norm = extract_eggnog_records(normalized_file)
+
+            self.assertEqual(len(rec_native), 2)
+            self.assertEqual(len(rec_norm), 2)
+            self.assertEqual(rec_native[0]["gene_id"], "first_prot")
+            self.assertEqual(rec_norm[0]["gene_id"], "first_prot")
+            self.assertEqual(rec_native, rec_norm)
+
+    def test_regression_7_header_only_and_malformed_eggnog(self):
+        """7. Header-only eggNOG input and malformed headers."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+
+            # Valid header-only native file
+            header_only = tmp / "header_only.tsv"
+            header_only.write_text(
+                "## emapper metadata\n"
+                "#query\tseed\tevalue\tscore\tKEGG_ko\tDescription\n"
+            )
+            rec = extract_eggnog_records(header_only)
+            self.assertEqual(rec, [])
+            df_en = load_eggnog(header_only)
+            self.assertTrue(df_en.empty)
+            self.assertIn("gene_id", df_en.columns)
+
+            # Malformed header: missing query
+            missing_query = tmp / "missing_query.tsv"
+            missing_query.write_text(
+                "#seed\tevalue\tscore\tKEGG_ko\tDescription\n"
+                "s1\t1e-40\t150.0\tK00001\tdef\n"
+            )
+            with self.assertRaises(ValueError):
+                extract_eggnog_records(missing_query)
+
+            # Malformed header: missing KO
+            missing_ko = tmp / "missing_ko.tsv"
+            missing_ko.write_text(
+                "#query\tseed\tevalue\tscore\tCOG\tDescription\n"
+                "prot1\ts1\t1e-40\t150.0\tCOG0001\tdef\n"
+            )
+            with self.assertRaises(ValueError):
+                extract_eggnog_records(missing_ko)
+
+    def test_regression_8_eggnog_missing_metrics_unknown_and_zero_evalue_valid(self):
+        """8. Missing/malformed/nonfinite eggNOG metrics remaining unknown, while E-value zero remains valid."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            en_file = tmp / "eggnog.tsv"
+            en_file.write_text(
+                "#query\tseed\tevalue\tscore\tKEGG_ko\tDescription\n"
+                "g_zero\ts1\t0.0\t120.0\tko:K00001\tzero evalue\n"
+                "g_missing_ev\ts2\t\t150.0\tko:K00002\tmissing evalue\n"
+                "g_missing_bs\ts3\t1e-50\t\tko:K00003\tmissing bitscore\n"
+                "g_inf\ts4\t1e-50\tinf\tko:K00004\tinf bitscore\n"
+                "g_below\ts5\t1e-10\t45.0\tko:K00005\tbelow threshold\n"
+            )
+
+            records = extract_eggnog_records(en_file, min_bitscore=60.0, max_evalue=1e-5)
+            rec_map = {r["gene_id"]: r for r in records}
+
+            self.assertEqual(rec_map["g_zero"]["original_status"], "threshold_passing")
+            self.assertEqual(rec_map["g_zero"]["e_value"], 0.0)
+
+            self.assertEqual(rec_map["g_missing_ev"]["original_status"], "unknown")
+            self.assertEqual(rec_map["g_missing_bs"]["original_status"], "unknown")
+            self.assertEqual(rec_map["g_inf"]["original_status"], "unknown")
+            self.assertEqual(rec_map["g_below"]["original_status"], "below_threshold")
+
+            # Run integrate_annotations to confirm unknowns stay unknown without promotion
+            out_tsv = tmp / "out.tsv"
+            ev_tsv = tmp / "ev.tsv"
+            df = integrate_annotations(eggnog_tsv=en_file, output_tsv=out_tsv, evidence_tsv=ev_tsv)
+
+            self.assertEqual(df[df["gene_id"] == "g_zero"].iloc[0]["accepted_ko"], "K00001")
+            self.assertEqual(df[df["gene_id"] == "g_missing_ev"].iloc[0]["consensus_level"], "unannotated")
+            self.assertEqual(df[df["gene_id"] == "g_missing_bs"].iloc[0]["consensus_level"], "unannotated")
+            self.assertEqual(df[df["gene_id"] == "g_inf"].iloc[0]["consensus_level"], "unannotated")
+
+    def test_regression_9_explicit_missing_input_paths_raise_and_omitted_supported(self):
+        """9. Explicit missing input paths raising errors and omitted optional paths remaining supported."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            out_tsv = tmp / "out.tsv"
+
+            # 1. Nonexistent explicitly supplied KOfam file
+            with self.assertRaises(FileNotFoundError):
+                integrate_annotations(kofam_tsv=tmp / "nonexistent_kofam.tsv", output_tsv=out_tsv)
+
+            # 2. Nonexistent explicitly supplied FASTA file
+            with self.assertRaises(FileNotFoundError):
+                integrate_annotations(protein_fasta=tmp / "nonexistent.faa", output_tsv=out_tsv)
+
+            # 3. Completely omitted optional paths (None) work as empty runs
+            df_empty = integrate_annotations(output_tsv=out_tsv)
+            self.assertTrue(df_empty.empty)
+            self.assertIn("accepted_ko", df_empty.columns)
+            self.assertIn("kofam_score_type", df_empty.columns)
+
+    def test_regression_10_legacy_adjudicate_consensus_single_tool_branch(self):
+        """10. Legacy single-tool consensus branches completing without a NameError or column-length mismatch."""
+        data = pd.DataFrame({
+            "gene_id": ["g1", "g2"],
+            "kofam_ko": ["K00001", "K00002"],
+            "kofam_assignment": ["threshold", "rescued"],
+            "deepkoala_ko": ["-", "-"],
+            "eggnog_ko": ["-", "-"],
+            "eggnog_candidate_ko": ["-", "-"],
+        })
+        active_tools = ["kofam", "deepkoala"]
+
+        # Run adjudicate_consensus directly; must complete without NameError and length must match
+        res = adjudicate_consensus(data, active_tools)
+        self.assertEqual(len(res), 2)
+        self.assertEqual(len(res["consensus_level"]), 2)
+        self.assertEqual(res.loc[res["gene_id"] == "g1", "consensus_level"].values[0], "single_tool")
+        self.assertEqual(res.loc[res["gene_id"] == "g2", "consensus_level"].values[0], "single_tool")
+        self.assertEqual(res.loc[res["gene_id"] == "g2", "evidence"].values[0], "kofam(rescued)")
+
+    def test_regression_11_accepted_ko_single_valued_and_alternatives_preserved(self):
+        """11. Accepted KOs remaining single-valued and unresolved alternatives being preserved."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+
+            # Solitary multi-KO hit
+            en_tsv = tmp / "eggnog.tsv"
+            en_tsv.write_text(
+                "query\tseed\tevalue\tscore\tKEGG_ko\tDescription\n"
+                "g_multi\ts1\t1e-50\t150.0\tko:K01447,ko:K01448\tmulti KO amidase\n"
+            )
+            df = integrate_annotations(eggnog_tsv=en_tsv)
+            row = df[df["gene_id"] == "g_multi"].iloc[0]
+            self.assertEqual(row["accepted_ko"], "-")
+            self.assertEqual(row["ko"], "-")
+            self.assertEqual(row["alternative_kos"], "K01447,K01448")
+
+            # Conflicting calls: KOfam calls K00001, DeepKOALA calls K00002
+            kf_tsv = tmp / "kf.tsv"
+            kf_tsv.write_text(
+                "gene_id\tko\tassignment\tscore_type\tthreshold\tbit_score\te_value\tdomain_bit_score\tdomain_e_value\tdefinition\n"
+                "g_conflict\tK00001\tthreshold\tfull\t100.0\t200.0\t1e-50\t200.0\t1e-50\tdef1\n"
+            )
+            dk_tsv = tmp / "dk.tsv"
+            dk_tsv.write_text(
+                "name\tpredict_label\tprobability\tthreshold\tannotate\n"
+                "g_conflict\tK00002\t0.95\t0.50\t*\n"
+            )
+            df_conf = integrate_annotations(kofam_tsv=kf_tsv, deepkoala_tsv=dk_tsv, conflict_strategy="multiple")
+            row_c = df_conf[df_conf["gene_id"] == "g_conflict"].iloc[0]
+            self.assertEqual(row_c["accepted_ko"], "-")
+            self.assertEqual(row_c["alternative_kos"], "K00001,K00002")
+            self.assertEqual(row_c["consensus_level"], "conflict")
+
+    def test_regression_12_kofam_missing_assignment_not_promoted_to_threshold_passing(self):
+        """12. Missing KOfam status/assignment must not imply threshold passage in legacy helpers."""
+        # In adjudicate_consensus, kofam_ko without assignment column or with "-" assignment
+        data = pd.DataFrame({
+            "gene_id": ["g1"],
+            "kofam_ko": ["K00001"],
+            # No kofam_assignment column
+            "deepkoala_ko": ["-"],
+            "eggnog_ko": ["-"],
+            "eggnog_candidate_ko": ["-"],
+        })
+        active_tools = ["kofam"]
+        res = adjudicate_consensus(data, active_tools)
+        # Without kofam_assignment, K00001 must NOT be promoted to accepted threshold-passing call
+        self.assertEqual(res.loc[res["gene_id"] == "g1", "accepted_ko"].values[0], "-")
+        self.assertEqual(res.loc[res["gene_id"] == "g1", "consensus_level"].values[0], "unannotated")
+
+        # In filter_and_disambiguate_eggnog:
+        # eggnog has a multi-KO hit K00010,K00020.
+        # If merged_df has kofam_ko="K00010" but NO kofam_assignment, KOfam cannot disambiguate as a trusted call
+        eggnog_df = pd.DataFrame({
+            "gene_id": ["g1"],
+            "eggnog_raw_ko": ["K00010,K00020"],
+            "eggnog_bit_score": [100.0],
+            "eggnog_evalue": [1e-20],
+            "eggnog_description": ["desc"],
+        })
+        base_df = pd.DataFrame({
+            "gene_id": ["g1"],
+            "kofam_ko": ["K00010"],
+            "deepkoala_ko": ["-"],
+            "deepkoala_candidate_ko": ["-"],
+        })
+        filtered = filter_and_disambiguate_eggnog(eggnog_df, base_df, filter_multi_mode="strict")
+        # In strict mode without trusted other call, cannot disambiguate -> "-"
+        self.assertEqual(filtered.loc[filtered["gene_id"] == "g1", "eggnog_ko"].values[0], "-")
+
+    def test_regression_13_eggnog_duplicate_inf_score_does_not_displace_valid_finite_hit(self):
+        """13. eggNOG duplicate with inf score must not displace a valid finite threshold-passing hit."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            tsv = tmp / "eggnog.tsv"
+            # Row 1: inf score (unknown status)
+            # Row 2: valid finite score 150.0, evalue 1e-50 (threshold_passing)
+            tsv.write_text(
+                "#query\tseed\tevalue\tscore\tKEGG_ko\tDescription\n"
+                "g1\ts1\t1e-50\tinf\tko:K00001\tinf hit\n"
+                "g1\ts2\t1e-50\t150.0\tko:K00001\tvalid hit\n"
+            )
+            records = extract_eggnog_records(tsv, min_bitscore=60.0, max_evalue=1e-5)
+            self.assertEqual(len(records), 1)
+            rec = records[0]
+            self.assertEqual(rec["bit_score"], 150.0)
+            self.assertEqual(rec["original_status"], "threshold_passing")
+            self.assertEqual(rec["eggnog_description"], "valid hit")
+
+            # Also verify in load_eggnog
+            df_en = load_eggnog(tsv)
+            row = df_en[df_en["gene_id"] == "g1"].iloc[0]
+            self.assertEqual(row["eggnog_bit_score"], 150.0)
+            self.assertEqual(row["eggnog_candidate_ko"], "K00001")
+
+    def test_regression_14_eggnog_pre_header_single_hash_comments_skipped(self):
+        """14. Leading single-# comments before the recognized #query header are skipped."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            tsv = tmp / "eggnog.tsv"
+            tsv.write_text(
+                "## emapper-2.1.12\n"
+                "# Command: emapper.py -i input.fa ...\n"
+                "# Generated on 2026-09-14\n"
+                "# Author: bioinfo\n"
+                "#query\tseed_ortholog\tevalue\tscore\tKEGG_ko\tDescription\n"
+                "prot1\ts1\t1e-50\t180.0\tko:K00001\tfirst protein\n"
+                "prot2\ts2\t1e-30\t120.0\tko:K00002\tsecond protein\n"
+            )
+            df = read_eggnog_tsv(tsv)
+            self.assertEqual(len(df), 2)
+            self.assertIn("query", df.columns)
+            self.assertEqual(df.iloc[0]["query"], "prot1")
+
+            records = extract_eggnog_records(tsv)
+            self.assertEqual(len(records), 2)
+            self.assertEqual(records[0]["gene_id"], "prot1")
+            self.assertEqual(records[0]["ko"], "K00001")
+
+            # Also check normalized TSV with pre-header single-# comment
+            norm_tsv = tmp / "norm_eggnog.tsv"
+            norm_tsv.write_text(
+                "# Leading comment line\n"
+                "# Another comment\n"
+                "query\tseed_ortholog\tevalue\tscore\tKEGG_ko\tDescription\n"
+                "prot1\ts1\t1e-50\t180.0\tko:K00001\tfirst protein\n"
+            )
+            df_norm = read_eggnog_tsv(norm_tsv)
+            self.assertEqual(len(df_norm), 1)
+            self.assertEqual(df_norm.iloc[0]["query"], "prot1")
+
 
 if __name__ == "__main__":
     unittest.main()
+
