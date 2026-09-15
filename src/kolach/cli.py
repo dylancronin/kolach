@@ -212,14 +212,14 @@ def main():
 
     annotate_parser.add_argument(
         "--eggnog-filter-multi",
-        choices=["disambiguate", "strict", "none"],
+        choices=["disambiguate", "none"],
         default="disambiguate",
-        help="eggNOG multi-KO filtering strategy: disambiguate against other tools (default), strict (drop unresolved), or none.",
+        help="eggNOG multi-KO filtering strategy: disambiguate against other tools (default) or none.",
     )
 
     annotate_parser.add_argument(
         "--conflict-strategy",
-        choices=["multiple", "priority", "union"],
+        choices=["multiple", "priority"],
         default="multiple",
         help=(
             "Consensus conflict strategy for disjoint calls: multiple (default: sets accepted_ko and ko to '-', "
@@ -301,14 +301,14 @@ def main():
 
     integrate_parser.add_argument(
         "--eggnog-filter-multi",
-        choices=["disambiguate", "strict", "none"],
+        choices=["disambiguate", "none"],
         default="disambiguate",
-        help="eggNOG multi-KO disambiguation strategy (default: disambiguate).",
+        help="eggNOG multi-KO disambiguation strategy: disambiguate against other tools (default) or none.",
     )
 
     integrate_parser.add_argument(
         "--conflict-strategy",
-        choices=["multiple", "priority", "union"],
+        choices=["multiple", "priority"],
         default="multiple",
         help=(
             "Consensus conflict strategy for disjoint calls: multiple (default: sets accepted_ko and ko to '-', "

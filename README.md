@@ -47,7 +47,7 @@ Key options:
 - `--eggnog-mode`: Search mode (`diamond` [default] or `mmseqs`).
 - `--eggnog-sensmode`: DIAMOND sensitivity mode (default: upstream sensitive iterative search).
 - `--eggnog-min-bitscore` / `--eggnog-max-evalue`: eggNOG retention thresholds (default: `60.0` / `1e-5`).
-- `--eggnog-filter-multi`: Resolve multi-KO orthology groups (`disambiguate` [default], `strict`, or `none`).
+- `--eggnog-filter-multi`: Resolve multi-KO orthology groups (`disambiguate` [default] or `none`).
 - `--conflict-strategy`: Adjudication for disjoint tool calls (`multiple` [default] or `priority`).
 
 ### 3. Standalone Table Integration
