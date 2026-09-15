@@ -137,6 +137,50 @@ def select_kofam_scores(
         return np.nan, np.nan, "-"
 
 
+def make_evidence_record(
+    gene_id: str,
+    ko: str,
+    method: str,
+    original_status: str,
+    bit_score: float = np.nan,
+    e_value: float = np.nan,
+    domain_bit_score: float = np.nan,
+    domain_e_value: float = np.nan,
+    score_type: str = "-",
+    threshold: float = np.nan,
+    bit_score_threshold: float = np.nan,
+    e_value_threshold: float = np.nan,
+    deepkoala_probability: float = np.nan,
+    deepkoala_threshold: float = np.nan,
+    eggnog_shared_seed_hit: bool = False,
+    shared_seed_hit: bool = False,
+    definition: str = "-",
+    **tool_kwargs: Any,
+) -> dict[str, Any]:
+    """Construct a normalized evidence record with standard field defaults."""
+    rec = {
+        "gene_id": gene_id,
+        "ko": ko,
+        "method": method,
+        "original_status": original_status,
+        "bit_score": bit_score,
+        "e_value": e_value,
+        "domain_bit_score": domain_bit_score,
+        "domain_e_value": domain_e_value,
+        "score_type": score_type if score_type else "-",
+        "threshold": threshold,
+        "bit_score_threshold": bit_score_threshold,
+        "e_value_threshold": e_value_threshold,
+        "deepkoala_probability": deepkoala_probability,
+        "deepkoala_threshold": deepkoala_threshold,
+        "eggnog_shared_seed_hit": eggnog_shared_seed_hit,
+        "shared_seed_hit": shared_seed_hit,
+        "definition": definition,
+    }
+    rec.update(tool_kwargs)
+    return rec
+
+
 def extract_kofam_records(tsv_path: Union[str, Path]) -> list[dict]:
     """Extract per-hit KO records from KOfam annotations TSV.
 
@@ -247,26 +291,24 @@ def extract_kofam_records(tsv_path: Union[str, Path]) -> list[dict]:
             bs_thresh = thresh
             ev_thresh = np.nan
 
-        records.append({
-            "gene_id": row["gene_id"],
-            "ko": row["ko"],
-            "method": "kofam",
-            "original_status": orig_status,
-            "bit_score": bs,
-            "e_value": ev,
-            "domain_bit_score": dbs,
-            "domain_e_value": dev,
-            "score_type": score_type if score_type else "-",
-            "threshold": thresh,
-            "bit_score_threshold": bs_thresh,
-            "e_value_threshold": ev_thresh,
-            "deepkoala_probability": np.nan,
-            "deepkoala_threshold": np.nan,
-            "eggnog_shared_seed_hit": False,
-            "shared_seed_hit": False,
-            "definition": definition,
-            "assignment": assign_raw if assign_raw else "-",
-        })
+        records.append(
+            make_evidence_record(
+                gene_id=row["gene_id"],
+                ko=row["ko"],
+                method="kofam",
+                original_status=orig_status,
+                bit_score=bs,
+                e_value=ev,
+                domain_bit_score=dbs,
+                domain_e_value=dev,
+                score_type=score_type,
+                threshold=thresh,
+                bit_score_threshold=bs_thresh,
+                e_value_threshold=ev_thresh,
+                definition=definition,
+                assignment=assign_raw if assign_raw else "-",
+            )
+        )
     return records
 
 
@@ -389,25 +431,17 @@ def extract_deepkoala_records(tsv_path: Union[str, Path]) -> list[dict]:
 
     records = []
     for _, row in exp_df.iterrows():
-        records.append({
-            "gene_id": row["gene_id"],
-            "ko": row["ko"],
-            "method": "deepkoala",
-            "original_status": row["original_status"],
-            "bit_score": np.nan,
-            "e_value": np.nan,
-            "domain_bit_score": np.nan,
-            "domain_e_value": np.nan,
-            "score_type": row["score_type"],
-            "threshold": np.nan,
-            "bit_score_threshold": np.nan,
-            "e_value_threshold": np.nan,
-            "deepkoala_probability": row["deepkoala_score"],
-            "deepkoala_threshold": row["deepkoala_threshold"],
-            "eggnog_shared_seed_hit": False,
-            "shared_seed_hit": False,
-            "definition": "-",
-        })
+        records.append(
+            make_evidence_record(
+                gene_id=row["gene_id"],
+                ko=row["ko"],
+                method="deepkoala",
+                original_status=row["original_status"],
+                score_type=row["score_type"],
+                deepkoala_probability=row["deepkoala_score"],
+                deepkoala_threshold=row["deepkoala_threshold"],
+            )
+        )
     return records
 
 
@@ -583,26 +617,24 @@ def extract_eggnog_records(
     records = []
     for _, row in exp_df.iterrows():
         is_shared = bool(row.get("eggnog_shared_seed_hit", row.get("shared_seed_hit", False)))
-        records.append({
-            "gene_id": row["gene_id"],
-            "ko": row["ko"],
-            "method": "eggnog",
-            "original_status": row["original_status"],
-            "bit_score": row["bit_score"],
-            "e_value": row["e_value"],
-            "domain_bit_score": np.nan,
-            "domain_e_value": np.nan,
-            "score_type": "seed_hit",
-            "threshold": min_bitscore,
-            "bit_score_threshold": min_bitscore,
-            "e_value_threshold": max_evalue,
-            "deepkoala_probability": np.nan,
-            "deepkoala_threshold": np.nan,
-            "eggnog_shared_seed_hit": is_shared,
-            "shared_seed_hit": is_shared,
-            "definition": "-",  # generic seed description is NOT authoritative KO definition
-            "eggnog_description": row["eggnog_description"],
-        })
+        records.append(
+            make_evidence_record(
+                gene_id=row["gene_id"],
+                ko=row["ko"],
+                method="eggnog",
+                original_status=row["original_status"],
+                bit_score=row["bit_score"],
+                e_value=row["e_value"],
+                score_type="seed_hit",
+                threshold=min_bitscore,
+                bit_score_threshold=min_bitscore,
+                e_value_threshold=max_evalue,
+                eggnog_shared_seed_hit=is_shared,
+                shared_seed_hit=is_shared,
+                definition="-",
+                eggnog_description=row["eggnog_description"],
+            )
+        )
     return records
 
 
@@ -651,6 +683,493 @@ def resolve_definition_for_kos(
         if d != "-":
             parts.append(f"{k}: {d}")
     return "; ".join(parts) if parts else "-"
+
+
+def disambiguate_eggnog(
+    en_agreed: set[str],
+    tool_recs: dict[str, list[dict]],
+    active_tools: list[str],
+    confident_kos: dict[str, set[str]],
+    candidate_kos: dict[str, set[str]],
+    rescued_kos: dict[str, set[str]],
+    eggnog_filter_multi: str = "disambiguate",
+) -> tuple[set[str], set[str]]:
+    """Disambiguate eggNOG multi-KO assignments against other methods' predictions.
+
+    When an eggNOG assignment represents a multi-KO seed hit, checks for corroboration
+    first against confident calls from other tools, then against candidate/rescued calls.
+    Dropped KOs are returned in en_dropped and preserved in alternative_kos.
+    """
+    en_dropped = set()
+    if "eggnog" in active_tools and en_agreed:
+        has_multi = any(
+            r.get("eggnog_shared_seed_hit", r.get("shared_seed_hit", False))
+            for r in tool_recs.get("eggnog", [])
+        )
+        if has_multi:
+            trusted_other = set().union(*[confident_kos.get(t, set()) for t in active_tools if t != "eggnog"])
+            cand_other = set().union(
+                *[rescued_kos.get(t, set()) | candidate_kos.get(t, set()) for t in active_tools if t != "eggnog"]
+            )
+
+            if eggnog_filter_multi == "disambiguate":
+                if en_agreed & trusted_other:
+                    overlap = en_agreed & trusted_other
+                    en_dropped = en_agreed - overlap
+                    en_agreed = overlap
+                elif en_agreed & cand_other:
+                    overlap = en_agreed & cand_other
+                    en_dropped = en_agreed - overlap
+                    en_agreed = overlap
+
+    return en_agreed, en_dropped
+
+
+def adjudicate_gene(
+    active_tools: list[str],
+    confident_kos: dict[str, set[str]],
+    candidate_kos: dict[str, set[str]],
+    rescued_kos: dict[str, set[str]],
+    en_dropped: set[str],
+    en_raw_cands: set[str],
+    conflict_strategy: str = "multiple",
+    priority_order: Optional[list[str]] = None,
+) -> tuple[str, set[str], str, str]:
+    """Adjudicate consensus KO, alternative KOs, consensus level, and evidence string for a gene."""
+    tool_calls = {t: confident_kos[t] for t in active_tools if t in confident_kos}
+    num_calling_tools = len(tool_calls)
+
+    accepted_ko = "-"
+    alt_set = set()
+    consensus_level = "unannotated"
+    evidence_str = "-"
+
+    if num_calling_tools == 0:
+        dk_cand = candidate_kos.get("deepkoala", set())
+        en_cand = candidate_kos.get("eggnog", set())
+        kf_resc = rescued_kos.get("kofam", set())
+
+        # Zero-calling-tools ladder:
+        # 1. KOfam rescue in any form first:
+        #    a. KOfam rescue agreed with both DeepKOALA and eggNOG candidates
+        #    b. KOfam rescue agreed with eggNOG candidate
+        #    c. KOfam rescue agreed with DeepKOALA candidate
+        #    d. KOfam rescue by itself
+        # 2. Then, look at eggNOG candidate, then DeepKOALA candidate:
+        #    a. DeepKOALA candidate agreed with eggNOG candidate
+        # 3. Otherwise: unannotated.
+        cand_agree = set()
+        agreeing_cands = []
+
+        if "kofam" in active_tools and kf_resc:
+            if "deepkoala" in active_tools and "eggnog" in active_tools and (kf_resc & en_cand & dk_cand):
+                cand_agree = kf_resc & en_cand & dk_cand
+                agreeing_cands = ["deepkoala(candidate)", "eggnog(candidate)", "kofam(rescued)"]
+            elif "eggnog" in active_tools and (kf_resc & en_cand):
+                cand_agree = kf_resc & en_cand
+                agreeing_cands = ["eggnog(candidate)", "kofam(rescued)"]
+            elif "deepkoala" in active_tools and (kf_resc & dk_cand):
+                cand_agree = kf_resc & dk_cand
+                agreeing_cands = ["deepkoala(candidate)", "kofam(rescued)"]
+
+            if cand_agree:
+                consensus_level = "orthogonal_dual_candidate"
+                evidence_str = ",".join(sorted(agreeing_cands))
+                dropped_en = (en_raw_cands - cand_agree) if (len(en_raw_cands) > 1 and bool(cand_agree & en_raw_cands)) else set()
+                if len(cand_agree) == 1:
+                    accepted_ko = next(iter(cand_agree))
+                    alt_set = dropped_en - {accepted_ko}
+                else:
+                    accepted_ko = "-"
+                    alt_set = cand_agree | dropped_en
+            else:
+                # KOfam rescue by itself
+                consensus_level = "single_tool"
+                evidence_str = "kofam(rescued)"
+                dropped_en = (en_raw_cands - kf_resc) if (len(en_raw_cands) > 1 and bool(kf_resc & en_raw_cands)) else set()
+                if len(kf_resc) == 1:
+                    accepted_ko = next(iter(kf_resc))
+                    alt_set = dropped_en - {accepted_ko}
+                else:
+                    accepted_ko = "-"
+                    alt_set = kf_resc | dropped_en
+
+        elif "deepkoala" in active_tools and "eggnog" in active_tools and (dk_cand & en_cand):
+            cand_agree = dk_cand & en_cand
+            agreeing_cands = ["deepkoala(candidate)", "eggnog(candidate)"]
+            consensus_level = "orthogonal_dual_candidate"
+            evidence_str = ",".join(sorted(agreeing_cands))
+            dropped_en = (en_raw_cands - cand_agree) if (len(en_raw_cands) > 1 and bool(cand_agree & en_raw_cands)) else set()
+            if len(cand_agree) == 1:
+                accepted_ko = next(iter(cand_agree))
+                alt_set = dropped_en - {accepted_ko}
+            else:
+                accepted_ko = "-"
+                alt_set = cand_agree | dropped_en
+
+        else:
+            accepted_ko = "-"
+            alt_set = set()
+            consensus_level = "unannotated"
+            evidence_str = "-"
+
+    elif num_calling_tools == 1:
+        tool_name = next(iter(tool_calls))
+        called_kos = tool_calls[tool_name]
+
+        dk_cand = candidate_kos.get("deepkoala", set())
+        en_cand = candidate_kos.get("eggnog", set())
+        kf_resc = rescued_kos.get("kofam", set())
+
+        rescued_by = []
+        if tool_name != "deepkoala" and "deepkoala" in active_tools and (called_kos & dk_cand):
+            rescued_by.append("deepkoala(candidate)")
+        if tool_name != "eggnog" and "eggnog" in active_tools and (called_kos & en_cand):
+            rescued_by.append("eggnog(candidate)")
+        if tool_name != "kofam" and "kofam" in active_tools and (called_kos & kf_resc):
+            rescued_by.append("kofam(rescued)")
+
+        dropped_en = (en_raw_cands - called_kos) if (len(en_raw_cands) > 1 and bool(called_kos & en_raw_cands)) else en_dropped
+
+        if len(called_kos) == 1:
+            accepted_ko = next(iter(called_kos))
+            alt_set = dropped_en - {accepted_ko}
+        else:
+            accepted_ko = "-"
+            alt_set = called_kos | dropped_en
+
+        if rescued_by:
+            consensus_level = "single_tool_with_candidate"
+            evidence_str = ",".join([tool_name] + rescued_by)
+        else:
+            consensus_level = "single_tool"
+            evidence_str = tool_name
+
+    else:  # num_calling_tools >= 2
+        all_sets = list(tool_calls.values())
+        union_all_calls = set.union(*all_sets)
+        common_all = set.intersection(*all_sets)
+
+        if common_all:
+            is_unanimous = (num_calling_tools == len(active_tools))
+            consensus_level = "unanimous" if is_unanimous else "majority"
+            evidence_str = ",".join(sorted(tool_calls.keys()))
+            dropped_en = (en_raw_cands - common_all) if (len(en_raw_cands) > 1 and bool(common_all & en_raw_cands)) else en_dropped
+            unselected_minority = union_all_calls - common_all
+            extra_alts = unselected_minority | dropped_en
+
+            if len(common_all) == 1:
+                accepted_ko = next(iter(common_all))
+                alt_set = extra_alts - {accepted_ko}
+            else:
+                accepted_ko = "-"
+                alt_set = common_all | extra_alts
+        else:
+            # Pairwise majority check
+            pairwise_agreed = set()
+            agreeing_tools = set()
+            tools_list = list(tool_calls.keys())
+            for i in range(len(tools_list)):
+                for j in range(i + 1, len(tools_list)):
+                    inter = tool_calls[tools_list[i]] & tool_calls[tools_list[j]]
+                    if inter:
+                        pairwise_agreed.update(inter)
+                        agreeing_tools.add(tools_list[i])
+                        agreeing_tools.add(tools_list[j])
+
+            if pairwise_agreed:
+                consensus_level = "majority"
+                evidence_str = ",".join(sorted(agreeing_tools))
+                dropped_en = (en_raw_cands - pairwise_agreed) if (len(en_raw_cands) > 1 and bool(pairwise_agreed & en_raw_cands)) else en_dropped
+                unselected_minority = union_all_calls - pairwise_agreed
+                extra_alts = unselected_minority | dropped_en
+
+                if len(pairwise_agreed) == 1:
+                    accepted_ko = next(iter(pairwise_agreed))
+                    alt_set = extra_alts - {accepted_ko}
+                else:
+                    accepted_ko = "-"
+                    alt_set = pairwise_agreed | extra_alts
+            else:
+                # Disjoint conflict
+                all_alts = union_all_calls | en_dropped
+                if conflict_strategy == "priority":
+                    if priority_order is None:
+                        priority_order = [t for t in ["kofam", "eggnog", "deepkoala"] if t in active_tools]
+                    top_tool = next((t for t in priority_order if t in tool_calls), tools_list[0])
+                    top_kos = tool_calls[top_tool]
+                    dropped_en_top = (en_raw_cands - top_kos) if (len(en_raw_cands) > 1 and bool(top_kos & en_raw_cands)) else en_dropped
+                    if len(top_kos) == 1:
+                        accepted_ko = next(iter(top_kos))
+                        alt_set = ((union_all_calls - top_kos) | dropped_en_top) - {accepted_ko}
+                    else:
+                        accepted_ko = "-"
+                        alt_set = all_alts
+                    consensus_level = "conflict_priority"
+                    evidence_str = top_tool
+                else:  # "multiple" (default)
+                    accepted_ko = "-"
+                    alt_set = all_alts
+                    consensus_level = "conflict"
+                    evidence_str = ",".join(sorted(tool_calls.keys()))
+
+    return accepted_ko, alt_set, consensus_level, evidence_str
+
+
+def build_gene_summary_row(
+    gid: str,
+    accepted_ko: str,
+    alt_set: set[str],
+    consensus_level: str,
+    evidence_str: str,
+    tool_recs: dict[str, list[dict]],
+    en_agreed: set[str],
+    master_ko_defs: dict[str, str],
+    evidence_defs: dict[str, str],
+) -> dict[str, Any]:
+    """Build the dictionary of summary metrics and annotations for a single gene."""
+    alternative_kos = format_kos(alt_set)
+    accepted_set = {accepted_ko} if accepted_ko != "-" else set()
+    definition = resolve_definition_for_kos(accepted_set, master_ko_defs, evidence_defs)
+    alternative_definition = resolve_definition_for_kos(alt_set, master_ko_defs, evidence_defs)
+
+    kf_recs = tool_recs.get("kofam", [])
+    if kf_recs:
+        kf_kos = sorted({r["ko"] for r in kf_recs})
+        kofam_ko_val = format_kos(set(kf_kos))
+        if len(kf_recs) == 1:
+            r0 = kf_recs[0]
+            sel_bs, sel_ev, norm_st = select_kofam_scores(
+                r0.get("score_type"),
+                r0.get("bit_score"),
+                r0.get("e_value"),
+                r0.get("domain_bit_score"),
+                r0.get("domain_e_value"),
+            )
+            kf_st_val = norm_st
+            kf_assign_val = str(r0["assignment"])
+            kf_bs_val = sel_bs
+            kf_ev_val = sel_ev
+            kf_th_val = r0["threshold"]
+        else:
+            kos_order = kofam_ko_val.split(",")
+            ko_to_rec = {r["ko"]: r for r in kf_recs}
+            st_list = []
+            for k in kos_order:
+                if k in ko_to_rec:
+                    r = ko_to_rec[k]
+                    _, _, norm_st = select_kofam_scores(
+                        r.get("score_type"),
+                        r.get("bit_score"),
+                        r.get("e_value"),
+                        r.get("domain_bit_score"),
+                        r.get("domain_e_value"),
+                    )
+                    st_list.append(norm_st)
+            kf_st_val = ",".join(st_list)
+            kf_assign_val = ",".join(f"{r['ko']}:{r['assignment']}" for r in kf_recs)
+            kf_bs_val = ",".join(
+                f"{r['ko']}:{select_kofam_scores(r.get('score_type'), r.get('bit_score'), r.get('e_value'), r.get('domain_bit_score'), r.get('domain_e_value'))[0]}"
+                for r in kf_recs
+            )
+            kf_ev_val = ",".join(
+                f"{r['ko']}:{select_kofam_scores(r.get('score_type'), r.get('bit_score'), r.get('e_value'), r.get('domain_bit_score'), r.get('domain_e_value'))[1]}"
+                for r in kf_recs
+            )
+            kf_th_val = ",".join(f"{r['ko']}:{r['threshold']}" for r in kf_recs)
+    else:
+        kofam_ko_val = "-"
+        kf_st_val = "-"
+        kf_assign_val = "-"
+        kf_bs_val = np.nan
+        kf_ev_val = np.nan
+        kf_th_val = np.nan
+
+    dk_recs = tool_recs.get("deepkoala", [])
+    if dk_recs:
+        dk_thresh_kos = {r["ko"] for r in dk_recs if r["original_status"] == "threshold_passing"}
+        dk_cands_kos = {r["ko"] for r in dk_recs if r["original_status"] in ("threshold_passing", "below_threshold")}
+        dk_ko_val = format_kos(dk_thresh_kos)
+        dk_cand_val = format_kos(dk_cands_kos)
+        best_dk = max(dk_recs, key=lambda r: (r["deepkoala_probability"] if pd.notna(r["deepkoala_probability"]) else -1.0))
+        dk_score_val = best_dk["deepkoala_probability"]
+        dk_th_val = best_dk["deepkoala_threshold"]
+    else:
+        dk_ko_val = "-"
+        dk_cand_val = "-"
+        dk_score_val = np.nan
+        dk_th_val = np.nan
+
+    en_recs = tool_recs.get("eggnog", [])
+    if en_recs:
+        en_cands_kos = {r["ko"] for r in en_recs if r["original_status"] in ("threshold_passing", "below_threshold")}
+        en_ko_val = format_kos(en_agreed)
+        en_cand_val = format_kos(en_cands_kos)
+        valid_en = [r for r in en_recs if r["original_status"] in ("threshold_passing", "below_threshold")]
+        best_en = max(valid_en, key=lambda r: (r["bit_score"], -r["e_value"])) if valid_en else en_recs[0]
+        en_bs_val = best_en["bit_score"]
+        en_ev_val = best_en["e_value"]
+    else:
+        en_ko_val = "-"
+        en_cand_val = "-"
+        en_bs_val = np.nan
+        en_ev_val = np.nan
+
+    return {
+        "gene_id": gid,
+        "accepted_ko": accepted_ko,
+        "alternative_kos": alternative_kos,
+        "definition": definition,
+        "alternative_definition": alternative_definition,
+        "consensus_level": consensus_level,
+        "evidence": evidence_str,
+        "kofam_ko": kofam_ko_val,
+        "kofam_score_type": kf_st_val,
+        "kofam_bit_score": kf_bs_val,
+        "kofam_evalue": kf_ev_val,
+        "kofam_assignment": kf_assign_val,
+        "kofam_threshold": kf_th_val,
+        "deepkoala_ko": dk_ko_val,
+        "deepkoala_candidate_ko": dk_cand_val,
+        "deepkoala_score": dk_score_val,
+        "deepkoala_threshold": dk_th_val,
+        "eggnog_ko": en_ko_val,
+        "eggnog_candidate_ko": en_cand_val,
+        "eggnog_bit_score": en_bs_val,
+        "eggnog_evalue": en_ev_val,
+    }
+
+
+def annotate_evidence_records(
+    gid: str,
+    recs: list[dict],
+    tool_recs: dict[str, list[dict]],
+    active_tools: list[str],
+    accepted_set: set[str],
+    alt_set: set[str],
+    accepted_ko: str,
+    consensus_level: str,
+    en_dropped: set[str],
+) -> list[dict]:
+    """Annotate raw evidence records for a gene with cross-method consensus and support."""
+    adjudicated = []
+    for r in recs:
+        ko = r["ko"]
+        method = r["method"]
+        orig_status = r["original_status"]
+
+        supporting = []
+        for other_t in active_tools:
+            if other_t != method:
+                other_t_recs = tool_recs.get(other_t, [])
+                other_matching = [
+                    o for o in other_t_recs
+                    if o["ko"] == ko and o["original_status"] in ("threshold_passing", "heuristic_rescued", "below_threshold")
+                ]
+                if other_matching:
+                    if ko in accepted_set:
+                        supporting.append(other_t)
+                    elif any(o["original_status"] == "threshold_passing" for o in other_matching):
+                        supporting.append(other_t)
+
+        supp_str = ",".join(sorted(supporting)) if supporting else "-"
+
+        if orig_status == "unknown":
+            cross_status = "unknown"
+        elif method == "eggnog" and ko in en_dropped:
+            cross_status = "disambiguated_dropped"
+        elif ko in accepted_set:
+            if orig_status == "threshold_passing":
+                if method == "eggnog" and r.get("eggnog_shared_seed_hit", r.get("shared_seed_hit", False)):
+                    cross_status = "disambiguated_retained"
+                else:
+                    cross_status = "accepted"
+            elif orig_status == "heuristic_rescued":
+                cross_status = "heuristic_rescued"
+            elif orig_status == "below_threshold":
+                cross_status = "rescued"
+            else:
+                cross_status = "unknown"
+        elif ko in alt_set:
+            if consensus_level.startswith("conflict"):
+                cross_status = "conflict"
+            elif r.get("eggnog_shared_seed_hit", r.get("shared_seed_hit", False)) and len(alt_set) > 1 and accepted_ko == "-":
+                cross_status = "unresolved_multi_ko"
+            elif orig_status == "threshold_passing":
+                cross_status = "alternative"
+            elif orig_status == "heuristic_rescued":
+                cross_status = "heuristic_rescued"
+            elif orig_status == "below_threshold":
+                if consensus_level == "orthogonal_dual_candidate":
+                    cross_status = "rescued"
+                else:
+                    cross_status = "below_threshold_unrescued"
+            else:
+                cross_status = "unknown"
+        else:
+            if orig_status == "below_threshold":
+                cross_status = "below_threshold_unrescued"
+            elif orig_status == "threshold_passing":
+                cross_status = "unselected"
+            else:
+                cross_status = "unselected"
+
+        adjudicated.append({
+            "gene_id": gid,
+            "ko": ko,
+            "method": method,
+            "consensus_level": consensus_level,
+            "original_status": orig_status,
+            "bit_score": r.get("bit_score", np.nan),
+            "e_value": r.get("e_value", np.nan),
+            "domain_bit_score": r.get("domain_bit_score", np.nan),
+            "domain_e_value": r.get("domain_e_value", np.nan),
+            "score_type": r.get("score_type", "-"),
+            "bit_score_threshold": r.get("bit_score_threshold", r.get("threshold", np.nan)),
+            "e_value_threshold": r.get("e_value_threshold", np.nan),
+            "deepkoala_probability": r.get("deepkoala_probability", np.nan),
+            "deepkoala_threshold": r.get("deepkoala_threshold", np.nan),
+            "eggnog_shared_seed_hit": bool(r.get("eggnog_shared_seed_hit", r.get("shared_seed_hit", False))),
+            "cross_method_status": cross_status,
+            "supporting_methods": supp_str,
+        })
+    return adjudicated
+
+
+def export_tables(
+    result_df: pd.DataFrame,
+    evidence_df: pd.DataFrame,
+    output_tsv: Optional[Union[str, Path]] = None,
+    evidence_tsv: Optional[Union[str, Path]] = None,
+) -> None:
+    """Export gene-level and long-form evidence tables to TSV."""
+    if output_tsv:
+        out_path = Path(output_tsv).expanduser().resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        tsv_export = result_df.copy()
+        for col in tsv_export.columns:
+            if pd.api.types.is_float_dtype(tsv_export[col]):
+                tsv_export[col] = tsv_export[col].apply(lambda x: "-" if pd.isna(x) else str(x))
+            else:
+                tsv_export[col] = tsv_export[col].fillna("-")
+        tsv_export.to_csv(out_path, sep="\t", index=False)
+
+        # Automatically export evidence TSV alongside annotations if not separately specified
+        if evidence_tsv is None:
+            evidence_tsv = out_path.parent / "kolach_evidence.tsv"
+
+    if evidence_tsv:
+        ev_path = Path(evidence_tsv).expanduser().resolve()
+        ev_path.parent.mkdir(parents=True, exist_ok=True)
+        ev_export = evidence_df.copy()
+        for col in ev_export.columns:
+            if pd.api.types.is_float_dtype(ev_export[col]):
+                ev_export[col] = ev_export[col].apply(lambda x: "-" if pd.isna(x) else str(x))
+            elif pd.api.types.is_bool_dtype(ev_export[col]):
+                ev_export[col] = ev_export[col].apply(lambda x: "True" if x else "False")
+            else:
+                ev_export[col] = ev_export[col].fillna("-")
+        ev_export.to_csv(ev_path, sep="\t", index=False)
 
 
 def integrate_annotations(
@@ -784,377 +1303,59 @@ def integrate_annotations(
 
         # eggNOG multi-KO disambiguation
         en_agreed = set(confident_kos.get("eggnog", set()))
-        en_dropped = set()
         en_raw_cands = {r["ko"] for r in tool_recs.get("eggnog", []) if r["original_status"] in ("threshold_passing", "below_threshold")}
-
-        if "eggnog" in active_tools and en_agreed:
-            # Check if any eggNOG record is multi-KO
-            has_multi = any(r.get("eggnog_shared_seed_hit", r.get("shared_seed_hit", False)) for r in tool_recs.get("eggnog", []))
-            if has_multi:
-                trusted_other = set().union(*[confident_kos.get(t, set()) for t in active_tools if t != "eggnog"])
-                cand_other = set().union(*[rescued_kos.get(t, set()) | candidate_kos.get(t, set()) for t in active_tools if t != "eggnog"])
-
-                if eggnog_filter_multi == "disambiguate":
-                    if en_agreed & trusted_other:
-                        overlap = en_agreed & trusted_other
-                        en_dropped = en_agreed - overlap
-                        en_agreed = overlap
-                    elif en_agreed & cand_other:
-                        overlap = en_agreed & cand_other
-                        en_dropped = en_agreed - overlap
-                        en_agreed = overlap
-
-                if en_agreed:
-                    confident_kos["eggnog"] = en_agreed
+        en_agreed, en_dropped = disambiguate_eggnog(
+            en_agreed=en_agreed,
+            tool_recs=tool_recs,
+            active_tools=active_tools,
+            confident_kos=confident_kos,
+            candidate_kos=candidate_kos,
+            rescued_kos=rescued_kos,
+            eggnog_filter_multi=eggnog_filter_multi,
+        )
+        if en_agreed:
+            confident_kos["eggnog"] = en_agreed
 
         # Adjudicate consensus directly
-        tool_calls = {t: confident_kos[t] for t in active_tools if t in confident_kos}
-        num_calling_tools = len(tool_calls)
+        accepted_ko, alt_set, consensus_level, evidence_str = adjudicate_gene(
+            active_tools=active_tools,
+            confident_kos=confident_kos,
+            candidate_kos=candidate_kos,
+            rescued_kos=rescued_kos,
+            en_dropped=en_dropped,
+            en_raw_cands=en_raw_cands,
+            conflict_strategy=conflict_strategy,
+            priority_order=priority_order,
+        )
 
-        accepted_ko = "-"
-        alt_set = set()
-        consensus_level = "unannotated"
-        evidence_str = "-"
+        # Build summary row
+        summary_row = build_gene_summary_row(
+            gid=gid,
+            accepted_ko=accepted_ko,
+            alt_set=alt_set,
+            consensus_level=consensus_level,
+            evidence_str=evidence_str,
+            tool_recs=tool_recs,
+            en_agreed=en_agreed,
+            master_ko_defs=master_ko_defs,
+            evidence_defs=evidence_defs,
+        )
+        gene_summary_rows.append(summary_row)
 
-        if num_calling_tools == 0:
-            dk_cand = candidate_kos.get("deepkoala", set())
-            en_cand = candidate_kos.get("eggnog", set())
-            kf_resc = rescued_kos.get("kofam", set())
-
-            cand_agree = set()
-            agreeing_cands = []
-            if "deepkoala" in active_tools and "eggnog" in active_tools and (dk_cand & en_cand):
-                cand_agree = dk_cand & en_cand
-                agreeing_cands = ["deepkoala(candidate)", "eggnog(candidate)"]
-            if not cand_agree and "kofam" in active_tools and "deepkoala" in active_tools and (kf_resc & dk_cand):
-                cand_agree = kf_resc & dk_cand
-                agreeing_cands = ["deepkoala(candidate)", "kofam(rescued)"]
-            if not cand_agree and "kofam" in active_tools and "eggnog" in active_tools and (kf_resc & en_cand):
-                cand_agree = kf_resc & en_cand
-                agreeing_cands = ["eggnog(candidate)", "kofam(rescued)"]
-
-            if cand_agree:
-                consensus_level = "orthogonal_dual_candidate"
-                evidence_str = ",".join(sorted(agreeing_cands))
-                dropped_en = (en_raw_cands - cand_agree) if (len(en_raw_cands) > 1 and bool(cand_agree & en_raw_cands)) else set()
-                if len(cand_agree) == 1:
-                    accepted_ko = next(iter(cand_agree))
-                    alt_set = dropped_en - {accepted_ko}
-                else:
-                    accepted_ko = "-"
-                    alt_set = cand_agree | dropped_en
-            elif kf_resc:
-                consensus_level = "single_tool"
-                evidence_str = "kofam(rescued)"
-                dropped_en = (en_raw_cands - kf_resc) if (len(en_raw_cands) > 1 and bool(kf_resc & en_raw_cands)) else set()
-                if len(kf_resc) == 1:
-                    accepted_ko = next(iter(kf_resc))
-                    alt_set = dropped_en - {accepted_ko}
-                else:
-                    accepted_ko = "-"
-                    alt_set = kf_resc | dropped_en
-            else:
-                accepted_ko = "-"
-                alt_set = set()
-                consensus_level = "unannotated"
-                evidence_str = "-"
-
-        elif num_calling_tools == 1:
-            tool_name = next(iter(tool_calls))
-            called_kos = tool_calls[tool_name]
-
-            dk_cand = candidate_kos.get("deepkoala", set())
-            en_cand = candidate_kos.get("eggnog", set())
-            kf_resc = rescued_kos.get("kofam", set())
-
-            rescued_by = []
-            if tool_name != "deepkoala" and "deepkoala" in active_tools and (called_kos & dk_cand):
-                rescued_by.append("deepkoala(candidate)")
-            if tool_name != "eggnog" and "eggnog" in active_tools and (called_kos & en_cand):
-                rescued_by.append("eggnog(candidate)")
-            if tool_name != "kofam" and "kofam" in active_tools and (called_kos & kf_resc):
-                rescued_by.append("kofam(rescued)")
-
-            dropped_en = (en_raw_cands - called_kos) if (len(en_raw_cands) > 1 and bool(called_kos & en_raw_cands)) else en_dropped
-
-            if len(called_kos) == 1:
-                accepted_ko = next(iter(called_kos))
-                alt_set = dropped_en - {accepted_ko}
-            else:
-                accepted_ko = "-"
-                alt_set = called_kos | dropped_en
-
-            if rescued_by:
-                consensus_level = "single_tool_with_candidate"
-                evidence_str = ",".join([tool_name] + rescued_by)
-            else:
-                consensus_level = "single_tool"
-                evidence_str = tool_name
-
-        else:  # num_calling_tools >= 2
-            all_sets = list(tool_calls.values())
-            union_all_calls = set.union(*all_sets)
-            common_all = set.intersection(*all_sets)
-
-            if common_all:
-                is_unanimous = (num_calling_tools == len(active_tools))
-                consensus_level = "unanimous" if is_unanimous else "majority"
-                evidence_str = ",".join(sorted(tool_calls.keys()))
-                dropped_en = (en_raw_cands - common_all) if (len(en_raw_cands) > 1 and bool(common_all & en_raw_cands)) else en_dropped
-                unselected_minority = union_all_calls - common_all
-                extra_alts = unselected_minority | dropped_en
-
-                if len(common_all) == 1:
-                    accepted_ko = next(iter(common_all))
-                    alt_set = extra_alts - {accepted_ko}
-                else:
-                    accepted_ko = "-"
-                    alt_set = common_all | extra_alts
-            else:
-                # Pairwise majority check
-                pairwise_agreed = set()
-                agreeing_tools = set()
-                tools_list = list(tool_calls.keys())
-                for i in range(len(tools_list)):
-                    for j in range(i + 1, len(tools_list)):
-                        inter = tool_calls[tools_list[i]] & tool_calls[tools_list[j]]
-                        if inter:
-                            pairwise_agreed.update(inter)
-                            agreeing_tools.add(tools_list[i])
-                            agreeing_tools.add(tools_list[j])
-
-                if pairwise_agreed:
-                    consensus_level = "majority"
-                    evidence_str = ",".join(sorted(agreeing_tools))
-                    dropped_en = (en_raw_cands - pairwise_agreed) if (len(en_raw_cands) > 1 and bool(pairwise_agreed & en_raw_cands)) else en_dropped
-                    unselected_minority = union_all_calls - pairwise_agreed
-                    extra_alts = unselected_minority | dropped_en
-
-                    if len(pairwise_agreed) == 1:
-                        accepted_ko = next(iter(pairwise_agreed))
-                        alt_set = extra_alts - {accepted_ko}
-                    else:
-                        accepted_ko = "-"
-                        alt_set = pairwise_agreed | extra_alts
-                else:
-                    # Disjoint conflict
-                    all_alts = union_all_calls | en_dropped
-                    if conflict_strategy == "priority":
-                        top_tool = next((t for t in priority_order if t in tool_calls), tools_list[0])
-                        top_kos = tool_calls[top_tool]
-                        dropped_en_top = (en_raw_cands - top_kos) if (len(en_raw_cands) > 1 and bool(top_kos & en_raw_cands)) else en_dropped
-                        if len(top_kos) == 1:
-                            accepted_ko = next(iter(top_kos))
-                            alt_set = ((union_all_calls - top_kos) | dropped_en_top) - {accepted_ko}
-                        else:
-                            accepted_ko = "-"
-                            alt_set = all_alts
-                        consensus_level = "conflict_priority"
-                        evidence_str = top_tool
-                    else:  # "multiple" (default)
-                        accepted_ko = "-"
-                        alt_set = all_alts
-                        consensus_level = "conflict"
-                        evidence_str = ",".join(sorted(tool_calls.keys()))
-
-        alternative_kos = format_kos(alt_set)
-
-        # Definitions resolved strictly by KO
+        # Annotate evidence records
         accepted_set = {accepted_ko} if accepted_ko != "-" else set()
-        definition = resolve_definition_for_kos(accepted_set, master_ko_defs, evidence_defs)
-        alternative_definition = resolve_definition_for_kos(alt_set, master_ko_defs, evidence_defs)
-
-        # Populate method-specific summary fields
-        kf_recs = tool_recs.get("kofam", [])
-        if kf_recs:
-            kf_kos = sorted({r["ko"] for r in kf_recs})
-            kofam_ko_val = format_kos(set(kf_kos))
-            if len(kf_recs) == 1:
-                r0 = kf_recs[0]
-                sel_bs, sel_ev, norm_st = select_kofam_scores(
-                    r0.get("score_type"),
-                    r0.get("bit_score"),
-                    r0.get("e_value"),
-                    r0.get("domain_bit_score"),
-                    r0.get("domain_e_value"),
-                )
-                kf_st_val = norm_st
-                kf_assign_val = str(r0["assignment"])
-                kf_bs_val = sel_bs
-                kf_ev_val = sel_ev
-                kf_th_val = r0["threshold"]
-            else:
-                kos_order = kofam_ko_val.split(",")
-                ko_to_rec = {r["ko"]: r for r in kf_recs}
-                st_list = []
-                for k in kos_order:
-                    if k in ko_to_rec:
-                        r = ko_to_rec[k]
-                        _, _, norm_st = select_kofam_scores(
-                            r.get("score_type"),
-                            r.get("bit_score"),
-                            r.get("e_value"),
-                            r.get("domain_bit_score"),
-                            r.get("domain_e_value"),
-                        )
-                        st_list.append(norm_st)
-                kf_st_val = ",".join(st_list)
-                kf_assign_val = ",".join(f"{r['ko']}:{r['assignment']}" for r in kf_recs)
-                kf_bs_val = ",".join(
-                    f"{r['ko']}:{select_kofam_scores(r.get('score_type'), r.get('bit_score'), r.get('e_value'), r.get('domain_bit_score'), r.get('domain_e_value'))[0]}"
-                    for r in kf_recs
-                )
-                kf_ev_val = ",".join(
-                    f"{r['ko']}:{select_kofam_scores(r.get('score_type'), r.get('bit_score'), r.get('e_value'), r.get('domain_bit_score'), r.get('domain_e_value'))[1]}"
-                    for r in kf_recs
-                )
-                kf_th_val = ",".join(f"{r['ko']}:{r['threshold']}" for r in kf_recs)
-        else:
-            kofam_ko_val = "-"
-            kf_st_val = "-"
-            kf_assign_val = "-"
-            kf_bs_val = np.nan
-            kf_ev_val = np.nan
-            kf_th_val = np.nan
-
-        dk_recs = tool_recs.get("deepkoala", [])
-        if dk_recs:
-            dk_thresh_kos = {r["ko"] for r in dk_recs if r["original_status"] == "threshold_passing"}
-            dk_cands_kos = {r["ko"] for r in dk_recs if r["original_status"] in ("threshold_passing", "below_threshold")}
-            dk_ko_val = format_kos(dk_thresh_kos)
-            dk_cand_val = format_kos(dk_cands_kos)
-            best_dk = max(dk_recs, key=lambda r: (r["deepkoala_probability"] if pd.notna(r["deepkoala_probability"]) else -1.0))
-            dk_score_val = best_dk["deepkoala_probability"]
-            dk_th_val = best_dk["deepkoala_threshold"]
-        else:
-            dk_ko_val = "-"
-            dk_cand_val = "-"
-            dk_score_val = np.nan
-            dk_th_val = np.nan
-
-        en_recs = tool_recs.get("eggnog", [])
-        if en_recs:
-            en_cands_kos = {r["ko"] for r in en_recs if r["original_status"] in ("threshold_passing", "below_threshold")}
-            en_ko_val = format_kos(en_agreed)
-            en_cand_val = format_kos(en_cands_kos)
-            valid_en = [r for r in en_recs if r["original_status"] in ("threshold_passing", "below_threshold")]
-            best_en = max(valid_en, key=lambda r: (r["bit_score"], -r["e_value"])) if valid_en else en_recs[0]
-            en_bs_val = best_en["bit_score"]
-            en_ev_val = best_en["e_value"]
-        else:
-            en_ko_val = "-"
-            en_cand_val = "-"
-            en_bs_val = np.nan
-            en_ev_val = np.nan
-
-        gene_summary_rows.append({
-            "gene_id": gid,
-            "accepted_ko": accepted_ko,
-            "alternative_kos": alternative_kos,
-            "definition": definition,
-            "alternative_definition": alternative_definition,
-            "consensus_level": consensus_level,
-            "evidence": evidence_str,
-            "kofam_ko": kofam_ko_val,
-            "kofam_score_type": kf_st_val,
-            "kofam_bit_score": kf_bs_val,
-            "kofam_evalue": kf_ev_val,
-            "kofam_assignment": kf_assign_val,
-            "kofam_threshold": kf_th_val,
-            "deepkoala_ko": dk_ko_val,
-            "deepkoala_candidate_ko": dk_cand_val,
-            "deepkoala_score": dk_score_val,
-            "deepkoala_threshold": dk_th_val,
-            "eggnog_ko": en_ko_val,
-            "eggnog_candidate_ko": en_cand_val,
-            "eggnog_bit_score": en_bs_val,
-            "eggnog_evalue": en_ev_val,
-        })
-
-        # Determine cross_method_status and supporting_methods on each per-KO record
-        for r in recs:
-            ko = r["ko"]
-            method = r["method"]
-            orig_status = r["original_status"]
-
-            # Supporting methods for this KO
-            supporting = []
-            for other_t in active_tools:
-                if other_t != method:
-                    other_t_recs = tool_recs.get(other_t, [])
-                    other_matching = [
-                        o for o in other_t_recs
-                        if o["ko"] == ko and o["original_status"] in ("threshold_passing", "heuristic_rescued", "below_threshold")
-                    ]
-                    if other_matching:
-                        # Only include if other method actively supported this KO in consensus
-                        if ko in accepted_set:
-                            supporting.append(other_t)
-                        elif any(o["original_status"] == "threshold_passing" for o in other_matching):
-                            supporting.append(other_t)
-
-            supp_str = ",".join(sorted(supporting)) if supporting else "-"
-
-            # Cross method status
-            if orig_status == "unknown":
-                cross_status = "unknown"
-            elif method == "eggnog" and ko in en_dropped:
-                cross_status = "disambiguated_dropped"
-            elif ko in accepted_set:
-                if orig_status == "threshold_passing":
-                    if method == "eggnog" and r.get("eggnog_shared_seed_hit", r.get("shared_seed_hit", False)):
-                        cross_status = "disambiguated_retained"
-                    else:
-                        cross_status = "accepted"
-                elif orig_status == "heuristic_rescued":
-                    cross_status = "heuristic_rescued"
-                elif orig_status == "below_threshold":
-                    cross_status = "rescued"
-                else:
-                    cross_status = "unknown"
-            elif ko in alt_set:
-                if consensus_level.startswith("conflict"):
-                    cross_status = "conflict"
-                elif r.get("eggnog_shared_seed_hit", r.get("shared_seed_hit", False)) and len(alt_set) > 1 and accepted_ko == "-":
-                    cross_status = "unresolved_multi_ko"
-                elif orig_status == "threshold_passing":
-                    cross_status = "alternative"
-                elif orig_status == "heuristic_rescued":
-                    cross_status = "heuristic_rescued"
-                elif orig_status == "below_threshold":
-                    if consensus_level == "orthogonal_dual_candidate":
-                        cross_status = "rescued"
-                    else:
-                        cross_status = "below_threshold_unrescued"
-                else:
-                    cross_status = "unknown"
-            else:
-                if orig_status == "below_threshold":
-                    cross_status = "below_threshold_unrescued"
-                elif orig_status == "threshold_passing":
-                    cross_status = "unselected"
-                else:
-                    cross_status = "unselected"
-
-            adjudicated_records.append({
-                "gene_id": gid,
-                "ko": ko,
-                "method": method,
-                "consensus_level": consensus_level,
-                "original_status": orig_status,
-                "bit_score": r.get("bit_score", np.nan),
-                "e_value": r.get("e_value", np.nan),
-                "domain_bit_score": r.get("domain_bit_score", np.nan),
-                "domain_e_value": r.get("domain_e_value", np.nan),
-                "score_type": r.get("score_type", "-"),
-                "bit_score_threshold": r.get("bit_score_threshold", r.get("threshold", np.nan)),
-                "e_value_threshold": r.get("e_value_threshold", np.nan),
-                "deepkoala_probability": r.get("deepkoala_probability", np.nan),
-                "deepkoala_threshold": r.get("deepkoala_threshold", np.nan),
-                "eggnog_shared_seed_hit": bool(r.get("eggnog_shared_seed_hit", r.get("shared_seed_hit", False))),
-                "cross_method_status": cross_status,
-                "supporting_methods": supp_str,
-            })
+        gene_adjudicated = annotate_evidence_records(
+            gid=gid,
+            recs=recs,
+            tool_recs=tool_recs,
+            active_tools=active_tools,
+            accepted_set=accepted_set,
+            alt_set=alt_set,
+            accepted_ko=accepted_ko,
+            consensus_level=consensus_level,
+            en_dropped=en_dropped,
+        )
+        adjudicated_records.extend(gene_adjudicated)
 
     # Build long-form evidence table
     if adjudicated_records:
@@ -1197,35 +1398,13 @@ def integrate_annotations(
 
     result_df.attrs["evidence"] = evidence_df
 
-    # Export gene-level TSV
-    if output_tsv:
-        out_path = Path(output_tsv).expanduser().resolve()
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        tsv_export = result_df.copy()
-        for col in tsv_export.columns:
-            if pd.api.types.is_float_dtype(tsv_export[col]):
-                tsv_export[col] = tsv_export[col].apply(lambda x: "-" if pd.isna(x) else str(x))
-            else:
-                tsv_export[col] = tsv_export[col].fillna("-")
-        tsv_export.to_csv(out_path, sep="\t", index=False)
-
-        # Automatically export evidence TSV alongside annotations if not separately specified
-        if evidence_tsv is None:
-            evidence_tsv = out_path.parent / "kolach_evidence.tsv"
-
-    # Export evidence TSV
-    if evidence_tsv:
-        ev_path = Path(evidence_tsv).expanduser().resolve()
-        ev_path.parent.mkdir(parents=True, exist_ok=True)
-        ev_export = evidence_df.copy()
-        for col in ev_export.columns:
-            if pd.api.types.is_float_dtype(ev_export[col]):
-                ev_export[col] = ev_export[col].apply(lambda x: "-" if pd.isna(x) else str(x))
-            elif pd.api.types.is_bool_dtype(ev_export[col]):
-                ev_export[col] = ev_export[col].apply(lambda x: "True" if x else "False")
-            else:
-                ev_export[col] = ev_export[col].fillna("-")
-        ev_export.to_csv(ev_path, sep="\t", index=False)
+    # Export tables
+    export_tables(
+        result_df=result_df,
+        evidence_df=evidence_df,
+        output_tsv=output_tsv,
+        evidence_tsv=evidence_tsv,
+    )
 
     return result_df
 
