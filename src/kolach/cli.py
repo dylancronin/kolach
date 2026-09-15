@@ -228,6 +228,13 @@ def main():
         ),
     )
 
+    annotate_parser.add_argument(
+        "--add-pathways",
+        action="store_true",
+        default=False,
+        help="Annotate accepted KOs with KEGG categories, subcategories, and pathways in kolach_annotations.tsv.",
+    )
+
     # ------------------------------------------------------
     # Integrate subcommand
     # ------------------------------------------------------
@@ -317,6 +324,49 @@ def main():
         ),
     )
 
+    integrate_parser.add_argument(
+        "--add-pathways",
+        action="store_true",
+        default=False,
+        help="Annotate accepted KOs with KEGG categories, subcategories, and pathways in the output table.",
+    )
+
+    # ------------------------------------------------------
+    # Pathway subcommand
+    # ------------------------------------------------------
+    pathway_parser = subparsers.add_parser(
+        "pathway",
+        help="Annotate KO identifiers in an annotation table with KEGG categories, subcategories, and pathways.",
+    )
+
+    pathway_parser.add_argument(
+        "--annotation-table",
+        type=str,
+        required=True,
+        help="Path to the input annotations TSV table (e.g. kolach_annotations.tsv).",
+    )
+
+    pathway_parser.add_argument(
+        "--output-file",
+        type=str,
+        required=True,
+        help="Path for output TSV table with KEGG pathway annotations.",
+    )
+
+    pathway_parser.add_argument(
+        "--database-dir",
+        type=str,
+        required=True,
+        help="Directory where databases are stored (contains or will download ko00001.json).",
+    )
+
+    pathway_parser.add_argument(
+        "--ko-column",
+        type=str,
+        default="accepted_ko",
+        help="Column name containing KO identifiers to annotate (default: 'accepted_ko').",
+    )
+
     args = parser.parse_args()
 
     if args.command == "download":
@@ -358,6 +408,7 @@ def main():
             f"eggnog_max_evalue={args.eggnog_max_evalue}",
             f"eggnog_filter_multi={args.eggnog_filter_multi}",
             f"conflict_strategy={args.conflict_strategy}",
+            f"add_pathways={args.add_pathways}",
         ]
         if args.eggnog_sensmode is not None:
             config_args.append(f"eggnog_sensmode={args.eggnog_sensmode}")
@@ -394,6 +445,26 @@ def main():
             conflict_strategy=args.conflict_strategy,
         )
 
+        if args.add_pathways:
+            from kolach.pathways import annotate_pathways
+
+            annotate_pathways(
+                annotation_table=args.output_file,
+                output_tsv=args.output_file,
+                database_dir=args.database_dir,
+            )
+
+    elif args.command == "pathway":
+        from kolach.pathways import annotate_pathways
+
+        annotate_pathways(
+            annotation_table=args.annotation_table,
+            output_tsv=args.output_file,
+            database_dir=args.database_dir,
+            ko_col=args.ko_column,
+        )
+
 
 if __name__ == "__main__":
     main()
+

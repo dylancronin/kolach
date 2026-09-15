@@ -4,6 +4,7 @@ DB_DIR = Path(config["database_dir"]).expanduser().resolve()
 PROTEIN_FASTA = str(Path(config["protein_fasta"]).expanduser().resolve())
 OUTDIR = str(Path(config["output_dir"]).expanduser().resolve())
 SELECTED_DBS = set(config.get("databases", ["kofam"]))
+ADD_PATHWAYS = str(config.get("add_pathways", "false")).lower() in ("true", "1", "yes")
 
 targets = []
 
@@ -24,6 +25,8 @@ if "eggnog" in SELECTED_DBS:
 
 if targets:
     include: "rules/integrate.smk"
+    if ADD_PATHWAYS:
+        include: "rules/pathway.smk"
     all_targets = targets + [f"{OUTDIR}/kolach_annotations.tsv", f"{OUTDIR}/kolach_evidence.tsv"]
 else:
     all_targets = []

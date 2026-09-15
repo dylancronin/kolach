@@ -6,7 +6,7 @@ rule integrate_annotations:
         fasta=PROTEIN_FASTA,
         tables=targets
     output:
-        tsv=f"{OUTDIR}/kolach_annotations.tsv",
+        tsv=temp(f"{OUTDIR}/.kolach_annotations_raw.tsv") if ADD_PATHWAYS else f"{OUTDIR}/kolach_annotations.tsv",
         evidence=f"{OUTDIR}/kolach_evidence.tsv"
     run:
         kofam_file = f"{OUTDIR}/kofam_annotations.tsv" if "kofam" in SELECTED_DBS else None
