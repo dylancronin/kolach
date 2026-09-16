@@ -11,11 +11,32 @@ KEGG_HIERARCHY_URL = (
 )
 
 
-def download_kegg_hierarchy(database_dir: Union[str, Path], verbose: bool = True) -> Path:
+KO_REGEX = re.compile(r"^K\d{5}$")
+KO_TOKEN_REGEX = re.compile(r"\bK\d{5}\b")
+
+
+def is_valid_hierarchy_json(file_path: Path) -> bool:
+    """Validate that the cached file exists, is non-empty, and parses as a valid KEGG hierarchy."""
+    if not file_path.is_file() or file_path.stat().st_size == 0:
+        return False
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return isinstance(data, dict) and "children" in data
+    except Exception:
+        return False
+
+
+def download_kegg_hierarchy(
+    database_dir: Union[str, Path],
+    force_download: bool = False,
+    verbose: bool = True,
+) -> Path:
     """Download master KEGG Orthology hierarchy (ko00001.json) into database_dir.
 
     Args:
         database_dir: Directory where kolach databases are stored.
+        force_download: If True, re-download even if a valid cached file exists.
         verbose: If True, print progress messages.
 
     Returns:
@@ -25,8 +46,8 @@ def download_kegg_hierarchy(database_dir: Union[str, Path], verbose: bool = True
     db_path.mkdir(parents=True, exist_ok=True)
     dest_path = db_path / "ko00001.json"
 
-    # If already downloaded and valid, skip re-downloading
-    if dest_path.is_file() and dest_path.stat().st_size > 0:
+    # If already downloaded and valid, skip re-downloading unless forced
+    if not force_download and is_valid_hierarchy_json(dest_path):
         return dest_path
 
     if verbose:
@@ -38,6 +59,11 @@ def download_kegg_hierarchy(database_dir: Union[str, Path], verbose: bool = True
     try:
         with urlopen(req, timeout=180) as response:
             temp_path.write_bytes(response.read())
+        # Validate downloaded payload before replacing destination
+        if not is_valid_hierarchy_json(temp_path):
+            raise ValueError(
+                "Downloaded file is not a valid KEGG hierarchy JSON (check network/permissions)."
+            )
         temp_path.replace(dest_path)
         if verbose:
             print(f"[kolach] Downloaded ko00001.json ({dest_path.stat().st_size / 1024 / 1024:.1f} MB).")
@@ -95,7 +121,7 @@ def parse_kegg_hierarchy(json_path: Union[str, Path]) -> dict[str, dict[str, str
                     ko_text = ko_node.get("name", "").strip()
                     parts = ko_text.split(None, 1)
 
-                    if parts and parts[0].startswith("K") and len(parts[0]) == 6:
+                    if parts and KO_REGEX.match(parts[0]):
                         ko_id = parts[0]
 
                         if ko_id not in raw_mapping:
@@ -151,9 +177,9 @@ def annotate_pathways(
 
     db_path = Path(database_dir).expanduser().resolve()
     # Resolve existing ko00001.json or download it directly to database_dir
-    if (db_path / "ko00001.json").is_file():
+    if is_valid_hierarchy_json(db_path / "ko00001.json"):
         json_path = db_path / "ko00001.json"
-    elif (db_path / "kofam" / "ko00001.json").is_file():
+    elif is_valid_hierarchy_json(db_path / "kofam" / "ko00001.json"):
         json_path = db_path / "kofam" / "ko00001.json"
     else:
         json_path = download_kegg_hierarchy(db_path, verbose=verbose)
@@ -175,10 +201,10 @@ def annotate_pathways(
 
     # Function to lookup a single or multi-KO string
     def lookup_kos(val: str) -> tuple[str, str, str]:
-        if pd.isna(val) or not val or val == "-":
+        if pd.isna(val) or not val or str(val).strip() in ("", "-", "None", "nan"):
             return "-", "-", "-"
-        # Parse all KO identifiers present in the cell (comma, semicolon, or whitespace delimited)
-        kos = [k for k in re.split(r"[,;\s|]+", str(val)) if k.startswith("K") and len(k) == 6]
+        # Parse all KO identifiers matching standard K\d{5} regex (same as integrate.py)
+        kos = KO_TOKEN_REGEX.findall(str(val))
         if not kos:
             return "-", "-", "-"
 
