@@ -19,6 +19,7 @@ wheels/
 venv/
 env/
 ENV/
+AGENTS.md
 
 # Local databases and test run outputs
 *.db
@@ -31,4 +32,3 @@ test_output/
 *.swp
 *~
 .DS_Store
-
