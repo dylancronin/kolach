@@ -26,6 +26,9 @@ AGENTS.md
 kolach-db/
 test_output/
 
+# Conversation logs
+conversation-*.md
+
 # IDE & Editor files
 .vscode/
 .idea/

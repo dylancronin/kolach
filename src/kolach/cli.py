@@ -1,7 +1,15 @@
 import argparse
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 import subprocess
 import sys
+
+
+def _package_version() -> str:
+    try:
+        return version("kolach")
+    except PackageNotFoundError:
+        return "0.0.0"
 
 
 def positive_float(value: str) -> float:
@@ -33,7 +41,7 @@ def main():
     parser.add_argument(
         "--version",
         action="version",
-        version="kolach 0.0.0",
+        version=f"kolach {_package_version()}",
     )
 
     subparsers = parser.add_subparsers(
