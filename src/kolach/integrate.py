@@ -8,7 +8,6 @@ kofam_evalue) follow each profile's score_type (full vs domain) as indicated by
 kofam_score_type, while the long-form evidence table preserves all original full
 and domain metrics.
 """
-import argparse
 import gzip
 from pathlib import Path
 import re
@@ -1555,7 +1554,7 @@ def integrate_annotations(
             norm_p = Path(p).expanduser().resolve()
             if not norm_p.is_file():
                 raise FileNotFoundError(
-                    f"Explicitly supplied {arg_name} file does not exist or is not a regular file: '{p}' (resolved: '{norm_p}')"
+                    f"Supplied {arg_name} file does not exist or is not a regular file: '{p}' (resolved: '{norm_p}')"
                 )
 
     # 1. Ingest KOfam: parse hits, select scores, and harvest KO definitions
@@ -1759,73 +1758,3 @@ def integrate_annotations(
     )
 
     return result_df
-
-
-def main():
-    """CLI entrypoint for standalone integration.
-
-    Parses command-line arguments and dispatches execution to
-    integrate_annotations.
-
-    Args:
-        None (reads arguments from sys.argv).
-
-    Returns:
-        None
-    """
-    parser = argparse.ArgumentParser(
-        prog="kolach-integrate",
-        description="Integrate KOfam, DeepKOALA, and eggNOG annotation tables into a unified consensus table.",
-    )
-    # Input file arguments
-    parser.add_argument("--protein-fasta", type=str, default=None, help="Input protein FASTA file.")
-    parser.add_argument("--kofam-table", type=str, default=None, help="KOfam annotations TSV.")
-    parser.add_argument("--deepkoala-table", type=str, default=None, help="DeepKOALA annotations TSV.")
-    parser.add_argument("--eggnog-table", type=str, default=None, help="eggNOG annotations TSV.")
-    parser.add_argument("--output-file", type=str, required=True, help="Path for integrated output TSV.")
-    parser.add_argument(
-        "--evidence-file",
-        type=str,
-        default=None,
-        help="Path for long-form evidence table TSV (default: kolach_evidence.tsv alongside output-file).",
-    )
-    parser.add_argument("--database-dir", type=str, default=None, help="Database directory (for ko_list definitions).")
-    # Method-specific filtering and consensus parameters
-    parser.add_argument("--eggnog-min-bitscore", type=float, default=60.0, help="Minimum eggNOG bitscore (default: 60.0).")
-    parser.add_argument("--eggnog-max-evalue", type=float, default=1e-5, help="Maximum eggNOG e-value (default: 1e-5).")
-    parser.add_argument(
-        "--eggnog-filter-multi",
-        choices=["disambiguate", "none"],
-        default="disambiguate",
-        help="eggNOG multi-KO filtering strategy: disambiguate against other tools (default) or none.",
-    )
-    parser.add_argument(
-        "--conflict-strategy",
-        choices=["multiple", "priority"],
-        default="multiple",
-        help=(
-            "Consensus conflict strategy for disjoint calls: multiple (default: sets accepted_ko and ko to '-', "
-            "records conflicting alternatives in alternative_kos; recommended for downstream pathway tools to avoid "
-            "false multifunctional enzyme inference) or priority (selects top method in hierarchy: kofam > eggnog > deepkoala)."
-        ),
-    )
-
-    args = parser.parse_args()
-    # Dispatch parsed CLI options to integration pipeline
-    integrate_annotations(
-        protein_fasta=args.protein_fasta,
-        kofam_tsv=args.kofam_table,
-        deepkoala_tsv=args.deepkoala_table,
-        eggnog_tsv=args.eggnog_table,
-        output_tsv=args.output_file,
-        evidence_tsv=args.evidence_file,
-        database_dir=args.database_dir,
-        eggnog_min_bitscore=args.eggnog_min_bitscore,
-        eggnog_max_evalue=args.eggnog_max_evalue,
-        eggnog_filter_multi=args.eggnog_filter_multi,
-        conflict_strategy=args.conflict_strategy,
-    )
-
-
-if __name__ == "__main__":
-    main()

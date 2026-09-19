@@ -270,48 +270,5 @@ def annotate_pathways(
     return df
 
 
-def main():
-    """CLI entrypoint for standalone pathway annotation."""
-    import argparse
 
-    parser = argparse.ArgumentParser(
-        prog="kolach-pathway",
-        description="Annotate KO identifiers in a TSV table with KEGG categories, subcategories, and pathways.",
-    )
-    parser.add_argument(
-        "--annotation-table",
-        type=str,
-        required=True,
-        help="Input tabular annotations TSV file (e.g. kolach_annotations.tsv).",
-    )
-    parser.add_argument(
-        "--output-file",
-        type=str,
-        required=True,
-        help="Path for output TSV table with KEGG pathway annotations.",
-    )
-    parser.add_argument(
-        "--database-dir",
-        type=str,
-        required=True,
-        help="Directory where databases are stored (contains or will download ko00001.json).",
-    )
-    parser.add_argument(
-        "--ko-column",
-        type=str,
-        default="accepted_ko",
-        help="Column name containing KO identifiers to annotate (default: 'accepted_ko').",
-    )
-    args = parser.parse_args()
-
-    annotate_pathways(
-        annotation_table=args.annotation_table,
-        output_tsv=args.output_file,
-        database_dir=args.database_dir,
-        ko_col=args.ko_column,
-    )
-
-
-if __name__ == "__main__":
-    main()
 
