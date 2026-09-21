@@ -19,7 +19,6 @@ wheels/
 venv/
 env/
 ENV/
-AGENTS.md
 
 # Local databases and test run outputs
 *.db
