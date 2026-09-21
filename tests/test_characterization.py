@@ -191,7 +191,7 @@ class TestCharacterization(unittest.TestCase):
         res = integrate_annotations(kofam_tsv=kf, eggnog_tsv=en)
         row = res.iloc[0]
         self.assertEqual(row["accepted_ko"], "K00001")
-        self.assertEqual(row["consensus_level"], "orthogonal_dual_candidate")
+        self.assertEqual(row["consensus_level"], "dual_candidate")
         self.assertEqual(row["evidence"], "eggnog(candidate),kofam(rescued)")
 
     def test_zero_calls_kofam_rescue_with_deepkoala_candidate(self):
@@ -201,7 +201,7 @@ class TestCharacterization(unittest.TestCase):
         res = integrate_annotations(kofam_tsv=kf, deepkoala_tsv=dk)
         row = res.iloc[0]
         self.assertEqual(row["accepted_ko"], "K00001")
-        self.assertEqual(row["consensus_level"], "orthogonal_dual_candidate")
+        self.assertEqual(row["consensus_level"], "dual_candidate")
         self.assertEqual(row["evidence"], "deepkoala(candidate),kofam(rescued)")
 
     def test_zero_calls_kofam_rescue_with_both_candidates(self):
@@ -212,7 +212,7 @@ class TestCharacterization(unittest.TestCase):
         res = integrate_annotations(kofam_tsv=kf, deepkoala_tsv=dk, eggnog_tsv=en)
         row = res.iloc[0]
         self.assertEqual(row["accepted_ko"], "K00001")
-        self.assertEqual(row["consensus_level"], "orthogonal_dual_candidate")
+        self.assertEqual(row["consensus_level"], "dual_candidate")
         self.assertEqual(row["evidence"], "deepkoala(candidate),eggnog(candidate),kofam(rescued)")
 
     def test_zero_calls_kofam_rescue_precedence_over_dk_en_candidates(self):
@@ -235,7 +235,7 @@ class TestCharacterization(unittest.TestCase):
         res = integrate_annotations(deepkoala_tsv=dk, eggnog_tsv=en)
         row = res.iloc[0]
         self.assertEqual(row["accepted_ko"], "K00002")
-        self.assertEqual(row["consensus_level"], "orthogonal_dual_candidate")
+        self.assertEqual(row["consensus_level"], "dual_candidate")
         self.assertEqual(row["evidence"], "deepkoala(candidate),eggnog(candidate)")
 
     def test_zero_calls_unannotated(self):

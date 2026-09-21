@@ -929,7 +929,7 @@ def adjudicate_gene(
             - accepted_ko: Primary consensus KO ID, or '-' if none/conflicting/ambiguous.
             - alt_set: Set of alternative, conflicting, or dropped KO IDs.
             - consensus_level: Classification label ('unanimous', 'majority', 'single_tool',
-              'single_tool_with_candidate', 'orthogonal_dual_candidate', 'conflict',
+              'single_tool_with_candidate', 'dual_candidate', 'conflict',
               'conflict_priority', 'unannotated').
             - evidence_str: Comma-separated string describing calling or supporting tools.
     """
@@ -978,7 +978,7 @@ def adjudicate_gene(
                 agreeing_cands = ["deepkoala(candidate)", "kofam(rescued)"]
 
             if cand_agree:
-                consensus_level = "orthogonal_dual_candidate"
+                consensus_level = "dual_candidate"
                 evidence_str = ",".join(sorted(agreeing_cands))
                 # Identify non-agreed eggNOG multi-KO candidates to track in alternatives
                 dropped_en = (en_raw_cands - cand_agree) if (len(en_raw_cands) > 1 and bool(cand_agree & en_raw_cands)) else set()
@@ -1006,7 +1006,7 @@ def adjudicate_gene(
             # Orthogonal agreement between below-threshold DeepKOALA and eggNOG candidates
             cand_agree = dk_cand & en_cand
             agreeing_cands = ["deepkoala(candidate)", "eggnog(candidate)"]
-            consensus_level = "orthogonal_dual_candidate"
+            consensus_level = "dual_candidate"
             evidence_str = ",".join(sorted(agreeing_cands))
             dropped_en = (en_raw_cands - cand_agree) if (len(en_raw_cands) > 1 and bool(cand_agree & en_raw_cands)) else set()
             if len(cand_agree) == 1:
@@ -1407,7 +1407,7 @@ def annotate_evidence_records(
             elif orig_status == "heuristic_rescued":
                 cross_status = "heuristic_rescued"
             elif orig_status == "below_threshold":
-                if consensus_level == "orthogonal_dual_candidate":
+                if consensus_level == "dual_candidate":
                     cross_status = "rescued"
                 else:
                     cross_status = "below_threshold_unrescued"

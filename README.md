@@ -78,7 +78,7 @@ kolach integrate \
    - **3 Confident Calls**: All 3 agree $\rightarrow$ `unanimous`. Exactly 2 agree $\rightarrow$ `majority` (the 3rd unselected call is preserved in `alternative_kos`). All 3 differ $\rightarrow$ disjoint conflict.
    - **2 Confident Calls**: Both agree $\rightarrow$ `majority` (or `unanimous` if only 2 tools were run). Disagree $\rightarrow$ disjoint conflict.
    - **1 Confident Call**: Supported by another tool's sub-threshold candidate $\rightarrow$ `single_tool_with_candidate`; sole call $\rightarrow$ `single_tool`.
-   - **0 Confident Calls**: 2 independent sub-threshold candidates agree $\rightarrow$ `orthogonal_dual_candidate`. KOfam heuristic rescue $\rightarrow$ `single_tool` (`evidence = kofam(rescued)`). Otherwise $\rightarrow$ `unannotated`.
+   - **0 Confident Calls**: 2 independent sub-threshold candidates agree $\rightarrow$ `dual_candidate`. KOfam heuristic rescue $\rightarrow$ `single_tool` (`evidence = kofam(rescued)`). Otherwise $\rightarrow$ `unannotated`.
 3. **Conflict Resolution (`--conflict-strategy`)**:
    - `multiple` *(default)*: Assigns `consensus_level = conflict`, sets `accepted_ko = '-'`, and records all conflicting KOs in `alternative_kos`.
    - `priority`: Assigns `consensus_level = conflict_priority`, selecting the top tool's KO (`kofam > eggnog > deepkoala`) for `accepted_ko` and moving unselected KOs to `alternative_kos`.
@@ -112,7 +112,7 @@ flowchart TD
 
     %% 0 calls
     Count -->|"0 calls"| C0{"Sub-threshold / Rescue?"}
-    C0 -->|"2 candidates agree"| DualCand["consensus_level: orthogonal_dual_candidate"]
+    C0 -->|"2 candidates agree"| DualCand["consensus_level: dual_candidate"]
     C0 -->|"KOfam rescued"| Rescued["consensus_level: single_tool<br/>(evidence: kofam(rescued))"]
     C0 -->|"None"| Unannotated["consensus_level: unannotated<br/>(accepted_ko = '-')"]
 ```
@@ -125,7 +125,7 @@ flowchart TD
 | `majority` | At least 2 methods confidently agree on the KO. | `accepted_ko` = agreed KO (`alternative_kos` = unselected 3rd KO) |
 | `single_tool_with_candidate` | 1 confident call corroborated by another tool's candidate. | `accepted_ko` = single KO |
 | `single_tool` | Exactly 1 confident method (or KOfam rescue) without corroboration. | `accepted_ko` = single KO |
-| `orthogonal_dual_candidate` | Sub-threshold candidates from 2 methods agree on the same KO. | `accepted_ko` = agreed KO |
+| `dual_candidate` | Sub-threshold candidates from 2 methods agree on the same KO. | `accepted_ko` = agreed KO |
 | `conflict` | Disjoint calls under `multiple` (default). | `accepted_ko` = `-` (`alternative_kos` = all conflicting KOs) |
 | `conflict_priority` | Disjoint calls resolved by method hierarchy. | `accepted_ko` = top tool KO (`alternative_kos` = unselected KOs) |
 | `unannotated` | No method produced a confident or corroborated assignment. | `accepted_ko` = `-` (`alternative_kos` = `-`) |
