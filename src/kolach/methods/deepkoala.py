@@ -30,28 +30,73 @@ def get_available_releases():
 
 
 def setup_resources_link(database_dir, release):
-    """Ensure deepkoala's expected resources directory points to our downloaded models."""
+    """Point deepkoala's expected resources directory at our downloaded model files.
+
+    Only ever replaces symlinks; a real directory at the target path is *never*
+    deleted automatically. If a real directory occupies the target and is not the
+    requested model source, fail visibly rather than destroy user data. Failures to
+    create the link (e.g. read-only site-packages) also surface instead of being
+    silently swallowed.
+
+    Args:
+        database_dir: Base directory containing the deepkoala release subdirectory.
+        release: DeepKOALA release identifier (YYYYMM string).
+
+    Raises:
+        ImportError: If the deepkoala package is not installed.
+        FileNotFoundError: If the requested model source directory does not exist.
+        RuntimeError: If the target path is a real directory that cannot be safely
+            linked, or the link cannot otherwise be established.
+    """
     try:
         import deepkoala
-        deepkoala_pkg_dir = Path(deepkoala.__file__).resolve().parent
-        resources_dir = deepkoala_pkg_dir.parent / "resources"
+    except ImportError as e:
+        raise ImportError(
+            "The 'deepkoala' package is not installed. "
+            "Please install it using: pip install git+https://github.com/zhaoxi120/deepkoala.git"
+        ) from e
+
+    deepkoala_pkg_dir = Path(deepkoala.__file__).resolve().parent
+    resources_dir = deepkoala_pkg_dir.parent / "resources"
+    source_dir = Path(database_dir).expanduser().resolve() / str(release)
+    target_link = resources_dir / str(release)
+
+    if not source_dir.is_dir():
+        raise FileNotFoundError(
+            f"DeepKOALA model directory not found: '{source_dir}'. "
+            "Run 'kolach download --databases deepkoala' first."
+        )
+
+    try:
         resources_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise RuntimeError(
+            f"Cannot create deepkoala resources directory '{resources_dir}': {e}"
+        ) from e
 
-        source_dir = Path(database_dir) / release
-        target_link = resources_dir / release
-
-        if target_link.is_symlink() or target_link.exists():
-            if target_link.resolve() != source_dir.resolve():
-                if target_link.is_symlink():
-                    target_link.unlink()
-                else:
-                    shutil.rmtree(target_link)
-                target_link.symlink_to(source_dir, target_is_directory=True)
-        else:
+    if target_link.is_symlink():
+        # Symlink may be safely replaced if it does not already point at our source
+        if target_link.resolve() != source_dir.resolve():
+            target_link.unlink()
             target_link.symlink_to(source_dir, target_is_directory=True)
-    except Exception:
-        # Fallback if site-packages is read-only; infer.py may already find it or symlink existed
-        pass
+        return
+
+    if target_link.exists():
+        if target_link.resolve() == source_dir.resolve():
+            return
+        raise RuntimeError(
+            f"'{target_link}' already exists as a real directory and is not the "
+            f"requested model source '{source_dir}'. Refusing to delete a real "
+            "directory automatically; remove it manually or choose a different "
+            "database directory."
+        )
+
+    try:
+        target_link.symlink_to(source_dir, target_is_directory=True)
+    except OSError as e:
+        raise RuntimeError(
+            f"Cannot link deepkoala resources '{target_link}' -> '{source_dir}': {e}"
+        ) from e
 
 
 def download_file(url, destination):
@@ -70,6 +115,8 @@ def download_deepkoala(directory, release="latest"):
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
 
+    # Normalize to string so numeric config values (e.g. int 202608) compare cleanly
+    release = str(release)
     available = get_available_releases()
     if release == "latest":
         selected_release = available[-1]
@@ -142,10 +189,14 @@ def annotate(args, output_file):
         ) from e
 
     db_dir = Path(args.database_dir).expanduser().resolve() / "deepkoala"
-    release = getattr(args, "deepkoala_release", "latest")
+    release = str(getattr(args, "deepkoala_release", "latest"))
 
     # If release is latest, find highest YYYYMM in db_dir
     pat = re.compile(r"^\d{6}$")
+    if not db_dir.is_dir():
+        raise FileNotFoundError(
+            f"No DeepKOALA model directory found in {db_dir}. Run 'kolach download --databases deepkoala' first."
+        )
     local_releases = [p.name for p in db_dir.iterdir() if p.is_dir() and pat.match(p.name)]
     if not local_releases:
         raise FileNotFoundError(

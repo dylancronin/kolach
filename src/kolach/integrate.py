@@ -38,12 +38,13 @@ EVIDENCE_COLUMNS = [
     "supporting_methods",
 ]
 
-VALID_ORIGINAL_STATUSES = {
-    "threshold_passing",
-    "heuristic_rescued",
-    "below_threshold",
-    "unknown",
-}
+
+def _validate_gene_ids(values: pd.Series, path: Path, method: str) -> None:
+    """Reject missing identifiers before pandas string conversion can create 'nan'."""
+    invalid = values.isna() | values.astype("string").str.strip().eq("")
+    if invalid.any():
+        rows = ", ".join(str(i + 2) for i in values.index[invalid][:5])
+        raise ValueError(f"{method} file '{path}' contains missing or blank gene IDs at row(s): {rows}")
 
 
 def parse_kos(val: Any) -> set[str]:
@@ -85,6 +86,15 @@ def format_kos(kos: set[str]) -> str:
     """
     # Alphabetical sorting guarantees reproducible, byte-identical output across runs
     return ",".join(sorted(kos)) if kos else "-"
+
+
+def format_metric_value(value: Any) -> str:
+    """Format a numeric value compactly for a KO-qualified summary field."""
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "-"
+    return f"{numeric:.6g}" if np.isfinite(numeric) else "-"
 
 
 def read_fasta_ids(fasta_path: Union[str, Path]) -> list[str]:
@@ -272,12 +282,16 @@ def make_evidence_record(
     return rec
 
 
-def extract_kofam_records(tsv_path: Union[str, Path]) -> list[dict]:
+def extract_kofam_records(
+    tsv_path: Union[str, Path],
+    heuristic_bitscore_fraction: float = 0.75,
+    heuristic_e_value: float = 1e-5,
+) -> list[dict]:
     """Extract per-hit KO records from KOfam annotations TSV.
 
-    Duplicate hits for a (gene_id, ko) pair are deterministically resolved by
-    selecting the hit with the highest applicable bit score (and lowest E-value)
-    according to each profile's score_type (full vs domain).
+    Duplicate hits for a (gene_id, ko) pair prefer threshold-passing evidence,
+    then heuristic-rescued, below-threshold, and unknown evidence. Applicable bit
+    score, E-value, and input order break ties within a status category.
 
     original_status is strictly determined:
     - 'threshold' or '*' -> threshold_passing
@@ -290,8 +304,17 @@ def extract_kofam_records(tsv_path: Union[str, Path]) -> list[dict]:
         unknown
     Preserves original full and domain metrics in the underlying evidence records.
 
+    For heuristic_rescued hits the reported bit_score_threshold is the actual
+    relaxed cutoff used upstream (heuristic_bitscore_fraction * threshold) and
+    e_value_threshold is the actual heuristic E-value cutoff, so the evidence
+    table's thresholds match the configured KOfam rescue parameters.
+
     Args:
         tsv_path (Union[str, Path]): Path to the KOfam annotations TSV file.
+        heuristic_bitscore_fraction (float, optional): Fraction of the profile
+            threshold used for rescued hits. Defaults to 0.75.
+        heuristic_e_value (float, optional): Maximum E-value for rescue
+            consideration. Defaults to 1e-5.
 
     Returns:
         list[dict]: List of normalized evidence records conforming to EVIDENCE_COLUMNS.
@@ -302,8 +325,13 @@ def extract_kofam_records(tsv_path: Union[str, Path]) -> list[dict]:
         return []
 
     df = pd.read_csv(path, sep="\t", dtype=str)
+    required = {"gene_id", "ko"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"KOfam file '{path}' missing required column(s): {', '.join(sorted(missing))}")
     if df.empty:
         return []
+    _validate_gene_ids(df["gene_id"], path, "KOfam")
 
     # Clean identifiers and coerce score columns to numeric floats (NaN on conversion failure)
     df["gene_id"] = df["gene_id"].astype(str).str.strip()
@@ -336,11 +364,33 @@ def extract_kofam_records(tsv_path: Union[str, Path]) -> list[dict]:
     df["_sel_e_value"] = [s[1] for s in sel_scores]
     df["_orig_idx"] = np.arange(len(df))
 
-    # Deterministic deduplication: highest selected bit_score, then lowest selected e_value,
-    # then original index as stable tie-breaker
+    def status_for_row(row: pd.Series) -> str:
+        assignment = str(row["assignment"]).strip().lower() if pd.notna(row["assignment"]) else ""
+        if assignment in ("threshold", "*"):
+            return "threshold_passing"
+        if assignment == "rescued":
+            return "heuristic_rescued"
+        if assignment in ("below_threshold", "below", "none"):
+            return "below_threshold"
+        if (
+            str(row["score_type"]).strip().lower() in ("full", "domain")
+            and pd.notna(row["_sel_bit_score"])
+            and np.isfinite(row["_sel_bit_score"])
+            and pd.notna(row["threshold"])
+            and np.isfinite(row["threshold"])
+        ):
+            return "threshold_passing" if row["_sel_bit_score"] >= row["threshold"] else "below_threshold"
+        return "unknown"
+
+    df["_original_status"] = df.apply(status_for_row, axis=1)
+    df["_status_rank"] = df["_original_status"].map(
+        {"threshold_passing": 3, "heuristic_rescued": 2, "below_threshold": 1, "unknown": 0}
+    )
+
+    # Preserve stronger status before ranking metrics within each category.
     df = df.sort_values(
-        by=["gene_id", "ko", "_sel_bit_score", "_sel_e_value", "_orig_idx"],
-        ascending=[True, True, False, True, True],
+        by=["gene_id", "ko", "_status_rank", "_sel_bit_score", "_sel_e_value", "_orig_idx"],
+        ascending=[True, True, False, False, True, True],
         na_position="last",
     )
     df = df.drop_duplicates(subset=["gene_id", "ko"], keep="first")
@@ -348,45 +398,23 @@ def extract_kofam_records(tsv_path: Union[str, Path]) -> list[dict]:
     records = []
     for _, row in df.iterrows():
         assign_raw = str(row["assignment"]).strip() if pd.notna(row["assignment"]) else ""
-        assign_lower = assign_raw.lower()
         score_type = str(row["score_type"]).strip() if pd.notna(row["score_type"]) else "-"
         thresh = row["threshold"]
         bs = row["bit_score"]
         ev = row["e_value"]
         dbs = row["domain_bit_score"]
         dev = row["domain_e_value"]
-        sel_bs = row["_sel_bit_score"]
-
-        # Evaluate status from explicit assignment column first
-        if assign_lower in ("threshold", "*"):
-            orig_status = "threshold_passing"
-        elif assign_lower == "rescued":
-            orig_status = "heuristic_rescued"
-        elif assign_lower in ("below_threshold", "below", "none"):
-            orig_status = "below_threshold"
-        else:
-            # Missing or unrecognized assignment -> evaluate using profile score_type and threshold
-            st_norm = str(score_type).strip().lower()
-            if (
-                st_norm in ("full", "domain")
-                and pd.notna(sel_bs)
-                and np.isfinite(sel_bs)
-                and pd.notna(thresh)
-                and np.isfinite(thresh)
-            ):
-                orig_status = "threshold_passing" if sel_bs >= thresh else "below_threshold"
-            else:
-                orig_status = "unknown"
+        orig_status = row["_original_status"]
 
         definition = str(row["definition"]).strip() if pd.notna(row["definition"]) else "-"
         if definition in ("", "-"):
             definition = "-"
 
         # Determine bit_score_threshold and e_value_threshold for evidence reporting
-        # For heuristic rescued hits, threshold is adjusted to 0.75 * profile cutoff
+        # For heuristic rescued hits, report the actual relaxed cutoff used upstream
         if orig_status == "heuristic_rescued":
-            bs_thresh = round(0.75 * thresh, 2) if (pd.notna(thresh) and np.isfinite(thresh)) else np.nan
-            ev_thresh = 1e-5
+            bs_thresh = heuristic_bitscore_fraction * thresh if (pd.notna(thresh) and np.isfinite(thresh)) else np.nan
+            ev_thresh = float(heuristic_e_value)
         else:
             bs_thresh = thresh
             ev_thresh = np.nan
@@ -415,8 +443,9 @@ def extract_kofam_records(tsv_path: Union[str, Path]) -> list[dict]:
 def extract_deepkoala_records(tsv_path: Union[str, Path]) -> list[dict]:
     """Extract per-hit KO records from DeepKOALA annotations TSV.
 
-    Duplicate hits for a (gene_id, ko) pair are deterministically resolved by
-    selecting the hit with the highest probability.
+    Duplicate hits for a (gene_id, ko) pair prefer threshold-passing evidence,
+    then below-threshold evidence, then unknown evidence; probability and input
+    order break ties within a status category.
 
     Status determination:
     - If annotate column is present and contains '*': threshold_passing
@@ -428,7 +457,7 @@ def extract_deepkoala_records(tsv_path: Union[str, Path]) -> list[dict]:
     - Documented simple format (name, predict_label exactly):
       emitted KOs have passed upstream filtering -> threshold_passing with
       score_type = 'upstream_filtered'.
-    - Arbitrary two-column tables without documented headers: unknown.
+    - Tables without documented gene/KO headers are rejected.
 
     Args:
         tsv_path (Union[str, Path]): Path to the DeepKOALA annotations TSV file.
@@ -441,9 +470,6 @@ def extract_deepkoala_records(tsv_path: Union[str, Path]) -> list[dict]:
         return []
 
     df = pd.read_csv(path, sep="\t", dtype=str)
-    if df.empty:
-        return []
-
     # Clean header column names for case-insensitive and hash-stripped matching
     cleaned_raw_cols = [c.lstrip("#").strip() for c in df.columns]
     cols_lower = [c.lower() for c in cleaned_raw_cols]
@@ -465,14 +491,14 @@ def extract_deepkoala_records(tsv_path: Union[str, Path]) -> list[dict]:
     elif "gene_id" in cols_lower:
         col_map[df.columns[cols_lower.index("gene_id")]] = "gene_id"
     else:
-        col_map[df.columns[0]] = "gene_id"
+        raise ValueError(f"DeepKOALA file '{path}' missing required 'name' or 'gene_id' column")
 
     if "predict_label" in cols_lower:
         col_map[df.columns[cols_lower.index("predict_label")]] = "predict_label"
     elif "ko" in cols_lower:
         col_map[df.columns[cols_lower.index("ko")]] = "predict_label"
-    elif len(df.columns) > 1:
-        col_map[df.columns[1]] = "predict_label"
+    else:
+        raise ValueError(f"DeepKOALA file '{path}' missing required 'predict_label' or 'ko' column")
 
     if "probability" in cols_lower:
         col_map[df.columns[cols_lower.index("probability")]] = "deepkoala_score"
@@ -486,6 +512,9 @@ def extract_deepkoala_records(tsv_path: Union[str, Path]) -> list[dict]:
         col_map[df.columns[cols_lower.index("annotate")]] = "deepkoala_annotate"
 
     df = df.rename(columns=col_map)
+    if df.empty:
+        return []
+    _validate_gene_ids(df["gene_id"], path, "DeepKOALA")
     df["gene_id"] = df["gene_id"].astype(str).str.strip()
     df["deepkoala_score"] = pd.to_numeric(df.get("deepkoala_score"), errors="coerce")
     df["deepkoala_threshold"] = pd.to_numeric(df.get("deepkoala_threshold"), errors="coerce")
@@ -508,13 +537,13 @@ def extract_deepkoala_records(tsv_path: Union[str, Path]) -> list[dict]:
             if "*" in ann:
                 orig_status = "threshold_passing"
                 score_type = "probability"
-            elif pd.notna(score) and pd.notna(thresh):
+            elif pd.notna(score) and np.isfinite(score) and pd.notna(thresh) and np.isfinite(thresh):
                 orig_status = "threshold_passing" if score >= thresh else "below_threshold"
                 score_type = "probability"
             else:
                 orig_status = "unknown"
                 score_type = "-"
-        elif pd.notna(score) and pd.notna(thresh):
+        elif pd.notna(score) and np.isfinite(score) and pd.notna(thresh) and np.isfinite(thresh):
             orig_status = "threshold_passing" if score >= thresh else "below_threshold"
             score_type = "probability"
         else:
@@ -535,8 +564,16 @@ def extract_deepkoala_records(tsv_path: Union[str, Path]) -> list[dict]:
         return []
 
     exp_df = pd.DataFrame(exploded_rows)
-    # Deduplicate: sort by highest score descending so best probability is retained per (gene_id, ko)
-    exp_df = exp_df.sort_values(by=["gene_id", "ko", "deepkoala_score"], ascending=[True, True, False])
+    # Preserve passing evidence before ranking within each status category.
+    exp_df["_status_rank"] = exp_df["original_status"].map(
+        {"threshold_passing": 2, "below_threshold": 1, "unknown": 0}
+    )
+    exp_df["_orig_idx"] = np.arange(len(exp_df))
+    exp_df = exp_df.sort_values(
+        by=["gene_id", "ko", "_status_rank", "deepkoala_score", "_orig_idx"],
+        ascending=[True, True, False, False, True],
+        na_position="last",
+    )
     exp_df = exp_df.drop_duplicates(subset=["gene_id", "ko"], keep="first")
 
     records = []
@@ -590,26 +627,29 @@ def read_eggnog_tsv(tsv_path: Union[str, Path]) -> pd.DataFrame:
     )
 
     header_line = None
-    data_lines = []
+    skip_indices: list[int] = []
     with open_fn(path) as f:
-        for line in f:
+        for idx, line in enumerate(f):
             stripped = line.strip()
             if not stripped:
+                skip_indices.append(idx)
                 continue
             # Skip emapper comment metadata lines
             if stripped.startswith("##"):
+                skip_indices.append(idx)
                 continue
             if header_line is None:
                 # Skip comment lines before the header except the recognized #query header
                 if stripped.startswith("#"):
                     first_cell = re.sub(r"\s+", "", stripped.split("\t")[0].lower())
                     if first_cell not in ("#query", "#gene_id"):
+                        skip_indices.append(idx)
                         continue
                 header_line = line.rstrip("\r\n")
+                header_idx = idx
             else:
                 if stripped.startswith("#"):
-                    continue
-                data_lines.append(line)
+                    skip_indices.append(idx)
 
     if header_line is None:
         raise ValueError(f"eggNOG annotations file contains no valid header: '{path}'")
@@ -626,13 +666,16 @@ def read_eggnog_tsv(tsv_path: Union[str, Path]) -> pd.DataFrame:
             f"or KO ('kegg_ko'/'ko') column (found columns: {clean_cols})"
         )
 
-    # Return empty DataFrame with parsed columns if no data rows exist
-    if not data_lines:
-        return pd.DataFrame(columns=clean_cols)
+    # Re-open and parse natively from the stream, skipping metadata/comment rows in
+    # a single pass (avoids buffering the whole file into memory via StringIO).
+    skip_rows = sorted(set(skip_indices) | {header_idx})
+    with open_fn(path) as f:
+        df = pd.read_csv(f, sep="\t", header=None, names=clean_cols, dtype=str, skiprows=skip_rows)
 
-    import io
-    content = "\t".join(clean_cols) + "\n" + "".join(data_lines)
-    return pd.read_csv(io.StringIO(content), sep="\t", dtype=str)
+    # Valid header-only files return an empty DataFrame with the parsed columns
+    if df.empty:
+        return pd.DataFrame(columns=clean_cols)
+    return df
 
 
 def extract_eggnog_records(
@@ -643,8 +686,10 @@ def extract_eggnog_records(
     """Extract per-hit KO records from eggNOG annotations TSV.
 
     Shared seed-hit metrics for multi-KO assignments are explicitly tagged.
-    Duplicate hits for a (gene_id, ko) pair are deterministically resolved by
-    selecting the hit with the highest bit_score (and lowest e_value).
+    Duplicate hits for a (gene_id, ko) pair prefer threshold-passing evidence,
+    then below-threshold evidence, then unknown evidence; bit score, E-value,
+    and input order break ties within a status category. All source seed-group
+    memberships remain available internally for group-scoped disambiguation.
 
     Status determination:
     - Missing, malformed, or nonfinite bit score or E-value -> unknown
@@ -692,6 +737,7 @@ def extract_eggnog_records(
         col_map[df.columns[cols_lower.index("description")]] = "eggnog_description"
 
     df = df.rename(columns=col_map)
+    _validate_gene_ids(df["gene_id"], path, "eggNOG")
     df["gene_id"] = df["gene_id"].astype(str).str.strip()
     df["eggnog_bit_score"] = pd.to_numeric(df.get("eggnog_bit_score"), errors="coerce")
     df["eggnog_evalue"] = pd.to_numeric(df.get("eggnog_evalue"), errors="coerce")
@@ -701,7 +747,7 @@ def extract_eggnog_records(
         df["eggnog_raw_ko"] = "-"
 
     exploded_rows = []
-    for _, row in df.iterrows():
+    for row_idx, (_, row) in enumerate(df.iterrows()):
         raw_val = row["eggnog_raw_ko"]
         # Explode multi-KO annotations into individual per-KO records
         kos = parse_kos(raw_val)
@@ -711,6 +757,10 @@ def extract_eggnog_records(
         is_multi = len(kos) > 1
         bs = row["eggnog_bit_score"]
         ev = row["eggnog_evalue"]
+        # Stable identifier for the originating eggNOG row; all KOs exploded from
+        # the same seed hit share this group id so disambiguation can be scoped to
+        # the KOs that genuinely co-occurred in a multi-KO hit.
+        group_key = f"en_row{row_idx}"
 
         # Validate finite numeric metrics (legitimate 0.0 E-values evaluate to True)
         is_finite_bs = pd.notna(bs) and np.isfinite(bs)
@@ -731,6 +781,8 @@ def extract_eggnog_records(
                 "e_value": ev,
                 "eggnog_shared_seed_hit": is_multi,
                 "shared_seed_hit": is_multi,
+                "eggnog_seed_group": group_key,
+                "source_is_multi": is_multi,
                 "original_status": orig_status,
                 "eggnog_description": str(row["eggnog_description"]).strip() if pd.notna(row["eggnog_description"]) else "-",
             })
@@ -739,11 +791,23 @@ def extract_eggnog_records(
         return []
 
     exp_df = pd.DataFrame(exploded_rows)
-    # Deduplicate: prefer records with valid finite metrics, then highest bit_score, lowest e_value
-    exp_df["_valid_metrics"] = exp_df["original_status"].isin(["threshold_passing", "below_threshold"])
+    source_map: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for source in exploded_rows:
+        source_map.setdefault((source["gene_id"], source["ko"]), []).append(
+            {
+                "group": source["eggnog_seed_group"],
+                "is_multi": source["source_is_multi"],
+                "status": source["original_status"],
+            }
+        )
+
+    # Preserve passing evidence before ranking metrics within each status category.
+    exp_df["_status_rank"] = exp_df["original_status"].map(
+        {"threshold_passing": 2, "below_threshold": 1, "unknown": 0}
+    )
     exp_df["_orig_idx"] = np.arange(len(exp_df))
     exp_df = exp_df.sort_values(
-        by=["gene_id", "ko", "_valid_metrics", "bit_score", "e_value", "_orig_idx"],
+        by=["gene_id", "ko", "_status_rank", "bit_score", "e_value", "_orig_idx"],
         ascending=[True, True, False, False, True, True],
         na_position="last",
     )
@@ -751,7 +815,8 @@ def extract_eggnog_records(
 
     records = []
     for _, row in exp_df.iterrows():
-        is_shared = bool(row.get("eggnog_shared_seed_hit", row.get("shared_seed_hit", False)))
+        sources = source_map[(row["gene_id"], row["ko"])]
+        is_shared = any(source["is_multi"] for source in sources)
         records.append(
             make_evidence_record(
                 gene_id=row["gene_id"],
@@ -766,6 +831,8 @@ def extract_eggnog_records(
                 e_value_threshold=max_evalue,
                 eggnog_shared_seed_hit=is_shared,
                 shared_seed_hit=is_shared,
+                eggnog_seed_group=row["eggnog_seed_group"],
+                eggnog_sources=sources,
                 definition="-",  # Generic seed description is NOT an authoritative KO definition
                 eggnog_description=row["eggnog_description"],
             )
@@ -849,11 +916,14 @@ def disambiguate_eggnog(
     candidate_kos: dict[str, set[str]],
     rescued_kos: dict[str, set[str]],
     eggnog_filter_multi: str = "disambiguate",
-) -> tuple[set[str], set[str]]:
+) -> tuple[set[str], set[str], set[Any], set[Any]]:
     """Disambiguate eggNOG multi-KO assignments against other methods' predictions.
 
     When an eggNOG assignment represents a multi-KO seed hit, checks for corroboration
     first against confident calls from other tools, then against candidate/rescued calls.
+    Narrowing is scoped to the KOs that genuinely shared the multi-KO seed hit:
+    confident singleton calls from other eggNOG rows for the same gene are preserved
+    unconditionally.
     Dropped KOs are returned in en_dropped and preserved in alternative_kos.
 
     Args:
@@ -866,36 +936,58 @@ def disambiguate_eggnog(
         eggnog_filter_multi (str, optional): Strategy ('disambiguate' or 'none'). Defaults to 'disambiguate'.
 
     Returns:
-        tuple[set[str], set[str]]: Tuple of (en_agreed, en_dropped) representing retained
-        and dropped eggNOG KOs.
+        tuple[set[str], set[str], set[Any], set[Any]]: Retained KOs, globally
+        dropped KOs, narrowed source-group IDs, and unresolved source-group IDs.
     """
     en_dropped = set()
+    narrowed_groups: set[Any] = set()
+    unresolved_groups: set[Any] = set()
     if "eggnog" in active_tools and en_agreed:
-        # Check if any eggNOG record for this gene was a multi-KO seed hit
-        has_multi = any(
-            r.get("eggnog_shared_seed_hit", r.get("shared_seed_hit", False))
-            for r in tool_recs.get("eggnog", [])
+        groups: dict[Any, set[str]] = {}
+        singleton_support: set[str] = set()
+        for r in tool_recs.get("eggnog", []):
+            sources = r.get("eggnog_sources") or [{
+                "group": r.get("eggnog_seed_group", id(r)),
+                "is_multi": r.get("eggnog_shared_seed_hit", False),
+                "status": r["original_status"],
+            }]
+            for source in sources:
+                if source["status"] == "threshold_passing" and source["is_multi"]:
+                    groups.setdefault(source["group"], set()).add(r["ko"])
+                elif source["status"] == "threshold_passing":
+                    singleton_support.add(r["ko"])
+
+        grouped_kos = set().union(*groups.values()) if groups else set()
+        retained = (en_agreed - grouped_kos) | singleton_support
+        trusted_other = set().union(
+            *[confident_kos.get(t, set()) for t in active_tools if t != "eggnog"]
         )
-        if has_multi:
-            # Collect confident and candidate predictions from non-eggNOG tools
-            trusted_other = set().union(*[confident_kos.get(t, set()) for t in active_tools if t != "eggnog"])
-            cand_other = set().union(
-                *[rescued_kos.get(t, set()) | candidate_kos.get(t, set()) for t in active_tools if t != "eggnog"]
-            )
+        candidate_other = set().union(
+            *[
+                rescued_kos.get(t, set()) | candidate_kos.get(t, set())
+                for t in active_tools
+                if t != "eggnog"
+            ]
+        )
 
-            if eggnog_filter_multi == "disambiguate":
-                # Priority 1: Match against other tools' confident calls
-                if en_agreed & trusted_other:
-                    overlap = en_agreed & trusted_other
-                    en_dropped = en_agreed - overlap
-                    en_agreed = overlap
-                # Priority 2: Match against other tools' candidate or rescued calls
-                elif en_agreed & cand_other:
-                    overlap = en_agreed & cand_other
-                    en_dropped = en_agreed - overlap
-                    en_agreed = overlap
+        for group_id, group_kos in groups.items():
+            kept = set(group_kos)
+            if eggnog_filter_multi == "disambiguate" and len(group_kos) > 1:
+                overlap = group_kos & trusted_other
+                if not overlap:
+                    overlap = group_kos & candidate_other
+                if overlap:
+                    kept = overlap
+                    narrowed_groups.add(group_id)
+                else:
+                    unresolved_groups.add(group_id)
+            retained |= kept
 
-    return en_agreed, en_dropped
+        en_agreed = en_agreed & retained
+        # A KO is globally dropped only when no independent confident source survives.
+        en_dropped = set(confident_kos.get("eggnog", set())) - en_agreed
+
+    return en_agreed, en_dropped, narrowed_groups, unresolved_groups
 
 
 def adjudicate_gene(
@@ -904,15 +996,18 @@ def adjudicate_gene(
     candidate_kos: dict[str, set[str]],
     rescued_kos: dict[str, set[str]],
     en_dropped: set[str],
-    en_raw_cands: set[str],
     conflict_strategy: str = "multiple",
     priority_order: Optional[list[str]] = None,
 ) -> tuple[str, set[str], str, str]:
     """Adjudicate consensus KO, alternative KOs, consensus level, and evidence string for a gene.
 
     Evaluates confident (threshold-passing), candidate (below-threshold), and
-    heuristic-rescued calls across active tools according to predefined hierarchical
+    heuristic-rescued calls across active tools according to specified hierarchical
     resolution rules.
+
+    Alternative KOs include confident minority calls, eggNOG KOs dropped during
+    multi-KO disambiguation, and corroborated candidate KOs when multiple candidates
+    remain unresolved. Uncorroborated below-threshold candidates are never injected.
 
     Args:
         active_tools: List of active annotation tools (e.g. ['kofam', 'deepkoala', 'eggnog']).
@@ -920,7 +1015,6 @@ def adjudicate_gene(
         candidate_kos: Mapping of tool name to set of candidate (below-threshold) KO IDs.
         rescued_kos: Mapping of tool name to set of heuristic-rescued KO IDs (specifically KOfam).
         en_dropped: Set of KO IDs dropped from eggNOG multi-KO predictions during disambiguation.
-        en_raw_cands: Set of all raw candidate/passing KO IDs from eggNOG before disambiguation.
         conflict_strategy: Resolution strategy for disjoint conflicts ('multiple' or 'priority').
         priority_order: Ordered list of tools for priority-based conflict resolution.
 
@@ -980,27 +1074,24 @@ def adjudicate_gene(
             if cand_agree:
                 consensus_level = "dual_candidate"
                 evidence_str = ",".join(sorted(agreeing_cands))
-                # Identify non-agreed eggNOG multi-KO candidates to track in alternatives
-                dropped_en = (en_raw_cands - cand_agree) if (len(en_raw_cands) > 1 and bool(cand_agree & en_raw_cands)) else set()
                 if len(cand_agree) == 1:
                     # Exactly one unanimous candidate KO accepted
                     accepted_ko = next(iter(cand_agree))
-                    alt_set = dropped_en - {accepted_ko}
+                    alt_set = en_dropped - {accepted_ko}
                 else:
                     # Multiple candidate KOs agreed; remain conservative and assign to alternatives
                     accepted_ko = "-"
-                    alt_set = cand_agree | dropped_en
+                    alt_set = cand_agree | en_dropped
             else:
                 # KOfam rescue accepted by itself without candidate corroboration
                 consensus_level = "single_tool"
                 evidence_str = "kofam(rescued)"
-                dropped_en = (en_raw_cands - kf_resc) if (len(en_raw_cands) > 1 and bool(kf_resc & en_raw_cands)) else set()
                 if len(kf_resc) == 1:
                     accepted_ko = next(iter(kf_resc))
-                    alt_set = dropped_en - {accepted_ko}
+                    alt_set = en_dropped - {accepted_ko}
                 else:
                     accepted_ko = "-"
-                    alt_set = kf_resc | dropped_en
+                    alt_set = kf_resc | en_dropped
 
         elif "deepkoala" in active_tools and "eggnog" in active_tools and (dk_cand & en_cand):
             # Orthogonal agreement between below-threshold DeepKOALA and eggNOG candidates
@@ -1008,13 +1099,12 @@ def adjudicate_gene(
             agreeing_cands = ["deepkoala(candidate)", "eggnog(candidate)"]
             consensus_level = "dual_candidate"
             evidence_str = ",".join(sorted(agreeing_cands))
-            dropped_en = (en_raw_cands - cand_agree) if (len(en_raw_cands) > 1 and bool(cand_agree & en_raw_cands)) else set()
             if len(cand_agree) == 1:
                 accepted_ko = next(iter(cand_agree))
-                alt_set = dropped_en - {accepted_ko}
+                alt_set = en_dropped - {accepted_ko}
             else:
                 accepted_ko = "-"
-                alt_set = cand_agree | dropped_en
+                alt_set = cand_agree | en_dropped
 
         else:
             # No confident or corroborated candidate calls
@@ -1044,17 +1134,15 @@ def adjudicate_gene(
         if tool_name != "kofam" and "kofam" in active_tools and (called_kos & kf_resc):
             rescued_by.append("kofam(rescued)")
 
-        # Disambiguate dropped eggNOG candidates if eggNOG had multiple raw candidates
-        dropped_en = (en_raw_cands - called_kos) if (len(en_raw_cands) > 1 and bool(called_kos & en_raw_cands)) else en_dropped
-
+        # ... keep 'en_dropped' as the single source of disambiguated eggNOG alternatives
         if len(called_kos) == 1:
             # Single unambiguous confident call
             accepted_ko = next(iter(called_kos))
-            alt_set = dropped_en - {accepted_ko}
+            alt_set = en_dropped - {accepted_ko}
         else:
             # Multiple confident KOs from the same tool; keep accepted_ko as '-' to avoid ambiguity
             accepted_ko = "-"
-            alt_set = called_kos | dropped_en
+            alt_set = called_kos | en_dropped
 
         if rescued_by:
             # Confident call supported by sub-threshold candidate from another tool
@@ -1080,9 +1168,8 @@ def adjudicate_gene(
             is_unanimous = (num_calling_tools == len(active_tools))
             consensus_level = "unanimous" if is_unanimous else "majority"
             evidence_str = ",".join(sorted(tool_calls.keys()))
-            dropped_en = (en_raw_cands - common_all) if (len(en_raw_cands) > 1 and bool(common_all & en_raw_cands)) else en_dropped
             unselected_minority = union_all_calls - common_all
-            extra_alts = unselected_minority | dropped_en
+            extra_alts = unselected_minority | en_dropped
 
             if len(common_all) == 1:
                 accepted_ko = next(iter(common_all))
@@ -1107,9 +1194,8 @@ def adjudicate_gene(
                 # Majority consensus reached among a subset of calling tools
                 consensus_level = "majority"
                 evidence_str = ",".join(sorted(agreeing_tools))
-                dropped_en = (en_raw_cands - pairwise_agreed) if (len(en_raw_cands) > 1 and bool(pairwise_agreed & en_raw_cands)) else en_dropped
                 unselected_minority = union_all_calls - pairwise_agreed
-                extra_alts = unselected_minority | dropped_en
+                extra_alts = unselected_minority | en_dropped
 
                 if len(pairwise_agreed) == 1:
                     accepted_ko = next(iter(pairwise_agreed))
@@ -1126,10 +1212,9 @@ def adjudicate_gene(
                         priority_order = [t for t in ["kofam", "eggnog", "deepkoala"] if t in active_tools]
                     top_tool = next((t for t in priority_order if t in tool_calls), tools_list[0])
                     top_kos = tool_calls[top_tool]
-                    dropped_en_top = (en_raw_cands - top_kos) if (len(en_raw_cands) > 1 and bool(top_kos & en_raw_cands)) else en_dropped
                     if len(top_kos) == 1:
                         accepted_ko = next(iter(top_kos))
-                        alt_set = ((union_all_calls - top_kos) | dropped_en_top) - {accepted_ko}
+                        alt_set = ((union_all_calls - top_kos) | en_dropped) - {accepted_ko}
                     else:
                         accepted_ko = "-"
                         alt_set = all_alts
@@ -1188,7 +1273,12 @@ def build_gene_summary_row(
     # If single record: format scalar values.
     # If multiple records: format as comma-separated 'KO:value' strings.
     # -------------------------------------------------------------------------
-    kf_recs = tool_recs.get("kofam", [])
+    # External tables can contain weak KOfam records; keep those in evidence but do
+    # not present them as confident KOfam summary assignments.
+    kf_recs = [
+        r for r in tool_recs.get("kofam", [])
+        if r["original_status"] in ("threshold_passing", "heuristic_rescued")
+    ]
     if kf_recs:
         kf_kos = sorted({r["ko"] for r in kf_recs})
         kofam_ko_val = format_kos(set(kf_kos))
@@ -1226,14 +1316,14 @@ def build_gene_summary_row(
             # Multi-hit metrics: prefix with KO ID to keep associations unambiguous
             kf_assign_val = ",".join(f"{r['ko']}:{r['assignment']}" for r in kf_recs)
             kf_bs_val = ",".join(
-                f"{r['ko']}:{select_kofam_scores(r.get('score_type'), r.get('bit_score'), r.get('e_value'), r.get('domain_bit_score'), r.get('domain_e_value'))[0]}"
+                f"{r['ko']}:{format_metric_value(select_kofam_scores(r.get('score_type'), r.get('bit_score'), r.get('e_value'), r.get('domain_bit_score'), r.get('domain_e_value'))[0])}"
                 for r in kf_recs
             )
             kf_ev_val = ",".join(
-                f"{r['ko']}:{select_kofam_scores(r.get('score_type'), r.get('bit_score'), r.get('e_value'), r.get('domain_bit_score'), r.get('domain_e_value'))[1]}"
+                f"{r['ko']}:{format_metric_value(select_kofam_scores(r.get('score_type'), r.get('bit_score'), r.get('e_value'), r.get('domain_bit_score'), r.get('domain_e_value'))[1])}"
                 for r in kf_recs
             )
-            kf_th_val = ",".join(f"{r['ko']}:{r['threshold']}" for r in kf_recs)
+            kf_th_val = ",".join(f"{r['ko']}:{format_metric_value(r['threshold'])}" for r in kf_recs)
     else:
         kofam_ko_val = "-"
         kf_st_val = "-"
@@ -1245,7 +1335,7 @@ def build_gene_summary_row(
     # -------------------------------------------------------------------------
     # Format DeepKOALA metrics
     # Distinguish confident (threshold_passing) from candidate (below_threshold).
-    # Select highest probability hit for representative scores.
+    # Preserve KO-to-metric associations when more than one record exists.
     # -------------------------------------------------------------------------
     dk_recs = tool_recs.get("deepkoala", [])
     if dk_recs:
@@ -1253,10 +1343,23 @@ def build_gene_summary_row(
         dk_cands_kos = {r["ko"] for r in dk_recs if r["original_status"] in ("threshold_passing", "below_threshold")}
         dk_ko_val = format_kos(dk_thresh_kos)
         dk_cand_val = format_kos(dk_cands_kos)
-        # Select record with highest probability; fall back to -1.0 if NaN
-        best_dk = max(dk_recs, key=lambda r: (r["deepkoala_probability"] if pd.notna(r["deepkoala_probability"]) else -1.0))
-        dk_score_val = best_dk["deepkoala_probability"]
-        dk_th_val = best_dk["deepkoala_threshold"]
+        ordered_dk = sorted(
+            (r for r in dk_recs if r["original_status"] in ("threshold_passing", "below_threshold")),
+            key=lambda r: r["ko"],
+        )
+        if not ordered_dk:
+            dk_score_val = np.nan
+            dk_th_val = np.nan
+        elif len(ordered_dk) == 1:
+            dk_score_val = ordered_dk[0]["deepkoala_probability"]
+            dk_th_val = ordered_dk[0]["deepkoala_threshold"]
+        else:
+            dk_score_val = ",".join(
+                f"{r['ko']}:{format_metric_value(r['deepkoala_probability'])}" for r in ordered_dk
+            )
+            dk_th_val = ",".join(
+                f"{r['ko']}:{format_metric_value(r['deepkoala_threshold'])}" for r in ordered_dk
+            )
     else:
         dk_ko_val = "-"
         dk_cand_val = "-"
@@ -1266,18 +1369,26 @@ def build_gene_summary_row(
     # -------------------------------------------------------------------------
     # Format eggNOG metrics
     # Report disambiguated KOs in eggnog_ko and all candidates in eggnog_candidate_ko.
-    # Select top hit ranked by highest bit score and lowest e-value.
+    # Preserve KO-to-metric associations when more than one record exists.
     # -------------------------------------------------------------------------
     en_recs = tool_recs.get("eggnog", [])
     if en_recs:
         en_cands_kos = {r["ko"] for r in en_recs if r["original_status"] in ("threshold_passing", "below_threshold")}
         en_ko_val = format_kos(en_agreed)
         en_cand_val = format_kos(en_cands_kos)
-        # Filter to valid (passing or candidate) records to select representative top hit
-        valid_en = [r for r in en_recs if r["original_status"] in ("threshold_passing", "below_threshold")]
-        best_en = max(valid_en, key=lambda r: (r["bit_score"], -r["e_value"])) if valid_en else en_recs[0]
-        en_bs_val = best_en["bit_score"]
-        en_ev_val = best_en["e_value"]
+        ordered_en = sorted(
+            (r for r in en_recs if r["original_status"] in ("threshold_passing", "below_threshold")),
+            key=lambda r: r["ko"],
+        )
+        if not ordered_en:
+            en_bs_val = np.nan
+            en_ev_val = np.nan
+        elif len(ordered_en) == 1:
+            en_bs_val = ordered_en[0]["bit_score"]
+            en_ev_val = ordered_en[0]["e_value"]
+        else:
+            en_bs_val = ",".join(f"{r['ko']}:{format_metric_value(r['bit_score'])}" for r in ordered_en)
+            en_ev_val = ",".join(f"{r['ko']}:{format_metric_value(r['e_value'])}" for r in ordered_en)
     else:
         en_ko_val = "-"
         en_cand_val = "-"
@@ -1319,6 +1430,8 @@ def annotate_evidence_records(
     accepted_ko: str,
     consensus_level: str,
     en_dropped: set[str],
+    narrowed_eggnog_groups: set[Any],
+    unresolved_eggnog_groups: set[Any],
 ) -> list[dict]:
     """Annotate raw evidence records for a gene with cross-method consensus and support.
 
@@ -1335,12 +1448,19 @@ def annotate_evidence_records(
         accepted_ko: Primary accepted KO ID string ('-' if none).
         consensus_level: Gene consensus classification label.
         en_dropped: Set of eggNOG KO IDs dropped during multi-KO disambiguation.
+        narrowed_eggnog_groups: eggNOG source groups narrowed during disambiguation.
+        unresolved_eggnog_groups: eggNOG multi-KO groups lacking corroboration.
 
     Returns:
         list[dict]: Adjudicated evidence records populated with 'cross_method_status'
             and 'supporting_methods'.
     """
     adjudicated = []
+    # eggNOG seed-hit groups that actually lost a KO during multi-KO disambiguation.
+    # A retained eggNOG KO is only labeled 'disambiguated_retained' when its own
+    # multi-KO seed group was genuinely narrowed (i.e. it shares a group with a
+    # dropped counterpart). With eggnog_filter_multi='none' no group ever drops a KO,
+    # so the label cannot occur.
     for r in recs:
         ko = r["ko"]
         method = r["method"]
@@ -1349,8 +1469,8 @@ def annotate_evidence_records(
         # ---------------------------------------------------------------------
         # Determine supporting methods:
         # Check other active tools for matching KO predictions.
-        # If KO is accepted: any matching hit (threshold_passing, heuristic_rescued, below_threshold) supports.
-        # If KO is not accepted: only threshold_passing hits count as supporting.
+        # Record all independent matching evidence. Retention is checked separately
+        # before a below-threshold record can be called rescued.
         # ---------------------------------------------------------------------
         supporting = []
         for other_t in active_tools:
@@ -1361,10 +1481,7 @@ def annotate_evidence_records(
                     if o["ko"] == ko and o["original_status"] in ("threshold_passing", "heuristic_rescued", "below_threshold")
                 ]
                 if other_matching:
-                    if ko in accepted_set:
-                        supporting.append(other_t)
-                    elif any(o["original_status"] == "threshold_passing" for o in other_matching):
-                        supporting.append(other_t)
+                    supporting.append(other_t)
 
         supp_str = ",".join(sorted(supporting)) if supporting else "-"
 
@@ -1379,7 +1496,7 @@ def annotate_evidence_records(
         # - unresolved_multi_ko: eggNOG multi-KO hit that could not be disambiguated
         # - alternative: threshold-passing call not chosen as primary consensus
         # - below_threshold_unrescued: candidate hit without sufficient support
-        # - unselected: threshold-passing hit not selected in consensus
+        # - unselected: threshold-passing or heuristic-rescued hit not selected in consensus
         # ---------------------------------------------------------------------
         if orig_status == "unknown":
             cross_status = "unknown"
@@ -1387,7 +1504,13 @@ def annotate_evidence_records(
             cross_status = "disambiguated_dropped"
         elif ko in accepted_set:
             if orig_status == "threshold_passing":
-                if method == "eggnog" and r.get("eggnog_shared_seed_hit", r.get("shared_seed_hit", False)):
+                if (
+                    method == "eggnog"
+                    and any(
+                        source["group"] in narrowed_eggnog_groups and source["status"] == "threshold_passing"
+                        for source in r.get("eggnog_sources", [])
+                    )
+                ):
                     cross_status = "disambiguated_retained"
                 else:
                     cross_status = "accepted"
@@ -1398,19 +1521,21 @@ def annotate_evidence_records(
             else:
                 cross_status = "unknown"
         elif ko in alt_set:
-            if consensus_level.startswith("conflict"):
-                cross_status = "conflict"
-            elif r.get("eggnog_shared_seed_hit", r.get("shared_seed_hit", False)) and len(alt_set) > 1 and accepted_ko == "-":
-                cross_status = "unresolved_multi_ko"
-            elif orig_status == "threshold_passing":
-                cross_status = "alternative"
+            if orig_status == "threshold_passing":
+                if consensus_level.startswith("conflict"):
+                    cross_status = "conflict"
+                elif method == "eggnog" and any(
+                    source["group"] in unresolved_eggnog_groups
+                    and source["status"] == "threshold_passing"
+                    for source in r.get("eggnog_sources", [])
+                ):
+                    cross_status = "unresolved_multi_ko"
+                else:
+                    cross_status = "alternative"
             elif orig_status == "heuristic_rescued":
                 cross_status = "heuristic_rescued"
             elif orig_status == "below_threshold":
-                if consensus_level == "dual_candidate":
-                    cross_status = "rescued"
-                else:
-                    cross_status = "below_threshold_unrescued"
+                cross_status = "rescued" if supporting else "below_threshold_unrescued"
             else:
                 cross_status = "unknown"
         else:
@@ -1418,6 +1543,8 @@ def annotate_evidence_records(
                 cross_status = "below_threshold_unrescued"
             elif orig_status == "threshold_passing":
                 cross_status = "unselected"
+            elif orig_status == "heuristic_rescued":
+                cross_status = "unselected"  # rescue lost to another tool's call; rescue preserved in original_status
             else:
                 cross_status = "unselected"
 
@@ -1510,6 +1637,8 @@ def integrate_annotations(
     eggnog_max_evalue: float = 1e-5,
     eggnog_filter_multi: str = "disambiguate",
     conflict_strategy: str = "multiple",
+    heuristic_bitscore_fraction: float = 0.75,
+    heuristic_e_value: float = 1e-5,
 ) -> pd.DataFrame:
     """Main evidence-first integration pipeline for kolach annotation outputs.
 
@@ -1533,11 +1662,41 @@ def integrate_annotations(
             ('disambiguate' or 'none').
         conflict_strategy: Resolution strategy for disjoint calling tools
             ('multiple' or 'priority').
+        heuristic_bitscore_fraction: Fraction of the KOfam profile threshold used
+            to rescue below-threshold hits (default: 0.75). Reported in the
+            evidence table for heuristic_rescued hits.
+        heuristic_e_value: Maximum E-value for KOfam rescue consideration
+            (default: 1e-5). Reported in the evidence table for heuristic_rescued hits.
 
     Returns:
         pd.DataFrame: Integrated gene-level summary table with the long-form evidence
             audit DataFrame stored in result_df.attrs['evidence'].
     """
+    if conflict_strategy not in {"multiple", "priority"}:
+        raise ValueError("conflict_strategy must be 'multiple' or 'priority'")
+    if eggnog_filter_multi not in {"disambiguate", "none"}:
+        raise ValueError("eggnog_filter_multi must be 'disambiguate' or 'none'")
+
+    numeric_parameters = {
+        "eggnog_min_bitscore": eggnog_min_bitscore,
+        "eggnog_max_evalue": eggnog_max_evalue,
+        "heuristic_bitscore_fraction": heuristic_bitscore_fraction,
+        "heuristic_e_value": heuristic_e_value,
+    }
+    for name, value in numeric_parameters.items():
+        try:
+            finite = np.isfinite(value)
+        except TypeError as exc:
+            raise ValueError(f"{name} must be a finite number") from exc
+        if not finite:
+            raise ValueError(f"{name} must be a finite number")
+    if eggnog_min_bitscore < 0:
+        raise ValueError("eggnog_min_bitscore must be nonnegative")
+    if eggnog_max_evalue < 0 or heuristic_e_value < 0:
+        raise ValueError("E-value cutoffs must be nonnegative")
+    if not 0 <= heuristic_bitscore_fraction <= 1:
+        raise ValueError("heuristic_bitscore_fraction must be within [0, 1]")
+
     active_tools = []
     all_evidence_records: list[dict] = []
     evidence_defs: dict[str, str] = {}  # KO-specific definitions harvested from KOfam
@@ -1559,7 +1718,11 @@ def integrate_annotations(
 
     # 1. Ingest KOfam: parse hits, select scores, and harvest KO definitions
     if kofam_tsv is not None:
-        kf_records = extract_kofam_records(kofam_tsv)
+        kf_records = extract_kofam_records(
+            kofam_tsv,
+            heuristic_bitscore_fraction=heuristic_bitscore_fraction,
+            heuristic_e_value=heuristic_e_value,
+        )
         all_evidence_records.extend(kf_records)
         for r in kf_records:
             if r.get("definition") and r["definition"] != "-":
@@ -1652,8 +1815,7 @@ def integrate_annotations(
 
         # eggNOG multi-KO disambiguation against other tools
         en_agreed = set(confident_kos.get("eggnog", set()))
-        en_raw_cands = {r["ko"] for r in tool_recs.get("eggnog", []) if r["original_status"] in ("threshold_passing", "below_threshold")}
-        en_agreed, en_dropped = disambiguate_eggnog(
+        en_agreed, en_dropped, narrowed_eggnog_groups, unresolved_eggnog_groups = disambiguate_eggnog(
             en_agreed=en_agreed,
             tool_recs=tool_recs,
             active_tools=active_tools,
@@ -1672,7 +1834,6 @@ def integrate_annotations(
             candidate_kos=candidate_kos,
             rescued_kos=rescued_kos,
             en_dropped=en_dropped,
-            en_raw_cands=en_raw_cands,
             conflict_strategy=conflict_strategy,
             priority_order=priority_order,
         )
@@ -1703,6 +1864,8 @@ def integrate_annotations(
             accepted_ko=accepted_ko,
             consensus_level=consensus_level,
             en_dropped=en_dropped,
+            narrowed_eggnog_groups=narrowed_eggnog_groups,
+            unresolved_eggnog_groups=unresolved_eggnog_groups,
         )
         adjudicated_records.extend(gene_adjudicated)
 

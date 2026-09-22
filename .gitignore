@@ -24,8 +24,10 @@ ENV/
 *.db
 kolach-db/
 test_output/
+tests/
 
 # Conversation logs
+session-*.md
 conversation-*.md
 
 # IDE & Editor files

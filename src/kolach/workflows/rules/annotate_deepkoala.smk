@@ -1,22 +1,30 @@
 import argparse
-from kolach.methods.deepkoala import annotate
+from kolach.methods.deepkoala import annotate as annotate_deepkoala
 
 rule annotate_deepkoala:
     input:
-        fasta=PROTEIN_FASTA
+        fasta=PROTEIN_FASTA,
+        models=[] if config.get("deepkoala_release", "latest") == "latest"
+               else f"{DEEPKOALA_DIR}/{config.get('deepkoala_release')}/manifest.json"
     output:
         tsv=f"{OUTDIR}/deepkoala_annotations.tsv"
     threads:
         int(config.get("threads", 1))
+    params:
+        deepkoala_model=config.get("deepkoala_model", "full"),
+        deepkoala_release=str(config.get("deepkoala_release", "latest")),
+        device=config.get("device", "auto"),
+        batch_size=int(config.get("batch_size", 64)),
+        detail=str(config.get("detail", True)).lower() in ("true", "1")
     run:
         args = argparse.Namespace(
             database_dir=config["database_dir"],
             protein_fasta=input.fasta,
             threads=threads,
-            deepkoala_model=config.get("deepkoala_model", "full"),
-            deepkoala_release=config.get("deepkoala_release", "latest"),
-            device=config.get("device", "auto"),
-            batch_size=int(config.get("batch_size", 64)),
-            detail=str(config.get("detail", True)).lower() in ("true", "1"),
+            deepkoala_model=params.deepkoala_model,
+            deepkoala_release=params.deepkoala_release,
+            device=params.device,
+            batch_size=params.batch_size,
+            detail=params.detail,
         )
-        annotate(args, output.tsv)
+        annotate_deepkoala(args, output.tsv)

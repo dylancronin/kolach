@@ -7,9 +7,25 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 
 REFERENCE = "https://github.com/eggnogdb/eggnog-mapper"
+
+
+def ensure_package_data_dir():
+    """Create eggnog-mapper's expected site-packages/data directory if missing.
+
+    eggnog-mapper v3 expects a 'data' directory next to its package; some installs
+    do not create it, which breaks downloads. Best effort — failures are ignored
+    because this is an upstream environment quirk unrelated to kolach's logic.
+    """
+    try:
+        data_dir = Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages" / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir
+    except OSError:
+        return None
 
 
 def annotate(args, output_file):
@@ -47,8 +63,19 @@ def annotate(args, output_file):
             "Please run 'kolach download --databases eggnog' first."
         )
 
+    mode = getattr(args, "eggnog_mode", "diamond")
+    if mode == "mmseqs" and not any(db_dir.glob("eggnog.db.mmseqs*")):
+        raise FileNotFoundError(
+            f"eggNOG MMseqs database not found in {db_dir}. The MMseqs search mode "
+            "requires the eggNOG MMseqs2 database files (eggnog.db.mmseqs*), which are "
+            "not part of the default DIAMOND download. Download the MMseqs database and "
+            "place it in the eggNOG database directory, or use --eggnog-mode diamond."
+        )
+
     output_path = Path(output_file).expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    ensure_package_data_dir()
 
     base_tmp_dir = getattr(args, "eggnog_temp_dir", None)
     if str(base_tmp_dir).lower() in ("none", ""):

@@ -1,5 +1,6 @@
 import argparse
 from importlib.metadata import PackageNotFoundError, version
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -17,8 +18,25 @@ def positive_float(value: str) -> float:
         val = float(value)
     except ValueError:
         raise argparse.ArgumentTypeError(f"Invalid float value: '{value}'")
-    if val <= 0:
+    if not math.isfinite(val) or val <= 0:
         raise argparse.ArgumentTypeError(f"Value must be positive (> 0), got {value}")
+    return val
+
+
+def nonnegative_float(value: str) -> float:
+    try:
+        val = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid float value: '{value}'")
+    if not math.isfinite(val) or val < 0:
+        raise argparse.ArgumentTypeError(f"Value must be finite and nonnegative, got {value}")
+    return val
+
+
+def fraction(value: str) -> float:
+    val = nonnegative_float(value)
+    if val > 1:
+        raise argparse.ArgumentTypeError(f"Value must be within [0, 1], got {value}")
     return val
 
 
@@ -135,6 +153,20 @@ def main():
     )
 
     annotate_parser.add_argument(
+        "--heuristic-bitscore-fraction",
+        type=fraction,
+        default=0.75,
+        help="Fraction of the KOfam profile threshold used to rescue below-threshold hits (default: 0.75).",
+    )
+
+    annotate_parser.add_argument(
+        "--heuristic-e-value",
+        type=nonnegative_float,
+        default=1e-5,
+        help="Maximum E-value for KOfam hit rescue consideration (default: 1e-5).",
+    )
+
+    annotate_parser.add_argument(
         "--deepkoala-model",
         choices=["full", "frag"],
         default="full",
@@ -206,14 +238,14 @@ def main():
 
     annotate_parser.add_argument(
         "--eggnog-min-bitscore",
-        type=float,
+        type=nonnegative_float,
         default=60.0,
         help="Minimum eggNOG bit score to retain KO assignment during integration (default: 60.0).",
     )
 
     annotate_parser.add_argument(
         "--eggnog-max-evalue",
-        type=float,
+        type=nonnegative_float,
         default=1e-5,
         help="Maximum eggNOG e-value to retain KO assignment during integration (default: 1e-5).",
     )
@@ -302,14 +334,14 @@ def main():
 
     integrate_parser.add_argument(
         "--eggnog-min-bitscore",
-        type=float,
+        type=nonnegative_float,
         default=60.0,
         help="Minimum eggNOG bit score for orthology retention (default: 60.0).",
     )
 
     integrate_parser.add_argument(
         "--eggnog-max-evalue",
-        type=float,
+        type=nonnegative_float,
         default=1e-5,
         help="Maximum eggNOG e-value for orthology retention (default: 1e-5).",
     )
@@ -319,6 +351,22 @@ def main():
         choices=["disambiguate", "none"],
         default="disambiguate",
         help="eggNOG multi-KO disambiguation strategy: disambiguate against other tools (default) or none.",
+    )
+
+    integrate_parser.add_argument(
+        "--heuristic-bitscore-fraction",
+        type=fraction,
+        default=0.75,
+        help="Fraction of the KOfam profile threshold used to rescue below-threshold hits, "
+        "reported in the evidence table (default: 0.75).",
+    )
+
+    integrate_parser.add_argument(
+        "--heuristic-e-value",
+        type=nonnegative_float,
+        default=1e-5,
+        help="Maximum E-value for KOfam hit rescue consideration, reported in the evidence "
+        "table (default: 1e-5).",
     )
 
     integrate_parser.add_argument(
@@ -377,13 +425,16 @@ def main():
 
     args = parser.parse_args()
 
+    if args.command == "integrate" and args.add_pathways and not args.database_dir:
+        parser.error("integrate --add-pathways requires --database-dir")
+
     if args.command == "download":
         snakefile_path = Path(__file__).parent / "workflows" / "download.smk"
         db_list_repr = f"[{','.join(repr(db) for db in args.databases)}]"
         config_args = [
             f"database_dir={args.database_dir}",
             f"databases={db_list_repr}",
-            f"deepkoala_release={args.deepkoala_release}",
+            f"deepkoala_release={str(args.deepkoala_release)}",
         ]
         cmd = [
             "snakemake",
@@ -406,8 +457,10 @@ def main():
             f"threads={args.threads}",
             f"skip_bitscore_heuristic={args.skip_bitscore_heuristic}",
             f"no_hmmer_prefiltering={args.no_hmmer_prefiltering}",
+            f"heuristic_bitscore_fraction={args.heuristic_bitscore_fraction}",
+            f"heuristic_e_value={args.heuristic_e_value}",
             f"deepkoala_model={args.deepkoala_model}",
-            f"deepkoala_release={args.deepkoala_release}",
+            f"deepkoala_release={str(args.deepkoala_release)}",
             f"device={args.device}",
             f"batch_size={args.batch_size}",
             f"detail={args.detail}",
@@ -451,6 +504,8 @@ def main():
             eggnog_max_evalue=args.eggnog_max_evalue,
             eggnog_filter_multi=args.eggnog_filter_multi,
             conflict_strategy=args.conflict_strategy,
+            heuristic_bitscore_fraction=args.heuristic_bitscore_fraction,
+            heuristic_e_value=args.heuristic_e_value,
         )
 
         if args.add_pathways:
@@ -475,4 +530,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

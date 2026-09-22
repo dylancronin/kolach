@@ -111,6 +111,9 @@ def parse_hits(path):
 
 def assign_hits(hits, profiles, *, fraction=0.75, evalue=1e-5, rescue=True):
     """Apply initial >= thresholds, then unique-KO rescue with strict > scores."""
+    fraction = float(fraction)
+    evalue = float(evalue)
+    rescue = str(rescue).lower() not in ("false", "0", "none", "")
     if not math.isfinite(fraction) or not 0 <= fraction <= 1:
         raise ValueError("Heuristic bit-score fraction must be between 0 and 1")
     if not math.isfinite(evalue) or evalue < 0:

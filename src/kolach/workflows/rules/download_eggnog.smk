@@ -1,18 +1,25 @@
-import sys
+import os
 from pathlib import Path
-
-# Create default site-packages data dir if missing (fixes eggnog-mapper v3 package bug)
-(Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages" / "data").mkdir(parents=True, exist_ok=True)
+import subprocess
+from kolach.methods.eggnog import ensure_package_data_dir
 
 rule download_eggnog:
     output:
         f"{EGGNOG_DIR}/.download_complete"
     params:
         data_dir=EGGNOG_DIR
-    shell:
-        """
-        mkdir -p {params.data_dir:q}
-        export EGGNOG_DATA_DIR={params.data_dir:q}
-        download_eggnog_data.py -y --release 3.0 --data_dir {params.data_dir:q} 
-        touch {output:q}
-        """
+    run:
+        # Create the site-packages/data dir at job runtime (not workflow parse time)
+        ensure_package_data_dir()
+        Path(params.data_dir).mkdir(parents=True, exist_ok=True)
+        os.environ["EGGNOG_DATA_DIR"] = params.data_dir
+        subprocess.run(
+            [
+                "download_eggnog_data.py",
+                "-y",
+                "--release", "3.0",
+                "--data_dir", params.data_dir,
+            ],
+            check=True,
+        )
+        Path(output[0]).touch()

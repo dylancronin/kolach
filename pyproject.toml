@@ -18,3 +18,6 @@ kolach = "kolach.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"kolach" = ["workflows/*.smk", "workflows/rules/*.smk"]
