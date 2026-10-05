@@ -1,5 +1,6 @@
 import argparse
 from importlib.metadata import PackageNotFoundError, version
+import json
 import math
 from pathlib import Path
 import subprocess
@@ -511,7 +512,10 @@ def main():
         for name in ("genome_id", "gene_genome_map", "markers", "cazy_product"):
             value = getattr(args, name)
             if value is not None:
-                config_args.append(f"{name}={value}")
+                # A singleton list preserves string IDs through both Snakemake's
+                # config parsing and its shell-spawned run jobs (e.g. '001').
+                # Plain quoted scalars lose their quotes in the child job.
+                config_args.append(f"{name}={json.dumps([value] if name == 'genome_id' else value)}")
         if args.eggnog_sensmode is not None:
             config_args.append(f"eggnog_sensmode={args.eggnog_sensmode}")
         if args.eggnog_temp_dir is not None:

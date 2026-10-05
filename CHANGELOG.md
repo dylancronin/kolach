@@ -25,6 +25,10 @@
 - Explicit Boolean parsing replaces identity-based tests.
 - Snakemake all is explicitly the default target to request final outputs.
 - Removed tests/ from .gitignore so regression tests are tracked normally.
+- Specialisation workflow parameters now trigger regeneration when genome
+  grouping changes; supplemental files are read through their resolved paths.
+- Numeric-looking genome IDs such as `001` survive Snakemake config parsing
+  and child-job execution without losing leading zeros.
 
 ### Compatibility and limits
 
@@ -38,7 +42,28 @@
   cannot reproduce calls depending on unavailable supplemental evidence.
 - GraftM/dbCAN execution, raw taxonomy interpretation and raw CAZy distillation
   are outside this change. Supply interpreted marker/verified CAZy results.
-- Initial fixtures execute unmodified legacy code with minimal adapters; a
-  verifier using actual upstream libraries is included. The build environment
-  lacks pandas/numpy and Snakemake, so the full old suite and live workflow need
-  validation in an installed Kolach environment.
+- Initial fixtures executed unmodified legacy code with minimal adapters;
+  independent verification with actual upstream libraries is now complete.
+
+### Final validation — 2026-10-05
+
+- Imported the verified bundle on `dev/metabolic-specialisation` and merged
+  the existing post-base `main` commit's comments and regression tests into
+  development. `main` remains at `db5a5ce`.
+- Full unittest discovery in the normal editable Kolach environment: 89 tests
+  passed (61 tracked tests plus 28 pre-existing local tests in the untracked
+  `tests/test_fixes.py`). Includes 28 specialisation tests and a real optional
+  Snakemake regression test for numeric IDs and genome-grouping reruns.
+- Pinned AnnoGuild checkout `291b2329`: all 1,485 captured pathway calls and
+  coverage/signature diagnostics independently verified with actual pandas,
+  numpy, networkx, click, graphviz and pytest imports, without source adapters.
+- Standalone full example legacy tables match expected outputs byte-for-byte;
+  small-rule default and relaxed-threshold examples and existing-product mode
+  also pass. Editable imports work without reinstalling.
+- Wheel build and extracted-wheel execution pass; the installed package includes
+  reaction/pathway definitions, manifest, GPL license and specialisation workflow.
+- Snakemake 9.26.1 dry run and controlled execution pass using captured KOfam
+  annotations, actual integration, marker/CAZy imports and all five reports.
+  Unchanged inputs are up to date; changed grouping schedules regeneration.
+  External annotation tools and live database downloads were not exercised.
+- Python compilation and Git whitespace checks pass.

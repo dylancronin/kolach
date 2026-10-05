@@ -324,7 +324,9 @@ kolach annotate \
 
 For a mixed FASTA replace `--genome-id` with `--gene-genome-map`. Optional markers
 and CAZy inputs work here too. Snakemake tracks those files, annotations, and
-rules. Its `all` rule is explicitly the default target.
+rules, along with genome grouping parameters. Changing the genome ID triggers
+regeneration; IDs such as `001` retain their leading zeros. Its `all` rule is
+explicitly the default target. Supplemental paths are resolved before execution.
 
 ## Corrections and validation
 
@@ -349,3 +351,22 @@ the build environment could not install pandas/numpy/networkx. Fixture provenanc
 records that limitation. `scripts/verify_annoguild_parity.py` independently verifies
 the snapshots with the real upstream libraries. The full existing suite requires
 the usual installed Kolach environment: `python -m unittest discover -s tests -v`.
+
+Final validation on 2026-10-05 verified all 1,485 snapshots against the pinned
+AnnoGuild checkout with actual dependencies. The full local suite passed 89 tests
+(61 tracked and 28 pre-existing local tests); wheel assets and extracted-wheel
+example execution also passed. No editable reinstall was needed.
+
+To reproduce the controlled offline workflow test:
+
+```bash
+python -m unittest tests.test_metabolism.TestSpecialisationWorkflow -v
+```
+
+It supplies one protein and a captured KOfam call (`g1`, `K10944`), imports the
+`pmoA` marker, and runs the real integration and specialisation jobs. It checks
+that genome `001` appears exactly in the product, an unchanged dry run has no
+work, and changing the genome to `002` reruns the reports and changes the output
+ID. Annotation tools and databases are unnecessary for this fixture test. The
+test skips when Snakemake is unavailable; the core feature tests remain
+standard-library-only.

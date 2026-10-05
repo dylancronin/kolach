@@ -18,6 +18,10 @@ Kolach's new evaluator during tests. To independently verify with real libraries
 python scripts/verify_annoguild_parity.py --annoguild-dir ../AnnoGuild
 ```
 
+On 2026-10-05 this command verified all 1,485 captured calls and diagnostics
+against a checkout at the exact source commit using actual upstream dependencies.
+The initial adapter-based capture limitation is therefore independently resolved.
+
 The old get_ko_percent diagnostic raises on an empty option list. Capture records
 zero for that diagnostic, consistent with its False Boolean coverage check.
 Comammox signature diagnostics expose the old sibling OR-node collision.

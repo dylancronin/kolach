@@ -1,11 +1,13 @@
 """Behavioral tests, including 1,485 pinned AnnoGuild pathway comparisons.
 
-This suite requires only Python's standard library. The existing integration and
-BRITE tests still use Kolach's normal pandas/numpy dependencies.
+Core feature tests require only Python's standard library. The optional workflow
+test uses installed Snakemake; existing integration and BRITE tests still use
+Kolach's normal pandas/numpy dependencies.
 """
 import ast
 import csv
 import io
+import importlib.util
 import json
 from pathlib import Path
 import subprocess
@@ -283,8 +285,60 @@ class TestInputsAndOutputs(unittest.TestCase):
             main()
         command = run.call_args.args[0]
         self.assertIn("add_specialisations=True", command)
-        self.assertIn("genome_id=MAG", command)
-        self.assertIn("markers=m.tsv", command)
+        self.assertIn('genome_id=["MAG"]', command)
+        self.assertIn('markers="m.tsv"', command)
+
+    def test_annotate_preserves_numeric_genome_id(self):
+        from kolach.cli import main
+        argv = ["kolach", "annotate", "--protein-fasta", "a.faa", "--database-dir", "db",
+                "--add-specialisations", "--genome-id", "001"]
+        with patch.object(sys, "argv", argv), patch("subprocess.run", return_value=SimpleNamespace(returncode=0)) as run:
+            main()
+        config_value = next(arg.split("=", 1)[1] for arg in run.call_args.args[0]
+                            if arg.startswith("genome_id="))
+        self.assertEqual(json.loads(config_value), ["001"])
+
+
+@unittest.skipUnless(importlib.util.find_spec("snakemake"), "Snakemake is not installed")
+class TestSpecialisationWorkflow(unittest.TestCase):
+    def test_numeric_ids_and_grouping_changes_in_real_workflow(self):
+        """Use captured annotations; exercise integration and report jobs offline."""
+        from kolach.cli import main
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            out = work / "out"
+            out.mkdir()
+            (work / "proteins.faa").write_text(">g1\nMAAAA\n")
+            (out / "kofam_annotations.tsv").write_text(
+                "gene_id\tko\tassignment\tbit_score\te_value\tthreshold\tscore_type\n"
+                "g1\tK10944\tthreshold\t150\t1e-20\t100\tfull\n")
+            (work / "markers.tsv").write_text("gene_id\tfeature\ng1\tpmoA\n")
+
+            def command(genome):
+                argv = ["kolach", "annotate", "--protein-fasta", str(work / "proteins.faa"),
+                        "--database-dir", str(work / "db"), "--output-dir", str(out),
+                        "--add-specialisations", "--genome-id", genome, "--markers", "markers.tsv"]
+                with patch.object(sys, "argv", argv), patch("subprocess.run", return_value=SimpleNamespace(returncode=0)) as run:
+                    main()
+                # Limit execution to existing annotation fixtures and downstream jobs.
+                return [sys.executable, "-m", "snakemake", *run.call_args.args[0][1:],
+                        "--directory", str(work), "--allowed-rules",
+                        "all", "integrate_annotations", "specialise_genomes"]
+
+            def execute(args):
+                result = subprocess.run(args, capture_output=True, text=True, timeout=90)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                return result.stdout + result.stderr
+
+            execute(command("001"))
+            product = out / "kolach_product_refined.tsv"
+            self.assertEqual(list(read_product(product)[1]), ["001"])
+            metadata = json.loads((out / "kolach_specialisation_metadata.json").read_text())
+            self.assertEqual(metadata["inputs"]["markers"]["path"], str(work / "markers.tsv"))
+            self.assertIn("Nothing to be done", execute(command("001") + ["--dry-run"]))
+            self.assertIn("Params have changed", execute(command("002") + ["--dry-run"]))
+            execute(command("002"))
+            self.assertEqual(list(read_product(product)[1]), ["002"])
 
 
 if __name__ == "__main__":
