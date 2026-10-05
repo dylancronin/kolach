@@ -5,6 +5,7 @@ PROTEIN_FASTA = str(Path(config["protein_fasta"]).expanduser().resolve())
 OUTDIR = str(Path(config["output_dir"]).expanduser().resolve())
 SELECTED_DBS = set(config.get("databases", ["kofam"]))
 ADD_PATHWAYS = str(config.get("add_pathways", "false")).lower() in ("true", "1", "yes")
+ADD_SPECIALISATIONS = str(config.get("add_specialisations", "false")).lower() in ("true", "1", "yes")
 
 targets = []
 
@@ -28,9 +29,13 @@ if targets:
     if ADD_PATHWAYS:
         include: "rules/pathway.smk"
     all_targets = targets + [f"{OUTDIR}/kolach_annotations.tsv", f"{OUTDIR}/kolach_evidence.tsv"]
+    if ADD_SPECIALISATIONS:
+        include: "rules/specialise.smk"
+        all_targets += [f"{OUTDIR}/{filename}" for filename in SPECIALISATION_FILES]
 else:
     all_targets = []
 
 rule all:
+    default_target: True
     input:
         all_targets

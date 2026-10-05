@@ -2,6 +2,13 @@
 
 Genome annotation targeting KEGG Orthologies (KOs).
 
+Genome-level metabolic specialisation is available with `kolach specialise` or
+`kolach annotate --add-specialisations`. It evaluates the original AnnoGuild
+EMERGE rules and writes compatible pathway/guild tables with the documented
+classifier bugs corrected. See the [step-by-step walkthrough](docs/specialisation.md),
+[example inputs and expected outputs](examples/specialisation), and
+[update history](CHANGELOG.md).
+
 `kolach` provides unified workflows to download databases and assign KO identifiers to protein sequences using three complementary methods:
 - **KOfam**: Profile HMM searches with bitscore thresholds and heuristic rescue.
 - **DeepKOALA**: Deep learning GRU models for complete or fragmented sequences.

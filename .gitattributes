@@ -1,0 +1,2 @@
+# TSVs require trailing tabs to preserve intentionally empty final columns.
+*.tsv whitespace=-blank-at-eol

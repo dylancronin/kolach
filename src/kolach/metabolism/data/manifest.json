@@ -1,0 +1,19 @@
+{
+  "rules_version": "annoguild-1.0.0",
+  "source_repository": "https://github.com/dylancronin/AnnoGuild",
+  "source_commit": "291b232907e6568597178e21384ff0f964993a82",
+  "source_files": [
+    "resources/custom_input_modules/EMERGE_pathways_module.tsv",
+    "resources/pathways_refined.tsv",
+    "scripts/calculate_specialisation.py"
+  ],
+  "reaction_count": 225,
+  "pathway_count": 55,
+  "scoring_policy": "AnnoGuild partial-reaction presence; conditional KO coverage; independent coverage maxima",
+  "classifier_fixes": [
+    "Separate K04480 and K14082",
+    "Recognize h2_dependent/h2_independent pathway names",
+    "Apply methanotrophy exclusion to both methanogenesis evidence routes",
+    "Rename ko_fdh to methanotrophy_marker without changing its evidence"
+  ]
+}
