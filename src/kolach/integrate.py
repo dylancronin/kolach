@@ -42,8 +42,8 @@ EVIDENCE_COLUMNS = [
 def _validate_gene_ids(values: pd.Series, path: Path, method: str) -> None:
     """Reject missing identifiers before pandas string conversion can create 'nan'."""
     invalid = values.isna() | values.astype("string").str.strip().eq("")
-    if invalid.any():
-        rows = ", ".join(str(i + 2) for i in values.index[invalid][:5])
+    if invalid.any(): #If any are invalid, report up to five row numbers and raise ValueError.
+        rows = ", ".join(str(i + 2) for i in values.index[invalid][:5]) #return tsv line #
         raise ValueError(f"{method} file '{path}' contains missing or blank gene IDs at row(s): {rows}")
 
 

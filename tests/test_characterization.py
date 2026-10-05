@@ -339,6 +339,48 @@ class TestCharacterization(unittest.TestCase):
         self.assertEqual(row["alternative_kos"], "K00001,K00002")
         self.assertEqual(row["consensus_level"], "unanimous")
 
+    def test_partial_multiko_agreement(self):
+        # One tool calls a multi-KO set {K1,K2}, another corroborates only K1 (2 tools):
+        # K1 is accepted, K2 is an unselected majority-ordained alternative.
+        kf = self._write_tsv("kf.tsv", "gene_id\tko\tassignment\tbit_score\te_value\tthreshold\tscore_type\ng1\tK00001\tthreshold\t150.0\t1e-20\t100.0\tfull\ng1\tK00002\tthreshold\t160.0\t1e-20\t100.0\tfull\n")
+        dk = self._write_tsv("dk.tsv", "gene_id\tpredict_label\tdeepkoala_score\tdeepkoala_threshold\tdeepkoala_annotate\ng1\tK00001\t0.95\t0.5\t*\n")
+
+        res = integrate_annotations(kofam_tsv=kf, deepkoala_tsv=dk)
+        row = res.iloc[0]
+        self.assertEqual(row["accepted_ko"], "K00001")
+        self.assertEqual(row["alternative_kos"], "K00002")
+        self.assertEqual(row["consensus_level"], "unanimous")
+
+    def test_tied_majority_two_kos(self):
+        # 3 tools, 2 KOs each backed by exactly 2 tools: no single winner. The gene is
+        # still 'majority' but accepted_ko is '-' and both KOs go to alternative_kos.
+        kf = self._write_tsv("kf.tsv", "gene_id\tko\tassignment\tbit_score\te_value\tthreshold\tscore_type\ng1\tK00001\tthreshold\t150.0\t1e-20\t100.0\tfull\ng1\tK00002\tthreshold\t160.0\t1e-20\t100.0\tfull\n")
+        dk = self._write_tsv("dk.tsv", "gene_id\tpredict_label\tdeepkoala_score\tdeepkoala_threshold\tdeepkoala_annotate\ng1\tK00002\t0.95\t0.5\t*\n")
+        en = self._write_tsv("en.tsv", "#query\tkegg_ko\tscore\tevalue\ng1\tK00001\t200.0\t1e-30\n")
+
+        res = integrate_annotations(kofam_tsv=kf, deepkoala_tsv=dk, eggnog_tsv=en)
+        row = res.iloc[0]
+        self.assertEqual(row["consensus_level"], "majority")
+        self.assertEqual(row["accepted_ko"], "-")
+        self.assertEqual(row["alternative_kos"], "K00001,K00002")
+        self.assertEqual(row["evidence"], "deepkoala,eggnog,kofam")
+
+    def test_rescued_unselected_label(self):
+        # A kofam rescue that loses to another tool's confident call is 'unselected' in
+        # cross_method_status while its original_status keeps the rescue provenance.
+        kf = self._write_tsv("kf.tsv", "gene_id\tko\tassignment\tbit_score\te_value\tthreshold\tscore_type\ng1\tK00002\trescued\t80.0\t1e-6\t100.0\tfull\n")
+        dk = self._write_tsv("dk.tsv", "gene_id\tpredict_label\tdeepkoala_score\tdeepkoala_threshold\tdeepkoala_annotate\ng1\tK00001\t0.95\t0.5\t*\n")
+
+        res = integrate_annotations(kofam_tsv=kf, deepkoala_tsv=dk)
+        row = res.iloc[0]
+        self.assertEqual(row["accepted_ko"], "K00001")
+        self.assertEqual(row["consensus_level"], "single_tool")
+
+        ev = res.attrs["evidence"]
+        k2 = ev[(ev["method"] == "kofam") & (ev["ko"] == "K00002")].iloc[0]
+        self.assertEqual(k2["original_status"], "heuristic_rescued")
+        self.assertEqual(k2["cross_method_status"], "unselected")
+
 
 if __name__ == "__main__":
     unittest.main()
