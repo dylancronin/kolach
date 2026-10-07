@@ -22,7 +22,7 @@ def main():
         rng = random.Random(723)
         sequences = {family: ''.join(rng.choices('ACDEFGHIKLMNPQRSTVWY', k=300)) for family in ('GH13', 'GH15')}
         fasta = root / 'proteins.faa'
-        fasta.write_text(''.join(f'>{family}\n{sequence}\n' for family, sequence in sequences.items()) + '>empty\n' + 'A' * 300 + '\n')
+        fasta.write_text(''.join(f'>{family}\n{sequence}\n' for family, sequence in sequences.items()) + '>empty\n' + ''.join(rng.choices('ACDEFGHIKLMNPQRSTVWY', k=300)) + '\n')
         reference = root / 'reference.faa'
         reference.write_text(''.join(f'>ref_{family}|{family}\n{sequence}\n' for family, sequence in sequences.items()))
         subprocess.run(['diamond', 'makedb', '--in', str(reference), '--db', str(db / 'CAZy')], check=True)
