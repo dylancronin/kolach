@@ -33,7 +33,7 @@ def main():
         (destination / name).write_bytes(data)
         manifest[name] = {'commit': commit(checkout), 'path': path,
                           'sha256': hashlib.sha256(data).hexdigest()}
-    (destination / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
+    (destination / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8', newline='\n')
 
 
 if __name__ == '__main__':

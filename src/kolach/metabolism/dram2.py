@@ -228,8 +228,8 @@ def evaluate(node, counts, rows=()):
 def annotation_features(row, ko_column='accepted_ko'):
     """Use accepted KOs and explicit supplementary IDs, never KO candidates.
 
-    Supplementary columns follow DRAM2's separators. Family+EC joins are made
-    on one gene (the upstream adapter explodes these columns on one gene too).
+    Supplementary columns follow DRAM2's separators. Family+EC features require
+    explicit correlated pairs from the annotation converter.
     """
     features = set()
     separators = {'dbcan_id': ';', 'dbcan_sub_id': ';', 'dbcan_sub_substrate': ';',

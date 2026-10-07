@@ -97,7 +97,7 @@ def main():
         print(f'{path.name}: {len(compiled.rules)} rules, {len(profiles)} profiles, {len(errors)} known upstream errors')
     if args.write_fixture:
         target = Path(__file__).resolve().parents[1] / 'tests/fixtures/dram2_parity.json'
-        target.write_text(json.dumps(fixture, indent=2) + '\n', encoding='utf-8')
+        target.write_text(json.dumps(fixture, indent=2) + '\n', encoding='utf-8', newline='\n')
     print(f'PASS: {comparisons:,} independent comparisons')
 
 
