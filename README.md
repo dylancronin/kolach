@@ -2,6 +2,9 @@
 
 Genome annotation targeting KEGG Orthologies (KOs).
 
+Current DRAM2 trait and product rules are available with `kolach specialise
+--ruleset dram2`. See [the usage and reproducible parity checks](docs/dram2.md).
+
 Genome-level metabolic specialisation is available with `kolach specialise` or
 `kolach annotate --add-specialisations`. It evaluates the original AnnoGuild
 EMERGE rules and writes compatible pathway/guild tables with the documented
