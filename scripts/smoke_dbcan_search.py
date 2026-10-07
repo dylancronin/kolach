@@ -45,9 +45,11 @@ def main():
         calls = read_overview(output / 'dbcan/overview.tsv')
         assert calls['GH13']['dbcan_tools'] == 3, calls
         assert calls['GH15']['dbcan_tools'] == 3, calls
-        assert not calls['empty']['dbcan_recommended'], calls
+        assert 'empty' not in calls, calls  # Upstream omits proteins with no hits.
         _, annotations = read_tsv(output / 'kolach_annotations.tsv')
         assert len(annotations) == 3 and all(row['accepted_ko'] == '-' for row in annotations)
+        empty = next(row for row in annotations if row['gene_id'] == 'empty')
+        assert empty['dbcan_id'] == '-' and empty['dbcan_recommended'] == 'False', empty
         _, product = read_tsv(output / 'kolach_cazy_product.tsv')
         assert product[0]['genome'] == '001' and product[0]['CAZy-Starch'] == 'True', product
         print('PASS: real HMM, subfamily HMM, DIAMOND, integration and metabolic distillation')
