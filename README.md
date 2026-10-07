@@ -2,6 +2,9 @@
 
 Genome annotation targeting KEGG Orthologies (KOs).
 
+Optional CAZyme annotation uses dbCAN 5.2.9 with pinned references:
+`--databases kofam dbcan`. See [CAZy annotation and metabolism](docs/dbcan.md).
+
 Genome-level metabolic specialisation is available with `kolach specialise` or
 `kolach annotate --add-specialisations`. It evaluates the original AnnoGuild
 EMERGE rules and writes compatible pathway/guild tables with the documented

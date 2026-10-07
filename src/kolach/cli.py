@@ -85,7 +85,7 @@ def main():
     download_parser.add_argument(
         "--databases",
         nargs="+",
-        choices=["eggnog", "kofam", "deepkoala"],
+        choices=["eggnog", "kofam", "deepkoala", "dbcan"],
         required=True,
         help="Databases to download.",
     )
@@ -122,7 +122,7 @@ def main():
     annotate_parser.add_argument(
         "--databases",
         nargs="+",
-        choices=["kofam", "eggnog", "deepkoala"],
+        choices=["kofam", "eggnog", "deepkoala", "dbcan"],
         default=["kofam"],
         help="Databases to use for annotation (default: kofam).",
     )
@@ -320,6 +320,7 @@ def main():
         default=None,
         help="Path to eggNOG annotations TSV.",
     )
+    integrate_parser.add_argument("--dbcan-overview", help="dbCAN 5.2.9 overview.tsv to attach as CAZy evidence.")
 
     integrate_parser.add_argument(
         "--output-file",
@@ -451,6 +452,20 @@ def main():
     specialise_parser.add_argument("--ko-threshold", type=fraction, default=0.6)
     specialise_parser.add_argument("--reactions-file", help="Custom reaction TSV (pathway, reaction_id, definition).")
     specialise_parser.add_argument("--pathways-file", help="Custom EMERGE refined pathway TSV.")
+    specialise_parser.add_argument("--dbcan-overview", help="Import dbCAN overview and calculate verified CAZy pathways.")
+
+    cazy_parser = subparsers.add_parser("cazy", help="Annotate/import CAZymes and produce metabolism inputs.")
+    cazy_parser.add_argument("--annotation-table", required=True)
+    cazy_parser.add_argument("--output-dir", required=True)
+    cazy_input = cazy_parser.add_mutually_exclusive_group(required=True)
+    cazy_input.add_argument("--protein-fasta", help="Run dbCAN 5.2.9 on these proteins.")
+    cazy_input.add_argument("--overview", help="Import an existing dbCAN 5 overview.tsv.")
+    cazy_parser.add_argument("--database-dir", help="Directory with the four dbCAN references.")
+    cazy_parser.add_argument("--threads", type=positive_int, default=1)
+    cazy_group = cazy_parser.add_mutually_exclusive_group()
+    cazy_group.add_argument("--genome-id")
+    cazy_group.add_argument("--genome-column")
+    cazy_group.add_argument("--gene-genome-map")
 
     args = parser.parse_args()
 
@@ -553,6 +568,10 @@ def main():
             heuristic_e_value=args.heuristic_e_value,
         )
 
+        if args.dbcan_overview:
+            from kolach.metabolism.dbcan import merge_overview
+            merge_overview(args.output_file, args.dbcan_overview, args.output_file)
+
         if args.add_pathways:
             from kolach.pathways import annotate_pathways
 
@@ -566,6 +585,16 @@ def main():
         from kolach.metabolism.specialise import specialise
 
         try:
+            if args.dbcan_overview:
+                if args.cazy_product or args.product:
+                    parser.error("--dbcan-overview cannot be combined with --cazy-product or --product")
+                from kolach.metabolism.dbcan import merge_overview, make_cazy_product
+                out = Path(args.output_dir)
+                out.mkdir(parents=True, exist_ok=True)
+                merged = merge_overview(args.annotation_table, args.dbcan_overview, out / 'kolach_cazy_annotations.tsv')
+                args.cazy_product = make_cazy_product(merged, out, genome_id=args.genome_id,
+                                                      genome_column=args.genome_column,
+                                                      gene_genome_map=args.gene_genome_map)
             paths = specialise(
                 args.annotation_table, args.output_dir,
                 genome_id=args.genome_id, genome_column=args.genome_column,
@@ -577,6 +606,21 @@ def main():
         except (ValueError, OSError, KeyError) as error:
             parser.error(str(error))
         print(f"[kolach] Wrote specialisations to {paths['specialisations']}")
+
+    elif args.command == "cazy":
+        from kolach.metabolism.dbcan import run_dbcan, merge_overview, make_cazy_product
+        if args.protein_fasta and not args.database_dir:
+            parser.error("cazy --protein-fasta requires --database-dir")
+        try:
+            out = Path(args.output_dir)
+            out.mkdir(parents=True, exist_ok=True)
+            overview = args.overview or run_dbcan(args.protein_fasta, args.database_dir, out / 'dbcan', args.threads)
+            merged = merge_overview(args.annotation_table, overview, out / 'kolach_cazy_annotations.tsv')
+            product = make_cazy_product(merged, out, genome_id=args.genome_id,
+                                       genome_column=args.genome_column, gene_genome_map=args.gene_genome_map)
+        except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as error:
+            parser.error(str(error))
+        print(f"[kolach] Wrote CAZy metabolism inputs to {product}")
 
     elif args.command == "pathway":
         from kolach.pathways import annotate_pathways

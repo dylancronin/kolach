@@ -7,6 +7,10 @@ SPECIALISATION_FILES = [
     "kolach_metabolic_pathways.tsv", "kolach_specialisation_assessment.tsv",
     "kolach_specialisation_metadata.json",
 ]
+if "dbcan" in SELECTED_DBS:
+    if config.get("cazy_product"):
+        raise ValueError("dbCAN annotation and an external cazy_product cannot both supply CAZy calls")
+    SPECIALISATION_FILES += ["kolach_cazy_product.tsv", "kolach_cazy_pathways.tsv", "kolach_cazy_metadata.json"]
 SPECIALISATION_INPUTS = {name: str(Path(config[name]).expanduser().resolve())
                          for name in ("gene_genome_map", "markers", "cazy_product")
                          if config.get(name)}
@@ -34,10 +38,15 @@ rule specialise_genomes:
         markers=SPECIALISATION_INPUTS.get("markers"),
         cazy_product=SPECIALISATION_INPUTS.get("cazy_product")
     run:
+        cazy_product = params.cazy_product
+        if "dbcan" in SELECTED_DBS:
+            from kolach.metabolism.dbcan import make_cazy_product
+            cazy_product = make_cazy_product(input.annotations, OUTDIR, genome_id=params.genome_id,
+                                             gene_genome_map=params.genome_map)
         specialise(
             input.annotations, OUTDIR,
             genome_id=params.genome_id,
             gene_genome_map=params.genome_map,
             markers=params.markers,
-            cazy_product=params.cazy_product,
+            cazy_product=cazy_product,
         )
