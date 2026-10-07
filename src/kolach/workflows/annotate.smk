@@ -37,6 +37,9 @@ if targets:
     if ADD_SPECIALISATIONS:
         include: "rules/specialise.smk"
         all_targets += [f"{OUTDIR}/{filename}" for filename in SPECIALISATION_FILES]
+        if "dbcan" in SELECTED_DBS:
+            include: "rules/cazy.smk"
+            all_targets += [f"{OUTDIR}/{filename}" for filename in CAZY_FILES]
 else:
     all_targets = []
 

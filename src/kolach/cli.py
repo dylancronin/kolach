@@ -434,6 +434,20 @@ def main():
         help="Column name containing KO identifiers to annotate (default: 'accepted_ko').",
     )
 
+    cazy_parser = subparsers.add_parser("cazy", help="Annotate/import CAZymes and produce metabolism inputs.")
+    cazy_parser.add_argument("--annotation-table", required=True)
+    cazy_parser.add_argument("--output-dir", required=True)
+    cazy_input = cazy_parser.add_mutually_exclusive_group(required=True)
+    cazy_input.add_argument("--protein-fasta", help="Run dbCAN 5.2.9 on these proteins.")
+    cazy_input.add_argument("--overview", help="Import an existing dbCAN 5 overview.tsv.")
+    cazy_parser.add_argument("--database-dir", help="Directory with the four dbCAN references.")
+    cazy_parser.add_argument("--threads", type=positive_int, default=1)
+    cazy_group = cazy_parser.add_mutually_exclusive_group()
+    cazy_group.add_argument("--genome-id")
+    cazy_group.add_argument("--genome-column")
+    cazy_group.add_argument("--gene-genome-map")
+
+
     # Specialisation uses the bundled EMERGE rules; it does not download databases.
     specialise_parser = subparsers.add_parser(
         "specialise", help="Evaluate genome-level metabolic pathways and AnnoGuild specialisations."
@@ -448,26 +462,17 @@ def main():
     specialise_parser.add_argument("--markers", help="Refined features: gene_id, feature, optional genome.")
     specialise_parser.add_argument("--product", help="Classify an existing refined Boolean product instead of evaluating pathways.")
     specialise_parser.add_argument("--cazy-product", help="Verified legacy CAZy Boolean calls; must include all assessed genomes.")
+    specialise_parser.add_argument("--dbcan-overview", help="Import dbCAN overview and calculate verified CAZy pathways.")
     specialise_parser.add_argument("--reaction-threshold", type=fraction, default=0.7)
     specialise_parser.add_argument("--ko-threshold", type=fraction, default=0.6)
     specialise_parser.add_argument("--reactions-file", help="Custom reaction TSV (pathway, reaction_id, definition).")
     specialise_parser.add_argument("--pathways-file", help="Custom EMERGE refined pathway TSV.")
-    specialise_parser.add_argument("--dbcan-overview", help="Import dbCAN overview and calculate verified CAZy pathways.")
 
-    cazy_parser = subparsers.add_parser("cazy", help="Annotate/import CAZymes and produce metabolism inputs.")
-    cazy_parser.add_argument("--annotation-table", required=True)
-    cazy_parser.add_argument("--output-dir", required=True)
-    cazy_input = cazy_parser.add_mutually_exclusive_group(required=True)
-    cazy_input.add_argument("--protein-fasta", help="Run dbCAN 5.2.9 on these proteins.")
-    cazy_input.add_argument("--overview", help="Import an existing dbCAN 5 overview.tsv.")
-    cazy_parser.add_argument("--database-dir", help="Directory with the four dbCAN references.")
-    cazy_parser.add_argument("--threads", type=positive_int, default=1)
-    cazy_group = cazy_parser.add_mutually_exclusive_group()
-    cazy_group.add_argument("--genome-id")
-    cazy_group.add_argument("--genome-column")
-    cazy_group.add_argument("--gene-genome-map")
 
     args = parser.parse_args()
+
+    if args.command == "specialise" and args.dbcan_overview and getattr(args, "ruleset", "annoguild") == "dram2":
+        parser.error("For DRAM2, first import with kolach cazy, then use its merged annotation table")
 
     if args.command == "integrate" and args.add_pathways and not args.database_dir:
         parser.error("integrate --add-pathways requires --database-dir")
