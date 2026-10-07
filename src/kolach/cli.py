@@ -284,6 +284,7 @@ def main():
     annotate_group.add_argument("--gene-genome-map", help="TSV mapping gene_id to genome for mixed inputs.")
     annotate_parser.add_argument("--markers", help="Optional gene-level refined marker TSV (gene_id, feature, optional genome).")
     annotate_parser.add_argument("--cazy-product", help="Optional legacy verified CAZy Boolean product matrix.")
+    annotate_parser.add_argument("--specialisation-ruleset", choices=["annoguild", "dram2"], default="annoguild")
 
     # ------------------------------------------------------
     # Integrate subcommand
@@ -451,6 +452,11 @@ def main():
     specialise_parser.add_argument("--ko-threshold", type=fraction, default=0.6)
     specialise_parser.add_argument("--reactions-file", help="Custom reaction TSV (pathway, reaction_id, definition).")
     specialise_parser.add_argument("--pathways-file", help="Custom EMERGE refined pathway TSV.")
+    specialise_parser.add_argument("--ruleset", choices=["annoguild", "dram2"], default="annoguild",
+                                   help="Rule semantics and outputs (default: annoguild).")
+    specialise_parser.add_argument("--dram2-system", choices=["default", "ag", "bgc", "eng_sys", "gut", "marine"], default="default")
+    specialise_parser.add_argument("--dram2-rules", help="Custom DRAM2 product rule TSV.")
+    specialise_parser.add_argument("--dram2-common", help="Custom DRAM2 shared alias TSV.")
 
     args = parser.parse_args()
 
@@ -458,6 +464,8 @@ def main():
         parser.error("integrate --add-pathways requires --database-dir")
 
     if args.command == "annotate":
+        if args.specialisation_ruleset == "dram2" and (not args.add_specialisations or args.markers or args.cazy_product):
+            parser.error("--specialisation-ruleset dram2 requires --add-specialisations and gene-level supplementary annotations")
         if args.add_specialisations and not (args.genome_id or args.gene_genome_map):
             parser.error("annotate --add-specialisations requires --genome-id or --gene-genome-map")
         if not args.add_specialisations and any((args.genome_id, args.gene_genome_map, args.markers, args.cazy_product)):
@@ -508,6 +516,7 @@ def main():
             f"conflict_strategy={args.conflict_strategy}",
             f"add_pathways={args.add_pathways}",
             f"add_specialisations={args.add_specialisations}",
+            f"specialisation_ruleset={args.specialisation_ruleset}",
         ]
         for name in ("genome_id", "gene_genome_map", "markers", "cazy_product"):
             value = getattr(args, name)
@@ -563,6 +572,22 @@ def main():
             )
 
     elif args.command == "specialise":
+        if args.ruleset == "dram2":
+            if any((args.markers, args.product, args.cazy_product, args.reactions_file, args.pathways_file)):
+                parser.error("DRAM2 requires gene-level supplementary evidence in the annotation table; legacy inputs cannot be combined")
+            from kolach.metabolism.dram2 import run_dram2
+            try:
+                path = run_dram2(args.annotation_table, args.output_dir,
+                                 genome_id=args.genome_id, genome_column=args.genome_column,
+                                 gene_genome_map=args.gene_genome_map, ko_column=args.ko_column,
+                                 rules_file=args.dram2_rules, common_file=args.dram2_common,
+                                 system=args.dram2_system)
+            except (ValueError, OSError, KeyError) as error:
+                parser.error(str(error))
+            print(f"[kolach] Wrote DRAM2 traits and product to {path}")
+            return
+        if args.dram2_rules or args.dram2_common or args.dram2_system != "default":
+            parser.error("DRAM2 options require --ruleset dram2")
         from kolach.metabolism.specialise import specialise
 
         try:

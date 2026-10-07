@@ -1,0 +1,52 @@
+{
+  "traits.tsv": {
+    "commit": "4536cd93c97c07d783fab9e9ef99e56b271f3782",
+    "path": "bin/assets/traits_rules.tsv",
+    "sha256": "2d811958c8fdb9512379d496834278d00c9d452fe1eaa8b1f9edeb3b3b9a4e0d"
+  },
+  "common.tsv": {
+    "commit": "b87133283d4d07924007902ae49cc8632f7ad908",
+    "path": "src/rules_common.tsv",
+    "sha256": "d1f4624e412d6cb723d821d10bcbef943ddad3746c58c64c6baf2e0674b8028b"
+  },
+  "LICENSE.GPL-3.0": {
+    "commit": "b87133283d4d07924007902ae49cc8632f7ad908",
+    "path": "LICENSE",
+    "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+  },
+  "LICENSE.dram-viz": {
+    "commit": "18ae54a6eaf7f0887cfbc34432a44ab592f27e5f",
+    "path": "LICENSE",
+    "sha256": "462fe21ec5a0ed1a3f137ee220ff8e721ca612208ba088906a477131be3b7654"
+  },
+  "ag_rules.tsv": {
+    "commit": "18ae54a6eaf7f0887cfbc34432a44ab592f27e5f",
+    "path": "dram_viz/data/ag_rules.tsv",
+    "sha256": "a6e59b48d108efb5973ccd261d896f6a6c7ea19398e686b2897b87c1d2580c1d"
+  },
+  "rules.tsv": {
+    "commit": "18ae54a6eaf7f0887cfbc34432a44ab592f27e5f",
+    "path": "dram_viz/data/rules.tsv",
+    "sha256": "2996af65ece486b1a4a5116ae8e52faa3ba2752c95d08ea1d9d60389d68e22d6"
+  },
+  "rules_bgc.tsv": {
+    "commit": "18ae54a6eaf7f0887cfbc34432a44ab592f27e5f",
+    "path": "dram_viz/data/rules_bgc.tsv",
+    "sha256": "aec42e9d4aa29c97ee9e2c557d23ed978dfe785cf0d9fc048efefde9a332bd8c"
+  },
+  "rules_eng_sys.tsv": {
+    "commit": "18ae54a6eaf7f0887cfbc34432a44ab592f27e5f",
+    "path": "dram_viz/data/rules_eng_sys.tsv",
+    "sha256": "4922ee2eecf23c7170dcb2a4479c25f0e54a4434740a54556603865ff17fdcff"
+  },
+  "rules_gut.tsv": {
+    "commit": "18ae54a6eaf7f0887cfbc34432a44ab592f27e5f",
+    "path": "dram_viz/data/rules_gut.tsv",
+    "sha256": "dc054f2e395c71d920797c00076525ab77a0355be4ced8681ee667cbc6decc2c"
+  },
+  "rules_marine.tsv": {
+    "commit": "18ae54a6eaf7f0887cfbc34432a44ab592f27e5f",
+    "path": "dram_viz/data/rules_marine.tsv",
+    "sha256": "cc2a16c2ed73c8db7f910da9c87aaea20d35d0ecf6d22c2e9e6cccc50ac0d8aa"
+  }
+}

@@ -21,4 +21,4 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "kolach" = ["workflows/*.smk", "workflows/rules/*.smk"]
-"kolach.metabolism" = ["data/*.tsv", "data/*.json", "data/LICENSE.GPL-3.0"]
+"kolach.metabolism" = ["data/*.tsv", "data/*.json", "data/LICENSE.GPL-3.0", "data/dram2/*"]
