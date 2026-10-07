@@ -9,6 +9,11 @@ ADD_SPECIALISATIONS = str(config.get("add_specialisations", "false")).lower() in
 
 targets = []
 
+if "dbcan" in SELECTED_DBS:
+    DBCAN_DIR = str(DB_DIR / "dbcan")
+    targets.append(f"{OUTDIR}/dbcan/overview.tsv")
+    include: "rules/annotate_dbcan.smk"
+
 if "kofam" in SELECTED_DBS:
     KOFAM_DIR = str(DB_DIR / "kofam")
     targets.append(f"{OUTDIR}/kofam_annotations.tsv")
@@ -32,6 +37,9 @@ if targets:
     if ADD_SPECIALISATIONS:
         include: "rules/specialise.smk"
         all_targets += [f"{OUTDIR}/{filename}" for filename in SPECIALISATION_FILES]
+        if "dbcan" in SELECTED_DBS:
+            include: "rules/cazy.smk"
+            all_targets += [f"{OUTDIR}/{filename}" for filename in CAZY_FILES]
 else:
     all_targets = []
 

@@ -33,6 +33,9 @@ conda activate kolach
 kolach download --database-dir /path/to/databases --databases kofam deepkoala eggnog
 ```
 
+Optional CAZyme annotation uses dbCAN 5.2.9 with pinned references:
+`--databases kofam dbcan`. See [CAZy annotation and metabolism](docs/dbcan.md).
+
 Optional download flags:
 - `--deepkoala-release`: Model release tag (`latest` or release tag like `202608`, default: `latest`).
 
@@ -105,7 +108,7 @@ flowchart TD
     %% 3 calls
     Count -->|"3 calls"| C3{"Agreement?"}
     C3 -->|"3 agree"| Unanimous["consensus_level: unanimous"]
-    C3 -->|"2 agree"| Majority["consensus_level: majority<br/>(3rd KO → alternative_kos)"]
+    C3 -->|"2 agree"| Majority["consensus_level: majority<br/>(3rd KO â†’ alternative_kos)"]
     C3 -->|"0 agree"| Conflict{"--conflict-strategy"}
 
     %% 2 calls

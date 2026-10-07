@@ -10,6 +10,11 @@ SPECIALISATION_FILES = [
 SPECIALISATION_INPUTS = {name: str(Path(config[name]).expanduser().resolve())
                          for name in ("gene_genome_map", "markers", "cazy_product")
                          if config.get(name)}
+
+if "dbcan" in SELECTED_DBS:
+    if "cazy_product" in SPECIALISATION_INPUTS:
+        raise ValueError("dbCAN annotation and an external cazy_product cannot both supply CAZy calls")
+    SPECIALISATION_INPUTS["cazy_product"] = f"{OUTDIR}/kolach_cazy_product.tsv"
 SPECIALISATION_RULES = list(DATA_DIR.glob("*.tsv")) + [DATA_DIR / "manifest.json"]
 GENOME_ID = config.get("genome_id")
 # The CLI wraps string IDs to survive Snakemake's child-job config coercion.

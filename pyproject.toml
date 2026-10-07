@@ -16,6 +16,9 @@ dependencies = [
 [project.scripts]
 kolach = "kolach.cli:main"
 
+[project.optional-dependencies]
+cazy = ["dbcan==5.2.9"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

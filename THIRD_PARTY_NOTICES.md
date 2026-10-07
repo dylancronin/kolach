@@ -1,3 +1,13 @@
+# CAZy reference definitions
+
+`src/kolach/metabolism/data/cazy_definitions.tsv` is an unchanged copy of
+`resources/DRAM_CAZy_definitions.tsv` from dylancronin/AnnoGuild commit
+`291b232907e6568597178e21384ff0f964993a82` (Git blob
+`508a9bb2e6502697739bef0e6225e36144953d49`). The existing bundled GPL-3.0
+license applies to these AnnoGuild assets. dbCAN is an optional external
+dependency, pinned to its released version 5.2.9; its annotation algorithms
+are not copied into Kolach.
+
 # AnnoGuild-derived metabolic rules and classification
 
 The feature adapts definitions and classification logic from

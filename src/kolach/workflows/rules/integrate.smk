@@ -7,7 +7,8 @@ rule integrate_annotations:
         tables=targets
     output:
         tsv=temp(f"{OUTDIR}/.kolach_annotations_raw.tsv") if ADD_PATHWAYS else f"{OUTDIR}/kolach_annotations.tsv",
-        evidence=f"{OUTDIR}/kolach_evidence.tsv"
+        evidence=f"{OUTDIR}/kolach_evidence.tsv",
+        dbcan_metadata=[f"{OUTDIR}/kolach_dbcan_import.json"] if "dbcan" in SELECTED_DBS else []
     params:
         database_dir=config.get("database_dir"),
         eggnog_min_bitscore=float(config.get("eggnog_min_bitscore", 60.0)),
@@ -36,3 +37,6 @@ rule integrate_annotations:
             heuristic_bitscore_fraction=params.heuristic_bitscore_fraction,
             heuristic_e_value=params.heuristic_e_value,
         )
+        if "dbcan" in SELECTED_DBS:
+            from kolach.metabolism.dbcan import merge_overview
+            merge_overview(output.tsv, f"{OUTDIR}/dbcan/overview.tsv", output.tsv)
