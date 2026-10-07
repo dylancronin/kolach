@@ -1,0 +1,25 @@
+name: DRAM2 metabolism
+on:
+  pull_request:
+  push:
+    branches: [metabolism/dram2-rules]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy pandas polars lark networkx
+      - run: PYTHONPATH=src python -m unittest discover -s tests
+      - name: Fetch pinned upstream sources
+        run: |
+          git clone --filter=blob:none https://github.com/BortonWrightonLabs/DRAM.git /tmp/dram
+          git -C /tmp/dram checkout 4536cd93c97c07d783fab9e9ef99e56b271f3782
+          git -C /tmp/dram submodule update --init bin/rule_parser
+          git clone --filter=blob:none https://github.com/BortonWrightonLabs/dram-viz.git /tmp/dram-viz
+          git -C /tmp/dram-viz checkout 18ae54a6eaf7f0887cfbc34432a44ab592f27e5f
+      - run: PYTHONPATH=src python scripts/verify_dram2_parity.py /tmp/dram --dram-viz /tmp/dram-viz

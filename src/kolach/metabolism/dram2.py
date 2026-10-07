@@ -251,9 +251,14 @@ def annotation_features(row, ko_column='accepted_ko'):
     features.update('EC:' + ec for ec in re.findall(r'([\d.\-]+)', row.get('cazy_subfam_ec') or ''))
     ecs = {part.split(':')[0] for part in (row.get('dbcan_sub_ec') or '').split(';') if part and part != '-'}
     features.update('EC:' + ec for ec in ecs)
-    families = (row.get('dbcan_id') or '').split(';')
-    features.update(family + ';' + ec for family in families for ec in (row.get('dbcan_sub_ec') or '').split(';')
-                    if family and family != '-' and ec and ec != '-')
+    # Family+EC substrate rules require correlated evidence. The dbCAN importer
+    # supplies selected-domain pairs; unrelated domains must not be cross-joined.
+    for pair in (row.get('dbcan_family_ec') or '').split('|'):
+        if pair in ('', '-'):
+            continue
+        if not re.fullmatch(r'(?:GH|GT|CBM|AA|CE|PL)\d+;EC:\d+\.(?:\d+|-)\.(?:\d+|-)\.(?:\d+|-)', pair):
+            raise ValueError(f'Invalid correlated CAZy family/EC feature: {pair!r}')
+        features.add(pair)
     return {feature.upper() for feature in features if feature and feature != '-'}
 
 

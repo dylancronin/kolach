@@ -86,4 +86,9 @@ Nextflow annotation run. Input feature conversion is a separate boundary.
 
 CAZy family-plus-EC rules depend on the upstream annotation encoding, so do not
 infer an EC-specific substrate merely from a CAZy family. Preserve gene/domain
-evidence and verify any external converter separately.
+evidence and verify any external converter separately. Kolach accepts explicit
+`dbcan_family_ec` pairs such as `GH13;EC:3.2.1.1|GH5;EC:3.2.1.4`. Its separate
+dbCAN integration produces these from selected subfamily domains. It does not
+cross-join every family with every EC on a multi-domain gene. This is a
+conservative input conversion difference from DRAM2's computed-column adapter;
+expression parity is tested after feature conversion.

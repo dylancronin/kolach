@@ -16,3 +16,11 @@ Kolach files retain their previous licensing status.
 The evaluator is rewritten around expressions rather than graphs. Reaction
 data have explicit IDs. Corrections and preserved assumptions are recorded
 in CHANGELOG.md and docs/specialisation.md.
+# DRAM2 assets
+
+The files under `src/kolach/metabolism/data/dram2` are unmodified upstream
+tables from DRAM2, Rule-Parser, and dram-viz. Exact source paths, commit hashes
+and SHA-256s appear in the adjacent `manifest.json`. Rule-Parser's GPL-3.0
+license and dram-viz's MIT license are included in that directory. The Kolach
+evaluator is independently implemented; see `docs/dram2.md` for compatibility
+choices and validation.

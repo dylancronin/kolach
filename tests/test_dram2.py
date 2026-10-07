@@ -53,6 +53,10 @@ class TestDram2(unittest.TestCase):
         features = annotation_features({'accepted_ko': 'K00001', 'alternative_kos': 'K00002',
                                         'kofam_id': 'K00003', 'dbcan_id': 'GH13;GH5'})
         self.assertEqual(features, {'K00001', 'GH13', 'GH5'})
+        features = annotation_features({'dbcan_id': 'GH13;GH5', 'dbcan_sub_ec': '3.2.1.1;3.2.1.4',
+                                        'dbcan_family_ec': 'GH13;EC:3.2.1.1|GH5;EC:3.2.1.4'})
+        self.assertIn('GH13;EC:3.2.1.1', features)
+        self.assertNotIn('GH13;EC:3.2.1.4', features)
 
     def test_cli_output_grouping_and_taxonomy_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
