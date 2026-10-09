@@ -24,7 +24,6 @@ ENV/
 *.db
 kolach-db/
 test_output/
-tests/
 
 # Conversation logs
 session-*.md
