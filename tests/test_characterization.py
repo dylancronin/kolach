@@ -365,9 +365,9 @@ class TestCharacterization(unittest.TestCase):
         self.assertEqual(row["alternative_kos"], "K00001,K00002")
         self.assertEqual(row["evidence"], "deepkoala,eggnog,kofam")
 
-    def test_rescued_unselected_label(self):
-        # A kofam rescue that loses to another tool's confident call is 'unselected' in
-        # cross_method_status while its original_status keeps the rescue provenance.
+    def test_rescued_alternative_preserves_provenance(self):
+        # A KOfam rescue that loses consensus remains an alternative with its
+        # heuristic rescue provenance in both evidence status fields.
         kf = self._write_tsv("kf.tsv", "gene_id\tko\tassignment\tbit_score\te_value\tthreshold\tscore_type\ng1\tK00002\trescued\t80.0\t1e-6\t100.0\tfull\n")
         dk = self._write_tsv("dk.tsv", "gene_id\tpredict_label\tdeepkoala_score\tdeepkoala_threshold\tdeepkoala_annotate\ng1\tK00001\t0.95\t0.5\t*\n")
 
@@ -379,7 +379,8 @@ class TestCharacterization(unittest.TestCase):
         ev = res.attrs["evidence"]
         k2 = ev[(ev["method"] == "kofam") & (ev["ko"] == "K00002")].iloc[0]
         self.assertEqual(k2["original_status"], "heuristic_rescued")
-        self.assertEqual(k2["cross_method_status"], "unselected")
+        self.assertEqual(row["alternative_kos"], "K00002")
+        self.assertEqual(k2["cross_method_status"], "heuristic_rescued")
 
 
 if __name__ == "__main__":

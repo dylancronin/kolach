@@ -85,7 +85,7 @@ kolach integrate \
 3. **Conflict Resolution (`--conflict-strategy`)**:
    - `multiple` *(default)*: Assigns `consensus_level = conflict`, sets `accepted_ko = '-'`, and records all conflicting KOs in `alternative_kos`.
    - `priority`: Assigns `consensus_level = conflict_priority`, selecting the top tool's KO (`kofam > eggnog > deepkoala`) for `accepted_ko` and moving unselected KOs to `alternative_kos`.
-4. **Strict Single-KO Policy**: Downstream pathway tools require single-KO calls. `accepted_ko` strictly contains exactly one KO (or `-` if unannotated, multi-KO, or conflicting). Confident minority/dropped calls and corroborated but unresolved candidates are retained in `alternative_kos`; uncorroborated sub-threshold candidates are not.
+4. **Strict Single-KO Policy**: Downstream pathway tools require single-KO calls. `accepted_ko` strictly contains exactly one KO (or `-` if unannotated, multi-KO, or conflicting). Confident minority/dropped calls and corroborated but unresolved candidates are retained in `alternative_kos`; all unselected heuristic-rescued KOfam assignments are also retained, even without cross-tool support. Other uncorroborated sub-threshold candidates are not.
 
 > **Tied majority**: When multiple KOs each have majority support but no single KO is agreed on by a dominant set of tools (e.g. kofam calls {K1, K2}, deepkoala calls {K2}, eggNOG calls {K1}, so K1 and K2 each have 2 of 3 votes), the gene is still classified `majority`, but `accepted_ko = '-'` and every tied KO is routed to `alternative_kos` under the strict single-KO policy.
 
@@ -145,7 +145,7 @@ flowchart TD
 | :--- | :--- |
 | `gene_id` | Protein identifier from FASTA (preserves input order). |
 | `accepted_ko` | Accepted single KEGG Orthology identifier (`-` when unannotated, conflicting, or multi-KO). |
-| `alternative_kos` | Unresolved confident calls, disambiguated eggNOG KOs, or corroborated candidate KOs. |
+| `alternative_kos` | Unresolved confident calls, disambiguated eggNOG KOs, corroborated candidate KOs, or unselected heuristic-rescued KOfam assignments. |
 | `definition` | Official KEGG functional definition for `accepted_ko`. |
 | `alternative_definition` | Functional definitions corresponding to `alternative_kos`. |
 | `consensus_level` | Classification status (`unanimous`, `majority`, `single_tool`, `conflict`, etc.). |
@@ -187,6 +187,6 @@ Long-form table with one row per gene $\times$ KO $\times$ method, preserving fu
 | `deepkoala_threshold` | DeepKOALA confidence threshold. |
 | `eggnog_shared_seed_hit` | Boolean indicating whether eggNOG alignment metrics are shared across multiple candidate KOs (`True` for multi-KO eggNOG rows, `False` otherwise). |
 | `original_status` | Pre-consensus status (`threshold_passing`, `heuristic_rescued`, `below_threshold`, `unknown`). |
-| `cross_method_status` | Per-hit outcome (`accepted`, `heuristic_rescued`, `rescued`, `disambiguated_retained`, `disambiguated_dropped`, `alternative`, `conflict`, `unresolved_multi_ko`, `below_threshold_unrescued`, `unselected`). `rescued` is a corroborated below-threshold KO retained as accepted or alternative; `unselected` covers threshold-passing or heuristic-rescued hits not selected in consensus. |
+| `cross_method_status` | Per-hit outcome (`accepted`, `heuristic_rescued`, `rescued`, `disambiguated_retained`, `disambiguated_dropped`, `alternative`, `conflict`, `unresolved_multi_ko`, `below_threshold_unrescued`, `unselected`). `rescued` is a corroborated below-threshold KO retained as accepted or alternative; `heuristic_rescued` also labels KOfam rescues retained as alternatives; `unselected` covers other hits not retained in consensus. |
 | `consensus_level` | Gene-level support pattern (`unanimous`, `majority`, `single_tool`, etc.); it does not by itself guarantee a unique `accepted_ko`. |
 | `supporting_methods` | Other methods corroborating this specific KO. |

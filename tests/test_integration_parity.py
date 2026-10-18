@@ -1,10 +1,11 @@
-"""Compare the refactor with upstream db5a5ce, including exhaustive call categories."""
+"""Compare the refactor with upstream db5a5ce, allowing only preservation of rescued KOfam alternatives."""
 import gzip
 import inspect
 import itertools
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -39,6 +40,21 @@ def records_for(tool, statuses, kos=KOS):
     return records
 
 
+# Keep the frozen implementation unchanged. Apply only the new policy to its
+# adjudication result, so all summary metrics and audit fields remain checked.
+_original_adjudicate = previous.adjudicate_gene
+
+
+def preserved_previous_decision(*args, **kwargs):
+    bound = inspect.signature(_original_adjudicate).bind(*args, **kwargs)
+    accepted, alternatives, level, evidence = _original_adjudicate(*args, **kwargs)
+    alternatives = set(alternatives)
+    if "kofam" in bound.arguments["active_tools"]:
+        alternatives.update(bound.arguments["rescued_kos"].get("kofam", set()))
+    alternatives.discard(accepted)
+    return accepted, alternatives, level, evidence
+
+
 def previous_decision(gene, filtering, strategy):
     # Build the oracle's indexes independently. Reusing the refactor's indexes
     # here would hide a categorization error in both expected and actual results.
@@ -61,7 +77,7 @@ def previous_decision(gene, filtering, strategy):
     )
     if retained:
         confident["eggnog"] = retained
-    decision = previous.adjudicate_gene(
+    decision = preserved_previous_decision(
         gene.active_tools, confident, candidates, rescued, dropped, strategy,
     )
     accepted, alternatives, level, evidence = decision
@@ -169,12 +185,40 @@ class ExhaustiveCategories(unittest.TestCase):
             assert_gene_parity(build_gene(records), filtering, strategy, "six KOs, four repeated groups")
 
 
+class RescuedKofamPreservation(unittest.TestCase):
+    def test_rescue_survives_each_consensus_path(self):
+        cases = [
+            ({"eggnog": {"K00002"}}, {}, {"K00001"}, "K00002"),
+            ({"eggnog": {"K00002", "K00003"}}, {}, {"K00001"}, "-"),
+            ({"eggnog": {"K00002"}, "deepkoala": {"K00002"}}, {}, {"K00001"}, "K00002"),
+            ({"eggnog": {"K00002"}, "deepkoala": {"K00003"}}, {}, {"K00001"}, "-"),
+            ({}, {"deepkoala": {"K00002"}}, {"K00001", "K00002"}, "K00002"),
+            ({"eggnog": {"K00001"}}, {}, {"K00001"}, "K00001"),
+        ]
+        for confident, candidates, rescued, expected in cases:
+            with self.subTest(confident=confident, rescued=rescued):
+                accepted, alternatives, _, _ = current.adjudicate_gene(
+                    list(TOOLS), confident, candidates, {"kofam": rescued}, set(),
+                )
+                self.assertEqual(accepted, expected)
+                self.assertEqual(alternatives & rescued, rescued - {accepted})
+                self.assertNotIn(accepted, alternatives)
+
+    def test_inactive_kofam_is_not_preserved(self):
+        result = current.adjudicate_gene(
+            ["eggnog"], {"eggnog": {"K00002"}}, {},
+            {"kofam": {"K00001"}}, set(),
+        )
+        self.assertEqual(result[1], set())
+
+
 class PipelineParity(unittest.TestCase):
     def compare(self, **kwargs):
         with tempfile.TemporaryDirectory() as directory:
             directory = Path(directory)
             old_path, new_path = directory / "old/summary.tsv", directory / "new/summary.tsv"
-            expected = previous.integrate_annotations(**kwargs, output_tsv=old_path)
+            with patch.object(previous, "adjudicate_gene", preserved_previous_decision):
+                expected = previous.integrate_annotations(**kwargs, output_tsv=old_path)
             actual = current.integrate_annotations(**kwargs, output_tsv=new_path)
             pd.testing.assert_frame_equal(actual, expected)
             pd.testing.assert_frame_equal(actual.attrs["evidence"], expected.attrs["evidence"])

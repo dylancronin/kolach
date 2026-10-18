@@ -562,6 +562,9 @@ def _set_decision(gene, selected, alternatives, level, evidence):
     """Only a unique selected KO is accepted; ambiguity stays in alternatives."""
     gene.accepted_ko = next(iter(selected)) if len(selected) == 1 else "-"
     gene.alternatives = set(alternatives)
+    # Rescue is a KOfam assignment, even when another tool wins consensus.
+    if "kofam" in gene.active_tools:
+        gene.alternatives.update(gene.rescued.get("kofam", set()))
     if gene.accepted_ko == "-":
         gene.alternatives.update(selected)
     else:

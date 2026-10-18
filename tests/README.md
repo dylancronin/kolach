@@ -35,7 +35,10 @@ It is test-only and is excluded from the installed package by the existing
 
 This is exhaustive coverage of the declared finite category model, not a claim
 to enumerate every arbitrary-size annotation table or every numeric input.
-The reference preserves the prior policy; explicit characterization assertions
+The frozen reference preserves the prior policy. The comparison harness adds only
+unselected heuristic-rescued KOfam KOs to its expected alternatives before
+comparing summaries and evidence; accepted calls and consensus decisions still
+match the original policy. Explicit characterization assertions
 and boundary fixtures also provide independent expected behavior.
 The reference side builds its own category indexes rather than borrowing
 indexes computed by the new implementation.
