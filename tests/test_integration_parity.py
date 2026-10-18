@@ -2,6 +2,7 @@
 import gzip
 import inspect
 import itertools
+from contextlib import nullcontext
 from pathlib import Path
 import tempfile
 import unittest
@@ -91,11 +92,11 @@ def previous_decision(gene, filtering, strategy):
 
 def assert_gene_parity(gene, filtering, strategy, case):
     expected, groups, expected_audit = previous_decision(gene, filtering, strategy)
-    current._disambiguate_gene(gene, filtering)
-    current._resolve_gene(gene, strategy)
+    gene.filter_eggnog_calls(filtering)
+    gene.choose_annotation(strategy)
     actual = gene.accepted_ko, gene.alternatives, gene.consensus_level, gene.evidence
     actual_groups = gene.eggnog_retained, gene.eggnog_dropped, gene.narrowed_groups, gene.unresolved_groups
-    actual_audit = current._build_audit(gene)
+    actual_audit = gene.evidence_rows()
     # Both versions reuse the same record metrics; compare every audit field.
     if actual != expected or actual_groups != groups or actual_audit != expected_audit:
         raise AssertionError(
@@ -108,7 +109,7 @@ def assert_gene_parity(gene, filtering, strategy, case):
 
 def build_gene(records, active=TOOLS):
     gene = current.GeneAnnotation("gene", records, list(active))
-    current._categorize_gene(gene)
+    gene.group_evidence()
     return gene
 
 
@@ -197,31 +198,35 @@ class RescuedKofamPreservation(unittest.TestCase):
         ]
         for confident, candidates, rescued, expected in cases:
             with self.subTest(confident=confident, rescued=rescued):
-                accepted, alternatives, _, _ = current.adjudicate_gene(
-                    list(TOOLS), confident, candidates, {"kofam": rescued}, set(),
-                )
+                gene = current.GeneAnnotation("gene", [], list(TOOLS),
+                                              confident=confident, candidates=candidates,
+                                              rescued={"kofam": rescued})
+                gene.choose_annotation()
+                accepted, alternatives = gene.accepted_ko, gene.alternatives
                 self.assertEqual(accepted, expected)
                 self.assertEqual(alternatives & rescued, rescued - {accepted})
                 self.assertNotIn(accepted, alternatives)
 
     def test_inactive_kofam_is_not_preserved(self):
-        result = current.adjudicate_gene(
-            ["eggnog"], {"eggnog": {"K00002"}}, {},
-            {"kofam": {"K00001"}}, set(),
-        )
-        self.assertEqual(result[1], set())
+        gene = current.GeneAnnotation("gene", [], ["eggnog"],
+                                      confident={"eggnog": {"K00002"}},
+                                      rescued={"kofam": {"K00001"}})
+        gene.choose_annotation()
+        self.assertEqual(gene.alternatives, set())
 
 
 class PipelineParity(unittest.TestCase):
-    def compare(self, **kwargs):
+    def compare(self, baseline=None, **kwargs):
+        baseline = previous if baseline is None else baseline
         with tempfile.TemporaryDirectory() as directory:
             directory = Path(directory)
             old_path, new_path = directory / "old/summary.tsv", directory / "new/summary.tsv"
-            with patch.object(previous, "adjudicate_gene", preserved_previous_decision):
-                expected = previous.integrate_annotations(**kwargs, output_tsv=old_path)
+            correction = patch.object(previous, "adjudicate_gene", preserved_previous_decision)
+            with correction if baseline is previous else nullcontext():
+                expected = baseline.integrate_annotations(**kwargs, output_tsv=old_path)
             actual = current.integrate_annotations(**kwargs, output_tsv=new_path)
-            pd.testing.assert_frame_equal(actual, expected)
-            pd.testing.assert_frame_equal(actual.attrs["evidence"], expected.attrs["evidence"])
+            pd.testing.assert_frame_equal(actual, expected, check_exact=True)
+            pd.testing.assert_frame_equal(actual.attrs["evidence"], expected.attrs["evidence"], check_exact=True)
             self.assertEqual(new_path.read_bytes(), old_path.read_bytes())
             self.assertEqual(
                 (new_path.parent / "kolach_evidence.tsv").read_bytes(),
@@ -237,11 +242,10 @@ class PipelineParity(unittest.TestCase):
                     kwargs = {tool + "_tsv": examples / (tool + "_annotations.tsv") for tool in active}
                     self.compare(**kwargs, eggnog_filter_multi=filtering, conflict_strategy=strategy)
 
-    def test_public_signatures(self):
-        for name, function in inspect.getmembers(previous, inspect.isfunction):
-            if not name.startswith("_"):
-                # NaN defaults do not compare equal, even for identical signatures.
-                self.assertEqual(str(inspect.signature(getattr(current, name))), str(inspect.signature(function)), name)
+    def test_pipeline_signature(self):
+        # Internal helpers now belong to GeneAnnotation; the CLI entry point is unchanged.
+        self.assertEqual(str(inspect.signature(current.integrate_annotations)),
+                         str(inspect.signature(previous.integrate_annotations)))
 
     def test_empty_and_fasta_ordering(self):
         self.compare()
@@ -299,6 +303,29 @@ class PipelineParity(unittest.TestCase):
                 )
                 self.assertIn("Master definition", result.iloc[0]["definition"])
 
+    def test_kofam_score_inference_and_duplicate_ranking(self):
+        with tempfile.TemporaryDirectory() as directory:
+            table = Path(directory) / "kofam.tsv"
+            rows = ["gene_id\tko\tscore_type\tassignment\tbit_score\te_value\tdomain_bit_score\tdomain_e_value\tthreshold"]
+            cases = itertools.product(
+                ("full", " domain ", "-", ""), ("threshold", "rescued", "below", "-"),
+                ("-1", "0", "80", "100", "inf", "-inf", "nan", "bad", "9007199254740993"),
+                ("0", "100", "inf", "bad"),
+            )
+            for index, (kind, assignment, score, threshold) in enumerate(cases):
+                rows.append(f"g{index}\tK00001\t{kind}\t{assignment}\t{score}\t0\t80\t1e-6\t{threshold}")
+                rows.append(f"g{index}\tK00001\tfull\t-\t90\t1e-5\t70\t0\t100")
+            table.write_text("\n".join(rows) + "\n")
+            self.compare(kofam_tsv=table)
+            # Homogeneous integer columns exercise comparisons without float coercion.
+            table.write_text(
+                "gene_id\tko\tscore_type\tbit_score\te_value\tthreshold\n"
+                "g1\tK00001\tfull\t9007199254740992\t0\t9007199254740993\n"
+                "g2\tK00001\tfull\t9007199254740993\t0\t9007199254740993\n"
+                "g3\tK00001\tfull\t18446744073709551615\t0\t18446744073709551615\n"
+            )
+            self.compare(kofam_tsv=table)
+
     def test_validation_parity(self):
         cases = [
             {"conflict_strategy": "bad"}, {"eggnog_filter_multi": "bad"},
@@ -331,3 +358,4 @@ class PipelineParity(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

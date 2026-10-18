@@ -31,7 +31,9 @@ It is test-only and is excluded from the installed package by the existing
 - Boundary cases cover duplicate ranking and ties, missing domain metrics,
   threshold equality, malformed and nonfinite values, zero E-values, gzip,
   metadata, empty inputs, duplicate FASTA headers, extra genes, definition
-  precedence, errors, and the existing public helper signatures.
+  precedence, errors, and the pipeline entry-point signature.
+- KOfam score inference and duplicate ranking cover 1,152 rows, including missing
+  and nonfinite metrics, full/domain profiles, explicit assignments, and large integers.
 
 This is exhaustive coverage of the declared finite category model, not a claim
 to enumerate every arbitrary-size annotation table or every numeric input.
@@ -52,9 +54,11 @@ The production pipeline constructs one `GeneAnnotation` at a time and runs:
 3. Resolve the consensus and alternatives.
 4. Emit the summary and evidence rows.
 
-The object is then released. It stores inputs and decisions, while plain
-functions implement the rules. Existing public helpers remain compatibility
-entry points; the main pipeline uses the gene object directly.
+The object owns these steps through `group_evidence`, `filter_eggnog_calls`,
+`choose_annotation`, `summary_row`, and `evidence_rows`. Annotation selection
+separates candidates, a single confident tool, agreement, and conflicts. Early
+returns make the rule order explicit. The old gene-level module helpers have
+been removed rather than retained as compatibility wrappers.
 
 ## Benchmark
 
@@ -66,15 +70,24 @@ time and process peak resident memory (working set on Windows), including
 interpreter/import memory. Measurements are informational, not fragile timing
 assertions in the test suite.
 
-Measured on Windows with Python 3.12.14, pandas 3.0.1 and NumPy 2.3.5,
-using three fresh processes per version and dataset:
+To compare against the main version used for this refactor, save its source
+outside the checkout and supply `--baseline`:
 
-| Dataset | Old time | New time | Old peak memory | New peak memory |
+    git show 9d0573a:src/kolach/integrate.py > ../baseline_main.py
+    PYTHONPATH=src python tests/benchmark_integration.py --baseline ../baseline_main.py --genes 20000 --repeats 3
+
+The supplied module is used for both the exact output comparison and the timing.
+
+Compared against main at `9d0573a` on Windows with Python 3.12.14, pandas 3.0.1
+and NumPy 2.3.5, using three fresh processes per version and dataset:
+
+| Dataset | Main time | New time | Main peak memory | New peak memory |
 | --- | ---: | ---: | ---: | ---: |
-| Examples (3,095 genes) | 0.729 s | 0.752 s | 107.60 MiB | 108.01 MiB |
-| Synthetic (20,000 genes) | 6.558 s | 6.880 s | 241.04 MiB | 243.65 MiB |
+| Examples (3,095 genes) | 1.042 s | 1.010 s | 84.57 MiB | 84.56 MiB |
+| Synthetic (20,000 genes) | 9.202 s | 9.075 s | 221.04 MiB | 221.00 MiB |
 
-These measurements show approximately 3% and 5% longer runtimes and approximately
-0.4% and 1.1% higher peak memory. They are specific to these fixtures and machine,
-not performance guarantees. The initial larger slowdown was traced to an extra
-pandas Series scan in KOfam parsing and removed by iterating its columns directly.
+Median runtimes were approximately 3% and 1% lower, with essentially unchanged
+peak memory. These small differences are specific to these fixtures and machine,
+not performance guarantees. KOfam score classification uses pandas masks, with
+object comparisons to preserve Python's treatment of integer thresholds above 2**53.
+

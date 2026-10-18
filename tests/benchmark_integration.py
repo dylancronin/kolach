@@ -7,6 +7,7 @@ also verifies full DataFrame and TSV parity for that fixture before measuring.
 """
 import argparse
 import ctypes
+import importlib.util
 import json
 from pathlib import Path
 import statistics
@@ -68,10 +69,20 @@ def fixture(directory, genes):
     return paths
 
 
-def worker(version, directory):
+def integration_module(version, baseline):
     from kolach import integrate
     from tests.reference import integrate_db5a5ce
-    module = integrate if version == "new" else integrate_db5a5ce
+    if baseline is None:
+        return integrate if version == "new" else integrate_db5a5ce
+    spec = importlib.util.spec_from_file_location("baseline", baseline)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return integrate if version == "new" else module
+
+
+def worker(version, directory, baseline):
+    module = integration_module(version, baseline)
     paths = {tool + "_tsv": directory / (tool + "_annotations.tsv") for tool in ("kofam", "deepkoala", "eggnog")}
     start = time.perf_counter()
     result = module.integrate_annotations(**paths)
@@ -85,9 +96,10 @@ def main():
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--worker", choices=("old", "new"))
     parser.add_argument("--directory", type=Path)
+    parser.add_argument("--baseline", type=Path, help="Baseline integration module (defaults to the frozen reference)")
     args = parser.parse_args()
     if args.worker:
-        worker(args.worker, args.directory)
+        worker(args.worker, args.directory, args.baseline)
         return
     if args.genes < 1 or args.repeats < 1:
         parser.error("--genes and --repeats must be positive")
@@ -98,7 +110,8 @@ def main():
     with tempfile.TemporaryDirectory() as directory:
         directory = Path(directory)
         paths = fixture(directory, args.genes)
-        PipelineParity().compare(**{tool + "_tsv": path for tool, path in paths.items()})
+        PipelineParity().compare(baseline=integration_module("old", args.baseline),
+                                 **{tool + "_tsv": path for tool, path in paths.items()})
         datasets = [("examples", ROOT / "examples"), ("synthetic", directory)]
         for label, dataset in datasets:
             samples = {"old": [], "new": []}
@@ -107,6 +120,8 @@ def main():
                 order = ("old", "new") if repeat % 2 == 0 else ("new", "old")
                 for version in order:
                     command = [sys.executable, __file__, "--worker", version, "--directory", str(dataset)]
+                    if args.baseline:
+                        command.extend(["--baseline", str(args.baseline.resolve())])
                     completed = subprocess.run(command, capture_output=True, text=True, check=True)
                     samples[version].append(json.loads(completed.stdout))
             report[label] = {
@@ -122,3 +137,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
