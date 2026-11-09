@@ -84,7 +84,7 @@ def main():
     download_parser.add_argument(
         "--databases",
         nargs="+",
-        choices=["eggnog", "kofam", "deepkoala"],
+        choices=["eggnog", "kofam", "deepkoala", "dbcan"],
         required=True,
         help="Databases to download.",
     )
@@ -121,7 +121,7 @@ def main():
     annotate_parser.add_argument(
         "--databases",
         nargs="+",
-        choices=["kofam", "eggnog", "deepkoala"],
+        choices=["kofam", "eggnog", "deepkoala", "dbcan"],
         default=["kofam"],
         help="Databases to use for annotation (default: kofam).",
     )
@@ -312,6 +312,11 @@ def main():
     )
 
     integrate_parser.add_argument(
+        "--dbcan-table", default=None,
+        help="Normalized dbcan_annotations.tsv (supplementary evidence, not a KO voter).",
+    )
+
+    integrate_parser.add_argument(
         "--output-file",
         type=str,
         required=True,
@@ -497,6 +502,7 @@ def main():
             kofam_tsv=args.kofam_table,
             deepkoala_tsv=args.deepkoala_table,
             eggnog_tsv=args.eggnog_table,
+            dbcan_tsv=args.dbcan_table,
             output_tsv=args.output_file,
             evidence_tsv=args.evidence_file,
             database_dir=args.database_dir,

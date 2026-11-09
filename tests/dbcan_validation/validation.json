@@ -1,0 +1,105 @@
+{
+  "reference_commit": "4536cd93c97c07d783fab9e9ef99e56b271f3782",
+  "native": {
+    "hmm": {
+      "kolach_rows": 106,
+      "dram2_rows": 106,
+      "missing": 0,
+      "additional": 0
+    },
+    "dbCANsub": {
+      "kolach_rows": 108,
+      "dram2_rows": 108,
+      "missing": 0,
+      "additional": 0
+    },
+    "diamond": {
+      "kolach_rows": 146,
+      "dram2_rows": 146,
+      "missing": 0,
+      "additional": 0
+    }
+  },
+  "upstream_overview_equal": true,
+  "gene_inventory": 3096,
+  "genes_with_hits": 169,
+  "genes_with_recommendations": 96,
+  "additional_summary_values_vs_dram2": 18,
+  "ko_columns_and_evidence_unchanged": true,
+  "retained_anvio_pairs": 1577,
+  "versions_and_database": {
+    "tool_version": "5.2.9",
+    "command": [
+      "run_dbcan",
+      "CAZyme_annotation",
+      "--mode",
+      "protein",
+      "--input_raw_data",
+      "/fs/scratch/PDS0325/Cronin/kolach/tests/dbcan_validation/kolach_output/dbcan-run-s_qex8lj/input.faa",
+      "--db_dir",
+      "/fs/scratch/PDS0325/Cronin/kolach/tests/dbcan_validation/db/dbcan",
+      "--output_dir",
+      "/fs/scratch/PDS0325/Cronin/kolach/tests/dbcan_validation/kolach_output/dbcan-run-s_qex8lj",
+      "--threads",
+      "4",
+      "--methods",
+      "diamond,hmm,dbCANsub"
+    ],
+    "threads": 4,
+    "diamond_version": "diamond version 2.2.6",
+    "policy": "all upstream passing hits; recommendations retained separately; no KO voting",
+    "thresholds": {
+      "diamond_evalue": 1e-102,
+      "hmm_evalue": 1e-15,
+      "subfamily_evalue": 1e-15,
+      "hmm_coverage": 0.35,
+      "subfamily_coverage": 0.35
+    },
+    "protein_fasta": {
+      "path": "/fs/scratch/PDS0325/Cronin/kolach/tests/anvio_validation/proteins.faa",
+      "sha256": "fdd7e441e6f0d870f8da7df00c1c26a03a5480f25a042d3ad8ca5d65ca47529d"
+    },
+    "database": {
+      "CAZy.dmnd": {
+        "path": "/fs/scratch/PDS0325/Cronin/kolach/tests/dbcan_validation/db/dbcan/CAZy.dmnd",
+        "sha256": "aed31a864ee6fed9a5550eb34750b51f379cf151013f50a9cccd5bf2499b4662"
+      },
+      "dbCAN.hmm": {
+        "path": "/fs/scratch/PDS0325/Cronin/kolach/tests/dbcan_validation/db/dbcan/dbCAN.hmm",
+        "sha256": "396c791fb13defab152864d8046687ef03b492937ec6f9bbab008bc77cbaa7a5"
+      },
+      "dbCAN-sub.hmm": {
+        "path": "/fs/scratch/PDS0325/Cronin/kolach/tests/dbcan_validation/db/dbcan/dbCAN-sub.hmm",
+        "sha256": "8e58b944108272142b57c0c260f996220b4f11c8ef290896a46d67dba6ab5136"
+      },
+      "fam-substrate-mapping.tsv": {
+        "path": "/fs/scratch/PDS0325/Cronin/kolach/tests/dbcan_validation/db/dbcan/fam-substrate-mapping.tsv",
+        "sha256": "6d31a84cac27dec72a3d0f209b81291336bccb8572abc5acb995d71f54df03dc"
+      }
+    },
+    "native_directory": "/fs/scratch/PDS0325/Cronin/kolach/tests/dbcan_validation/kolach_output/dbcan",
+    "search_id_map": "/fs/scratch/PDS0325/Cronin/kolach/tests/dbcan_validation/kolach_output/dbcan/gene_ids.tsv"
+  },
+  "reference_sources": {
+    "commit": "4536cd93c97c07d783fab9e9ef99e56b271f3782",
+    "files": {
+      "modules/nf-core/rundbcan/cazymeannotation/main.nf": {
+        "url": "https://raw.githubusercontent.com/BortonWrightonLabs/DRAM/4536cd93c97c07d783fab9e9ef99e56b271f3782/modules/nf-core/rundbcan/cazymeannotation/main.nf",
+        "sha256": "69c806dab4607d892ea99033f5b3bb14842f2a3b9755a125c77ecd51c737f51b"
+      },
+      "modules/nf-core/rundbcan/cazymeannotation/environment.yml": {
+        "url": "https://raw.githubusercontent.com/BortonWrightonLabs/DRAM/4536cd93c97c07d783fab9e9ef99e56b271f3782/modules/nf-core/rundbcan/cazymeannotation/environment.yml",
+        "sha256": "7bfdb0099c562af6cac62c29d6e36017b17f9a8af79fabd2630e28d4629b0f90"
+      },
+      "bin/combine_annotations.py": {
+        "url": "https://raw.githubusercontent.com/BortonWrightonLabs/DRAM/4536cd93c97c07d783fab9e9ef99e56b271f3782/bin/combine_annotations.py",
+        "sha256": "af5ab8cab549cd6e51ace765b3afeeb1cbf8c4fabb1fcb6516bca0e06ece0ecf"
+      },
+      "bin/utils/logger.py": {
+        "url": "https://raw.githubusercontent.com/BortonWrightonLabs/DRAM/4536cd93c97c07d783fab9e9ef99e56b271f3782/bin/utils/logger.py",
+        "sha256": "2679ed44f4de8eab52bf0960830142c6edc48e8c7f9d738e6f4baf97bbab8955"
+      }
+    }
+  },
+  "protein_fasta_sha256": "fdd7e441e6f0d870f8da7df00c1c26a03a5480f25a042d3ad8ca5d65ca47529d"
+}

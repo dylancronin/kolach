@@ -241,7 +241,16 @@ class PipelineParity(unittest.TestCase):
         for name, function in inspect.getmembers(previous, inspect.isfunction):
             if not name.startswith("_"):
                 # NaN defaults do not compare equal, even for identical signatures.
-                self.assertEqual(str(inspect.signature(getattr(current, name))), str(inspect.signature(function)), name)
+                actual = inspect.signature(getattr(current, name))
+                if name == "integrate_annotations":
+                    # The only intentional API extension is an optional trailing
+                    # supplementary table; every original parameter stays intact.
+                    parameters = list(actual.parameters.values())
+                    self.assertEqual(parameters[-1].name, "dbcan_tsv")
+                    self.assertIsNone(parameters[-1].default)
+                    self.assertEqual(parameters[-1].kind, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+                    actual = actual.replace(parameters=parameters[:-1])
+                self.assertEqual(str(actual), str(inspect.signature(function)), name)
 
     def test_empty_and_fasta_ordering(self):
         self.compare()

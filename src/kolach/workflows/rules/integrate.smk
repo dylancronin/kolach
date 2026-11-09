@@ -26,6 +26,7 @@ rule integrate_annotations:
             kofam_tsv=kofam_file,
             deepkoala_tsv=deepkoala_file,
             eggnog_tsv=eggnog_file,
+            dbcan_tsv=f"{OUTDIR}/dbcan_annotations.tsv" if "dbcan" in SELECTED_DBS else None,
             output_tsv=output.tsv,
             evidence_tsv=output.evidence,
             database_dir=params.database_dir,

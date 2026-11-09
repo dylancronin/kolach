@@ -7,6 +7,13 @@ SELECTED_DBS = set(config.get("databases", ["kofam"]))
 ADD_PATHWAYS = str(config.get("add_pathways", "false")).lower() in ("true", "1", "yes")
 
 targets = []
+supplementary_targets = []
+
+if "dbcan" in SELECTED_DBS:
+    DBCAN_DIR = str(DB_DIR / "dbcan")
+    targets.append(f"{OUTDIR}/dbcan_annotations.tsv")
+    include: "rules/annotate_dbcan.smk"
+    supplementary_targets.extend(path for path in rules.annotate_dbcan.output if path not in targets)
 
 if "kofam" in SELECTED_DBS:
     KOFAM_DIR = str(DB_DIR / "kofam")
@@ -27,10 +34,11 @@ if targets:
     include: "rules/integrate.smk"
     if ADD_PATHWAYS:
         include: "rules/pathway.smk"
-    all_targets = targets + [f"{OUTDIR}/kolach_annotations.tsv", f"{OUTDIR}/kolach_evidence.tsv"]
+    all_targets = targets + supplementary_targets + [f"{OUTDIR}/kolach_annotations.tsv", f"{OUTDIR}/kolach_evidence.tsv"]
 else:
     all_targets = []
 
 rule all:
+    default_target: True
     input:
         all_targets

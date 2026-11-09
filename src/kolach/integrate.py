@@ -838,6 +838,7 @@ def integrate_annotations(
     eggnog_min_bitscore: float = 60.0, eggnog_max_evalue: float = 1e-5,
     eggnog_filter_multi: str = "disambiguate", conflict_strategy: str = "multiple",
     heuristic_bitscore_fraction: float = 0.75, heuristic_e_value: float = 1e-5,
+    dbcan_tsv: Optional[Union[str, Path]] = None,
 ) -> pd.DataFrame:
     """Return the gene summary and its audit DataFrame in attrs["evidence"]."""
     if conflict_strategy not in {"multiple", "priority"}:
@@ -890,6 +891,19 @@ def integrate_annotations(
             records_by_gene[gid] = []
             gene_ids.append(gid)
         records_by_gene[gid].append(record)
+    dbcan_rows = None
+    if dbcan_tsv is not None:
+        from kolach.methods.dbcan import read_summary
+
+        dbcan_rows = read_summary(dbcan_tsv)
+        inventory = set(read_fasta_ids(protein_fasta)) if protein_fasta is not None else None
+        for row in dbcan_rows:
+            gid = row["gene_id"]
+            if inventory is not None and gid not in inventory:
+                raise ValueError(f"dbCAN gene ID {gid!r} is absent from the protein FASTA")
+            if gid not in records_by_gene:
+                records_by_gene[gid] = []
+                gene_ids.append(gid)
     ko_list = None
     if database_dir:
         directory = Path(database_dir).expanduser().resolve()
@@ -918,6 +932,13 @@ def integrate_annotations(
         "eggnog_ko", "eggnog_candidate_ko", "eggnog_bit_score", "eggnog_evalue",
     ]
     result = pd.DataFrame(summaries, columns=columns)
+    if dbcan_rows is not None:
+        from kolach.methods.dbcan import SUMMARY_COLUMNS
+
+        lookup = {row["gene_id"]: row for row in dbcan_rows}
+        for column in SUMMARY_COLUMNS:
+            default = "0" if column == "dbcan_tools_count" else "-"
+            result[column] = [lookup.get(gid, {}).get(column, default) for gid in gene_ids]
     result.attrs["evidence"] = evidence_df
     export_tables(result, evidence_df, output_tsv, evidence_tsv)
     return result

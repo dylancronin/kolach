@@ -5,6 +5,13 @@ SELECTED_DBS = set(config.get("databases", []))
 
 targets = []
 
+if "dbcan" in SELECTED_DBS:
+    DBCAN_DIR = str(DB_DIR / "dbcan")
+    from kolach.methods.dbcan import ASSETS
+    targets.extend([f"{DBCAN_DIR}/.download_complete", f"{DBCAN_DIR}/manifest.json"])
+    targets.extend(f"{DBCAN_DIR}/{name}" for name in ASSETS)
+    include: "rules/download_dbcan.smk"
+
 if "eggnog" in SELECTED_DBS:
     EGGNOG_DIR = str(DB_DIR / "eggnog")
     targets.append(f"{EGGNOG_DIR}/.download_complete")
@@ -21,5 +28,6 @@ if "deepkoala" in SELECTED_DBS:
     include: "rules/download_deepkoala.smk"
 
 rule all:
+    default_target: True
     input:
         targets

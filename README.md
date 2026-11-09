@@ -2,6 +2,11 @@
 
 Genome annotation targeting KEGG Orthologies (KOs).
 
+Optional CAZyme annotation is available with `--databases dbcan` for both
+`download` and `annotate`. It runs dbCAN family/subfamily HMM searches and CAZy
+DIAMOND searches, appends supplementary columns to the gene table, and retains
+domain-level evidence separately. See [dbCAN usage and validation](docs/dbcan.md).
+
 `kolach` provides unified workflows to download databases and assign KO identifiers to protein sequences using three complementary methods:
 - **KOfam**: Profile HMM searches with bitscore thresholds and heuristic rescue.
 - **DeepKOALA**: Deep learning GRU models for complete or fragmented sequences.
