@@ -1,5 +1,5 @@
-from pathlib import Path
-from kolach.methods.deepkoala import download_deepkoala
+# DEEPKOALA_RELEASE is already resolved against GenomeNet in download.smk.
+from kolach.methods.deepkoala import download_release
 
 rule download_deepkoala:
     output:
@@ -8,5 +8,4 @@ rule download_deepkoala:
         data_dir=DEEPKOALA_DIR,
         release=DEEPKOALA_RELEASE
     run:
-        download_deepkoala(params.data_dir, release=params.release)
-        Path(params.data_dir, ".download_complete").touch()
+        download_release(params.data_dir, params.release)

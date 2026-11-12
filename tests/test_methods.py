@@ -8,6 +8,7 @@ import unittest
 from unittest import mock
 from urllib.error import URLError
 
+from kolach import download
 from kolach.methods import deepkoala, eggnog, kofam
 
 
@@ -204,7 +205,7 @@ class TestEggnog(unittest.TestCase):
 
 
 class TestDeepkoalaDownloads(unittest.TestCase):
-    def test_download_file_is_atomic(self):
+    def test_download_atomic_keeps_previous_file_on_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp) / "weights_full.pt"
             dest.write_bytes(b"previous")
@@ -213,14 +214,14 @@ class TestDeepkoalaDownloads(unittest.TestCase):
                 def read(self, size=-1):
                     raise URLError("connection reset")
 
-            with mock.patch.object(deepkoala, "urlopen", return_value=Broken()):
+            with mock.patch.object(download, "urlopen", return_value=Broken()):
                 with self.assertRaises(URLError):
-                    deepkoala.download_file("https://example.invalid/x", dest)
+                    download.download_atomic("https://example.invalid/x", dest)
             self.assertEqual(dest.read_bytes(), b"previous")
             self.assertEqual(sorted(p.name for p in Path(tmp).iterdir()), ["weights_full.pt"])
 
-            with mock.patch.object(deepkoala, "urlopen", return_value=io.BytesIO(b"new weights")):
-                digest = deepkoala.download_file("https://example.invalid/x", dest)
+            with mock.patch.object(download, "urlopen", return_value=io.BytesIO(b"new weights")):
+                digest = download.download_atomic("https://example.invalid/x", dest)
             self.assertEqual(dest.read_bytes(), b"new weights")
             self.assertEqual(len(digest), 64)
 

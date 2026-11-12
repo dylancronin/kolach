@@ -5,10 +5,8 @@ DeepKOALA package (zhaoxi120/deepkoala), managing database downloads from
 GenomeNet and linking them for upstream model loading.
 """
 import csv
-import hashlib
 import importlib.util
 import json
-import os
 from pathlib import Path
 import re
 import shutil
@@ -16,8 +14,14 @@ import tempfile
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
+from kolach.download import download_atomic
+
 REFERENCE = "https://github.com/zhaoxi120/deepkoala"
 BASE_URL = "https://www.genome.jp/ftp/db/deepkoala/"
+MISSING_DEEPKOALA = (
+    "The 'deepkoala' package is not installed. "
+    f"Please install it using: pip install git+{REFERENCE}.git"
+)
 
 
 def get_available_releases():
@@ -53,10 +57,7 @@ def setup_resources_link(database_dir, release):
     try:
         import deepkoala
     except ImportError as e:
-        raise ImportError(
-            "The 'deepkoala' package is not installed. "
-            "Please install it using: pip install git+https://github.com/zhaoxi120/deepkoala.git"
-        ) from e
+        raise ImportError(MISSING_DEEPKOALA) from e
 
     deepkoala_pkg_dir = Path(deepkoala.__file__).resolve().parent
     resources_dir = deepkoala_pkg_dir.parent / "resources"
@@ -109,28 +110,6 @@ def setup_resources_link(database_dir, release):
         ) from e
 
 
-def download_file(url, destination):
-    """Download a file with SHA256 calculation.
-
-    Data is streamed into a temporary sibling file that replaces the destination
-    only after the transfer completes, so a failed download never leaves a
-    truncated model file in place.
-    """
-    digest = hashlib.sha256()
-    destination = Path(destination)
-    fd, temp_name = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".part", dir=destination.parent)
-    temp_path = Path(temp_name)
-    try:
-        with os.fdopen(fd, "wb") as out, urlopen(url, timeout=180) as response:
-            while block := response.read(1024 * 1024):
-                out.write(block)
-                digest.update(block)
-        temp_path.replace(destination)
-    finally:
-        temp_path.unlink(missing_ok=True)
-    return digest.hexdigest()
-
-
 def resolve_release(release="latest"):
     """Resolve 'latest' or a YYYYMM tag against the releases published on GenomeNet."""
     release = str(release)
@@ -147,19 +126,18 @@ def resolve_release(release="latest"):
 def check_dependencies():
     """Fail fast when the upstream deepkoala package is not importable."""
     if importlib.util.find_spec("deepkoala") is None:
-        raise ImportError(
-            "The 'deepkoala' package is not installed. "
-            "Please install it using: pip install git+https://github.com/zhaoxi120/deepkoala.git"
-        )
+        raise ImportError(MISSING_DEEPKOALA)
 
 
 def download_deepkoala(directory, release="latest"):
     """Download DeepKOALA model weights and configs from GenomeNet."""
+    download_release(directory, resolve_release(release))
+
+
+def download_release(directory, selected_release):
+    """Download an already-resolved DeepKOALA release (YYYYMM) from GenomeNet."""
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-
-    # Normalize to string so numeric config values (e.g. int 202608) compare cleanly
-    selected_release = resolve_release(release)
 
     release_dir = directory / selected_release
     release_dir.mkdir(parents=True, exist_ok=True)
@@ -186,7 +164,7 @@ def download_deepkoala(directory, release="latest"):
         for cand in candidates:
             url = f"{release_url}{cand}"
             try:
-                sha256 = download_file(url, target_path)
+                sha256 = download_atomic(url, target_path)
                 manifest["downloads"][target_name] = {"url": url, "sha256": sha256}
                 downloaded = True
 
@@ -217,10 +195,7 @@ def annotate(args, output_file):
     try:
         from deepkoala.infer import inference
     except ImportError as e:
-        raise ImportError(
-            "The 'deepkoala' package is not installed. "
-            "Please install it using: pip install git+https://github.com/zhaoxi120/deepkoala.git"
-        ) from e
+        raise ImportError(MISSING_DEEPKOALA) from e
 
     db_dir = Path(args.database_dir).expanduser().resolve() / "deepkoala"
     release = str(getattr(args, "deepkoala_release", "latest"))

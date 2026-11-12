@@ -1,5 +1,5 @@
 import argparse
-from importlib.metadata import PackageNotFoundError, version
+import importlib
 import json
 import math
 import os
@@ -9,12 +9,7 @@ import subprocess
 import sys
 import tempfile
 
-
-def _package_version() -> str:
-    try:
-        return version("kolach")
-    except PackageNotFoundError:
-        return "0.0.0"
+from kolach import package_version
 
 
 def positive_float(value: str) -> float:
@@ -117,7 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"kolach {_package_version()}",
+        version=f"kolach {package_version()}",
     )
 
     subparsers = parser.add_subparsers(
@@ -387,7 +382,7 @@ def download_config(args) -> dict:
     return {
         "database_dir": args.database_dir,
         "databases": list(args.databases),
-        "deepkoala_release": str(args.deepkoala_release),
+        "deepkoala_release": args.deepkoala_release,
     }
 
 
@@ -408,7 +403,7 @@ def annotate_config(args) -> dict:
         "heuristic_bitscore_fraction": args.heuristic_bitscore_fraction,
         "heuristic_e_value": args.heuristic_e_value,
         "deepkoala_model": args.deepkoala_model,
-        "deepkoala_release": str(args.deepkoala_release),
+        "deepkoala_release": args.deepkoala_release,
         "device": args.device,
         "batch_size": args.batch_size,
         "detail": args.detail,
@@ -428,15 +423,8 @@ def annotate_config(args) -> dict:
 
 def check_annotation_dependencies(databases) -> None:
     """Fail before launching the workflow if a selected method cannot run."""
-    if "kofam" in databases:
-        from kolach.methods.kofam import check_dependencies
-        check_dependencies()
-    if "eggnog" in databases:
-        from kolach.methods.eggnog import check_dependencies
-        check_dependencies()
-    if "deepkoala" in databases:
-        from kolach.methods.deepkoala import check_dependencies
-        check_dependencies()
+    for db in databases:
+        importlib.import_module(f"kolach.methods.{db}").check_dependencies()
 
 
 def run_workflow(snakefile: str, config: dict, cores: int) -> int:

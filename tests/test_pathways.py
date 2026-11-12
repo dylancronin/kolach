@@ -195,7 +195,7 @@ class TestPathways(unittest.TestCase):
 
     def test_failed_download_leaves_no_partial_file(self):
         from unittest import mock
-        from kolach import pathways
+        from kolach import download, pathways
 
         db = self.tmp / "fresh_db"
 
@@ -203,13 +203,13 @@ class TestPathways(unittest.TestCase):
             def read(self, *args):
                 raise OSError("connection reset")
 
-        with mock.patch.object(pathways, "urlopen", return_value=Broken()):
+        with mock.patch.object(download, "urlopen", return_value=Broken()):
             with self.assertRaises(RuntimeError):
                 pathways.download_kegg_hierarchy(db, verbose=False)
         self.assertEqual(list(db.iterdir()), [])
 
         payload = json.dumps(self.mock_hierarchy).encode()
-        with mock.patch.object(pathways, "urlopen", return_value=io.BytesIO(payload)) as fake:
+        with mock.patch.object(download, "urlopen", return_value=io.BytesIO(payload)) as fake:
             path = pathways.download_kegg_hierarchy(db, verbose=False)
         self.assertEqual(path.read_bytes(), payload)
         self.assertEqual([p.name for p in db.iterdir()], ["ko00001.json"])

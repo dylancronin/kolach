@@ -1,13 +1,12 @@
-from importlib.metadata import PackageNotFoundError, version
 import json
-import os
 import re
-import shutil
-import tempfile
 from pathlib import Path
 from typing import Union
-from urllib.request import Request, urlopen
+from urllib.request import Request
 import pandas as pd
+
+from kolach import package_version
+from kolach.download import download_atomic
 
 
 KEGG_HIERARCHY_URL = (
@@ -17,13 +16,6 @@ KEGG_HIERARCHY_URL = (
 
 KO_REGEX = re.compile(r"^K\d{5}$")
 KO_TOKEN_REGEX = re.compile(r"\bK\d{5}\b")
-
-
-def _user_agent() -> str:
-    try:
-        return f"kolach/{version('kolach')}"
-    except PackageNotFoundError:
-        return "kolach"
 
 
 def is_valid_hierarchy_json(file_path: Path) -> bool:
@@ -64,29 +56,21 @@ def download_kegg_hierarchy(
     if verbose:
         print(f"[kolach] Downloading KEGG Orthology hierarchy (ko00001.json) to {dest_path}...")
 
-    # Stream into a uniquely named temporary file in the destination directory so an
-    # interrupted or concurrent download never leaves a partial ko00001.json behind.
-    fd, temp_name = tempfile.mkstemp(prefix=".ko00001.", suffix=".part", dir=db_path)
-    os.close(fd)
-    temp_path = Path(temp_name)
-    req = Request(KEGG_HIERARCHY_URL, headers={"User-Agent": _user_agent()})
-    try:
-        with urlopen(req, timeout=180) as response, open(temp_path, "wb") as out:
-            shutil.copyfileobj(response, out, 1024 * 1024)
-        # Validate downloaded payload before replacing destination
-        if not is_valid_hierarchy_json(temp_path):
+    def validate(path: Path) -> None:
+        if not is_valid_hierarchy_json(path):
             raise ValueError(
                 "Downloaded file is not a valid KEGG hierarchy JSON (check network/permissions)."
             )
-        temp_path.replace(dest_path)
-        if verbose:
-            print(f"[kolach] Downloaded ko00001.json ({dest_path.stat().st_size / 1024 / 1024:.1f} MB).")
+
+    req = Request(KEGG_HIERARCHY_URL, headers={"User-Agent": f"kolach/{package_version()}"})
+    try:
+        download_atomic(req, dest_path, validate=validate)
     except Exception as e:
         raise RuntimeError(
             f"Failed to download KEGG hierarchy from {KEGG_HIERARCHY_URL}: {e}"
         ) from e
-    finally:
-        temp_path.unlink(missing_ok=True)
+    if verbose:
+        print(f"[kolach] Downloaded ko00001.json ({dest_path.stat().st_size / 1024 / 1024:.1f} MB).")
 
     return dest_path
 
