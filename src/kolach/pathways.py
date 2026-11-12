@@ -7,6 +7,7 @@ import pandas as pd
 
 from kolach import package_version
 from kolach.download import download_atomic
+from kolach.integrate import KO_REGEX as KO_TOKEN_REGEX
 
 
 KEGG_HIERARCHY_URL = (
@@ -15,7 +16,6 @@ KEGG_HIERARCHY_URL = (
 
 
 KO_REGEX = re.compile(r"^K\d{5}$")
-KO_TOKEN_REGEX = re.compile(r"\bK\d{5}\b")
 
 
 def is_valid_hierarchy_json(file_path: Path) -> bool:
@@ -197,7 +197,7 @@ def annotate_pathways(
     def lookup_kos(val: str) -> tuple[str, str, str]:
         if pd.isna(val) or not val or str(val).strip() in ("", "-", "None", "nan"):
             return "-", "-", "-"
-        # Parse all KO identifiers matching standard K\d{5} regex (same as integrate.py)
+        # Same KO token pattern as integration.
         kos = KO_TOKEN_REGEX.findall(str(val))
         if not kos:
             return "-", "-", "-"
