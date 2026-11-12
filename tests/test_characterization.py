@@ -284,9 +284,12 @@ class TestCharacterization(unittest.TestCase):
         self.assertEqual(g2_row["consensus_level"], "unannotated")
         self.assertEqual(g2_row["accepted_ko"], "-")
 
-    def test_read_fasta_ids_keeps_order_and_duplicates(self):
-        fasta = self._write_tsv("ids.faa", ">g2 desc\nM\n>g1\nM\n>g2 again\nM\n")
-        self.assertEqual(read_fasta_ids(fasta), ["g2", "g1", "g2"])
+    def test_read_fasta_ids_keeps_order_and_rejects_duplicates(self):
+        fasta = self._write_tsv("ids.faa", ">g2 desc\nM\n>g1\nM\n")
+        self.assertEqual(read_fasta_ids(fasta), ["g2", "g1"])
+        fasta = self._write_tsv("dup_ids.faa", ">g2 desc\nM\n>g1\nM\n>g2 again\nM\n")
+        with self.assertRaisesRegex(ValueError, "1 duplicate gene ID\\(s\\): g2"):
+            read_fasta_ids(fasta)
 
     def test_duplicate_fasta_ids_rejected(self):
         fasta = self._write_tsv("dup.faa", ">g1\nM\n>g2\nM\n>g1\nM\n")

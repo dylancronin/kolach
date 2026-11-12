@@ -3,6 +3,7 @@ import contextlib
 import io
 import json
 from pathlib import Path
+import tempfile
 import unittest
 from unittest import mock
 
@@ -92,6 +93,20 @@ class TestWorkflowConfig(unittest.TestCase):
             cli.main(["annotate", "--protein-fasta", "p.faa", "--database-dir", "db", "--databases", "kofam"])
         self.assertEqual(exit_.exception.code, 1)
         self.assertIn("hmmsearch", err.getvalue())
+        run.assert_not_called()
+
+    def test_annotate_rejects_duplicate_fasta_ids_before_workflow(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fasta = Path(tmp) / "p.faa"
+            fasta.write_text(">g1 a\nM\n>g2\nM\n>g1 b\nM\n")
+            with mock.patch.object(cli, "check_annotation_dependencies"), \
+                    mock.patch.object(cli, "run_workflow") as run, \
+                    contextlib.redirect_stderr(io.StringIO()) as err, \
+                    self.assertRaises(SystemExit) as exit_:
+                cli.main(["annotate", "--protein-fasta", str(fasta), "--database-dir", "db",
+                          "--databases", "eggnog"])
+        self.assertEqual(exit_.exception.code, 1)
+        self.assertIn("1 duplicate gene ID(s): g1", err.getvalue())
         run.assert_not_called()
 
 

@@ -467,9 +467,14 @@ def main(argv=None):
             sys.exit(returncode)
 
     elif args.command == "annotate":
+        from kolach.integrate import read_fasta_ids
+
         try:
             check_annotation_dependencies(args.databases)
-        except (FileNotFoundError, ImportError) as exc:
+            # Duplicate IDs would only be rejected at the integrate step, after
+            # every annotation method has already run.
+            read_fasta_ids(args.protein_fasta)
+        except (OSError, ImportError, ValueError) as exc:
             parser.exit(1, f"kolach annotate: error: {exc}\n")
         returncode = run_workflow("annotate.smk", annotate_config(args), cores=args.threads)
         if returncode != 0:
