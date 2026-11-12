@@ -6,7 +6,9 @@ GenomeNet and linking them for upstream model loading.
 """
 import csv
 import hashlib
+import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -93,6 +95,14 @@ def setup_resources_link(database_dir, release):
 
     try:
         target_link.symlink_to(source_dir, target_is_directory=True)
+    except FileExistsError:
+        # Another kolach process created the link concurrently; accept it only if
+        # it points at the same model source.
+        if target_link.resolve() != source_dir.resolve():
+            raise RuntimeError(
+                f"'{target_link}' was created concurrently and does not point at "
+                f"the requested model source '{source_dir}'."
+            )
     except OSError as e:
         raise RuntimeError(
             f"Cannot link deepkoala resources '{target_link}' -> '{source_dir}': {e}"
@@ -100,14 +110,47 @@ def setup_resources_link(database_dir, release):
 
 
 def download_file(url, destination):
-    """Download a file with SHA256 calculation."""
+    """Download a file with SHA256 calculation.
+
+    Data is streamed into a temporary sibling file that replaces the destination
+    only after the transfer completes, so a failed download never leaves a
+    truncated model file in place.
+    """
     digest = hashlib.sha256()
     destination = Path(destination)
-    with urlopen(url, timeout=180) as response, open(destination, "wb") as out:
-        while block := response.read(1024 * 1024):
-            out.write(block)
-            digest.update(block)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".part", dir=destination.parent)
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, "wb") as out, urlopen(url, timeout=180) as response:
+            while block := response.read(1024 * 1024):
+                out.write(block)
+                digest.update(block)
+        temp_path.replace(destination)
+    finally:
+        temp_path.unlink(missing_ok=True)
     return digest.hexdigest()
+
+
+def resolve_release(release="latest"):
+    """Resolve 'latest' or a YYYYMM tag against the releases published on GenomeNet."""
+    release = str(release)
+    available = get_available_releases()
+    if release == "latest":
+        return available[-1]
+    if release in available:
+        return release
+    raise ValueError(
+        f"Release '{release}' not found on GenomeNet. Available releases: {', '.join(available)}"
+    )
+
+
+def check_dependencies():
+    """Fail fast when the upstream deepkoala package is not importable."""
+    if importlib.util.find_spec("deepkoala") is None:
+        raise ImportError(
+            "The 'deepkoala' package is not installed. "
+            "Please install it using: pip install git+https://github.com/zhaoxi120/deepkoala.git"
+        )
 
 
 def download_deepkoala(directory, release="latest"):
@@ -116,16 +159,7 @@ def download_deepkoala(directory, release="latest"):
     directory.mkdir(parents=True, exist_ok=True)
 
     # Normalize to string so numeric config values (e.g. int 202608) compare cleanly
-    release = str(release)
-    available = get_available_releases()
-    if release == "latest":
-        selected_release = available[-1]
-    elif release in available:
-        selected_release = release
-    else:
-        raise ValueError(
-            f"Release '{release}' not found on GenomeNet. Available releases: {', '.join(available)}"
-        )
+    selected_release = resolve_release(release)
 
     release_dir = directory / selected_release
     release_dir.mkdir(parents=True, exist_ok=True)

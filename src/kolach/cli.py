@@ -1,9 +1,13 @@
 import argparse
 from importlib.metadata import PackageNotFoundError, version
+import json
 import math
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
+import tempfile
 
 
 def _package_version() -> str:
@@ -50,7 +54,61 @@ def positive_int(value: str) -> int:
     return val
 
 
-def main():
+CONFLICT_STRATEGY_HELP = (
+    "Consensus conflict strategy for disjoint calls: multiple (default: sets accepted_ko and ko to '-', "
+    "records conflicting alternatives in alternative_kos; recommended for downstream pathway tools to avoid "
+    "false multifunctional enzyme inference) or priority (selects top method in hierarchy: kofam > eggnog > deepkoala)."
+)
+
+
+def _add_integration_options(parser, heuristic_note=""):
+    """Options shared by `annotate` and `integrate` that control consensus integration."""
+    parser.add_argument(
+        "--heuristic-bitscore-fraction",
+        type=fraction,
+        default=0.75,
+        help=f"Fraction of the KOfam profile threshold used to rescue below-threshold hits{heuristic_note} "
+        "(default: 0.75).",
+    )
+    parser.add_argument(
+        "--heuristic-e-value",
+        type=nonnegative_float,
+        default=1e-5,
+        help=f"Maximum E-value for KOfam hit rescue consideration{heuristic_note} (default: 1e-5).",
+    )
+    parser.add_argument(
+        "--eggnog-min-bitscore",
+        type=nonnegative_float,
+        default=60.0,
+        help="Minimum eggNOG bit score to retain KO assignment during integration (default: 60.0).",
+    )
+    parser.add_argument(
+        "--eggnog-max-evalue",
+        type=nonnegative_float,
+        default=1e-5,
+        help="Maximum eggNOG e-value to retain KO assignment during integration (default: 1e-5).",
+    )
+    parser.add_argument(
+        "--eggnog-filter-multi",
+        choices=["disambiguate", "none"],
+        default="disambiguate",
+        help="eggNOG multi-KO filtering strategy: disambiguate against other tools (default) or none.",
+    )
+    parser.add_argument(
+        "--conflict-strategy",
+        choices=["multiple", "priority"],
+        default="multiple",
+        help=CONFLICT_STRATEGY_HELP,
+    )
+    parser.add_argument(
+        "--add-pathways",
+        action="store_true",
+        default=False,
+        help="Annotate accepted KOs with KEGG categories, subcategories, and pathways in the output table.",
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="kolach",
         description="Assign KEGG Orthology identifiers to proteins.",
@@ -86,14 +144,16 @@ def main():
         nargs="+",
         choices=["eggnog", "kofam", "deepkoala"],
         required=True,
-        help="Databases to download.",
+        help="Databases to download. The KEGG Orthology hierarchy (ko00001.json) used by "
+        "--add-pathways is always fetched alongside them.",
     )
 
     download_parser.add_argument(
         "--deepkoala-release",
         type=str,
         default="latest",
-        help="DeepKOALA model release date (e.g. 202608 or latest, default: latest).",
+        help="DeepKOALA model release date (e.g. 202608 or latest, default: latest). "
+        "'latest' is resolved against GenomeNet on each run, so newer releases are downloaded.",
     )
 
     # ------------------------------------------------------
@@ -135,7 +195,7 @@ def main():
 
     annotate_parser.add_argument(
         "--threads",
-        type=int,
+        type=positive_int,
         default=1,
         help="Number of CPU threads to use (default: 1).",
     )
@@ -150,20 +210,6 @@ def main():
         "--no-hmmer-prefiltering",
         action="store_true",
         help="Disable HMMER e-value prefiltering for large datasets.",
-    )
-
-    annotate_parser.add_argument(
-        "--heuristic-bitscore-fraction",
-        type=fraction,
-        default=0.75,
-        help="Fraction of the KOfam profile threshold used to rescue below-threshold hits (default: 0.75).",
-    )
-
-    annotate_parser.add_argument(
-        "--heuristic-e-value",
-        type=nonnegative_float,
-        default=1e-5,
-        help="Maximum E-value for KOfam hit rescue consideration (default: 1e-5).",
     )
 
     annotate_parser.add_argument(
@@ -189,7 +235,7 @@ def main():
 
     annotate_parser.add_argument(
         "--batch-size",
-        type=int,
+        type=positive_int,
         default=64,
         help="Batch size for DeepKOALA inference (default: 64).",
     )
@@ -236,44 +282,7 @@ def main():
         help="Number of chunks for processing DIAMOND seed index (--dmnd_index_chunks). If unspecified, upstream automatic tuning is used.",
     )
 
-    annotate_parser.add_argument(
-        "--eggnog-min-bitscore",
-        type=nonnegative_float,
-        default=60.0,
-        help="Minimum eggNOG bit score to retain KO assignment during integration (default: 60.0).",
-    )
-
-    annotate_parser.add_argument(
-        "--eggnog-max-evalue",
-        type=nonnegative_float,
-        default=1e-5,
-        help="Maximum eggNOG e-value to retain KO assignment during integration (default: 1e-5).",
-    )
-
-    annotate_parser.add_argument(
-        "--eggnog-filter-multi",
-        choices=["disambiguate", "none"],
-        default="disambiguate",
-        help="eggNOG multi-KO filtering strategy: disambiguate against other tools (default) or none.",
-    )
-
-    annotate_parser.add_argument(
-        "--conflict-strategy",
-        choices=["multiple", "priority"],
-        default="multiple",
-        help=(
-            "Consensus conflict strategy for disjoint calls: multiple (default: sets accepted_ko and ko to '-', "
-            "records conflicting alternatives in alternative_kos; recommended for downstream pathway tools to avoid "
-            "false multifunctional enzyme inference) or priority (selects top method in hierarchy: kofam > eggnog > deepkoala)."
-        ),
-    )
-
-    annotate_parser.add_argument(
-        "--add-pathways",
-        action="store_true",
-        default=False,
-        help="Annotate accepted KOs with KEGG categories, subcategories, and pathways in kolach_annotations.tsv.",
-    )
+    _add_integration_options(annotate_parser)
 
     # ------------------------------------------------------
     # Integrate subcommand
@@ -332,60 +341,7 @@ def main():
         help="Path to database directory (to load KO definitions from ko_list).",
     )
 
-    integrate_parser.add_argument(
-        "--eggnog-min-bitscore",
-        type=nonnegative_float,
-        default=60.0,
-        help="Minimum eggNOG bit score for orthology retention (default: 60.0).",
-    )
-
-    integrate_parser.add_argument(
-        "--eggnog-max-evalue",
-        type=nonnegative_float,
-        default=1e-5,
-        help="Maximum eggNOG e-value for orthology retention (default: 1e-5).",
-    )
-
-    integrate_parser.add_argument(
-        "--eggnog-filter-multi",
-        choices=["disambiguate", "none"],
-        default="disambiguate",
-        help="eggNOG multi-KO disambiguation strategy: disambiguate against other tools (default) or none.",
-    )
-
-    integrate_parser.add_argument(
-        "--heuristic-bitscore-fraction",
-        type=fraction,
-        default=0.75,
-        help="Fraction of the KOfam profile threshold used to rescue below-threshold hits, "
-        "reported in the evidence table (default: 0.75).",
-    )
-
-    integrate_parser.add_argument(
-        "--heuristic-e-value",
-        type=nonnegative_float,
-        default=1e-5,
-        help="Maximum E-value for KOfam hit rescue consideration, reported in the evidence "
-        "table (default: 1e-5).",
-    )
-
-    integrate_parser.add_argument(
-        "--conflict-strategy",
-        choices=["multiple", "priority"],
-        default="multiple",
-        help=(
-            "Consensus conflict strategy for disjoint calls: multiple (default: sets accepted_ko and ko to '-', "
-            "records conflicting alternatives in alternative_kos; recommended for downstream pathway tools to avoid "
-            "false multifunctional enzyme inference) or priority (selects top method in hierarchy: kofam > eggnog > deepkoala)."
-        ),
-    )
-
-    integrate_parser.add_argument(
-        "--add-pathways",
-        action="store_true",
-        default=False,
-        help="Annotate accepted KOs with KEGG categories, subcategories, and pathways in the output table.",
-    )
+    _add_integration_options(integrate_parser, heuristic_note=", reported in the evidence table")
 
     # ------------------------------------------------------
     # Pathway subcommand
@@ -423,71 +379,113 @@ def main():
         help="Column name containing KO identifiers to annotate (default: 'accepted_ko').",
     )
 
-    args = parser.parse_args()
+    return parser
+
+
+def download_config(args) -> dict:
+    """Workflow config for `kolach download`, with native JSON types."""
+    return {
+        "database_dir": args.database_dir,
+        "databases": list(args.databases),
+        "deepkoala_release": str(args.deepkoala_release),
+    }
+
+
+def annotate_config(args) -> dict:
+    """Workflow config for `kolach annotate`, with native JSON types.
+
+    Optional eggNOG settings are omitted when unset so the rules fall back to
+    upstream defaults.
+    """
+    config = {
+        "database_dir": args.database_dir,
+        "protein_fasta": args.protein_fasta,
+        "output_dir": args.output_dir,
+        "databases": list(args.databases),
+        "threads": args.threads,
+        "skip_bitscore_heuristic": args.skip_bitscore_heuristic,
+        "no_hmmer_prefiltering": args.no_hmmer_prefiltering,
+        "heuristic_bitscore_fraction": args.heuristic_bitscore_fraction,
+        "heuristic_e_value": args.heuristic_e_value,
+        "deepkoala_model": args.deepkoala_model,
+        "deepkoala_release": str(args.deepkoala_release),
+        "device": args.device,
+        "batch_size": args.batch_size,
+        "detail": args.detail,
+        "eggnog_mode": args.eggnog_mode,
+        "eggnog_min_bitscore": args.eggnog_min_bitscore,
+        "eggnog_max_evalue": args.eggnog_max_evalue,
+        "eggnog_filter_multi": args.eggnog_filter_multi,
+        "conflict_strategy": args.conflict_strategy,
+        "add_pathways": args.add_pathways,
+    }
+    for key in ("eggnog_sensmode", "eggnog_temp_dir", "eggnog_dmnd_block_size", "eggnog_dmnd_index_chunks"):
+        value = getattr(args, key)
+        if value is not None:
+            config[key] = value
+    return config
+
+
+def check_annotation_dependencies(databases) -> None:
+    """Fail before launching the workflow if a selected method cannot run."""
+    if "kofam" in databases:
+        from kolach.methods.kofam import check_dependencies
+        check_dependencies()
+    if "eggnog" in databases:
+        from kolach.methods.eggnog import check_dependencies
+        check_dependencies()
+    if "deepkoala" in databases:
+        from kolach.methods.deepkoala import check_dependencies
+        check_dependencies()
+
+
+def run_workflow(snakefile: str, config: dict, cores: int) -> int:
+    """Run a bundled Snakefile with `config` passed as a JSON config file.
+
+    A config file (rather than `--config key=value`) keeps values typed and stops
+    Snakemake from YAML-parsing paths and strings into other types.
+    """
+    if not shutil.which("snakemake"):
+        raise FileNotFoundError(
+            "The 'snakemake' executable was not found in PATH. "
+            "Please activate the kolach conda environment."
+        )
+    snakefile_path = Path(__file__).parent / "workflows" / snakefile
+    fd, config_path = tempfile.mkstemp(prefix="kolach_config_", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(config, handle, indent=2)
+        cmd = [
+            "snakemake",
+            "-s", str(snakefile_path),
+            "--cores", str(cores),
+            "--configfile", config_path,
+        ]
+        return subprocess.run(cmd).returncode
+    finally:
+        Path(config_path).unlink(missing_ok=True)
+
+
+def main(argv=None):
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     if args.command == "integrate" and args.add_pathways and not args.database_dir:
         parser.error("integrate --add-pathways requires --database-dir")
 
     if args.command == "download":
-        snakefile_path = Path(__file__).parent / "workflows" / "download.smk"
-        db_list_repr = f"[{','.join(repr(db) for db in args.databases)}]"
-        config_args = [
-            f"database_dir={args.database_dir}",
-            f"databases={db_list_repr}",
-            f"deepkoala_release={str(args.deepkoala_release)}",
-        ]
-        cmd = [
-            "snakemake",
-            "-s", str(snakefile_path),
-            "--cores", "1",
-            "--config", *config_args,
-        ]
-        result = subprocess.run(cmd)
-        if result.returncode != 0:
-            sys.exit(result.returncode)
+        returncode = run_workflow("download.smk", download_config(args), cores=1)
+        if returncode != 0:
+            sys.exit(returncode)
 
     elif args.command == "annotate":
-        snakefile_path = Path(__file__).parent / "workflows" / "annotate.smk"
-        db_list_repr = f"[{','.join(repr(db) for db in args.databases)}]"
-        config_args = [
-            f"database_dir={args.database_dir}",
-            f"protein_fasta={args.protein_fasta}",
-            f"output_dir={args.output_dir}",
-            f"databases={db_list_repr}",
-            f"threads={args.threads}",
-            f"skip_bitscore_heuristic={args.skip_bitscore_heuristic}",
-            f"no_hmmer_prefiltering={args.no_hmmer_prefiltering}",
-            f"heuristic_bitscore_fraction={args.heuristic_bitscore_fraction}",
-            f"heuristic_e_value={args.heuristic_e_value}",
-            f"deepkoala_model={args.deepkoala_model}",
-            f"deepkoala_release={str(args.deepkoala_release)}",
-            f"device={args.device}",
-            f"batch_size={args.batch_size}",
-            f"detail={args.detail}",
-            f"eggnog_mode={args.eggnog_mode}",
-            f"eggnog_min_bitscore={args.eggnog_min_bitscore}",
-            f"eggnog_max_evalue={args.eggnog_max_evalue}",
-            f"eggnog_filter_multi={args.eggnog_filter_multi}",
-            f"conflict_strategy={args.conflict_strategy}",
-            f"add_pathways={args.add_pathways}",
-        ]
-        if args.eggnog_sensmode is not None:
-            config_args.append(f"eggnog_sensmode={args.eggnog_sensmode}")
-        if args.eggnog_temp_dir is not None:
-            config_args.append(f"eggnog_temp_dir={args.eggnog_temp_dir}")
-        if args.eggnog_dmnd_block_size is not None:
-            config_args.append(f"eggnog_dmnd_block_size={args.eggnog_dmnd_block_size}")
-        if args.eggnog_dmnd_index_chunks is not None:
-            config_args.append(f"eggnog_dmnd_index_chunks={args.eggnog_dmnd_index_chunks}")
-        cmd = [
-            "snakemake",
-            "-s", str(snakefile_path),
-            "--cores", str(args.threads),
-            "--config", *config_args,
-        ]
-        result = subprocess.run(cmd)
-        if result.returncode != 0:
-            sys.exit(result.returncode)
+        try:
+            check_annotation_dependencies(args.databases)
+        except (FileNotFoundError, ImportError) as exc:
+            parser.exit(1, f"kolach annotate: error: {exc}\n")
+        returncode = run_workflow("annotate.smk", annotate_config(args), cores=args.threads)
+        if returncode != 0:
+            sys.exit(returncode)
 
     elif args.command == "integrate":
         from kolach.integrate import integrate_annotations

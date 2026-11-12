@@ -6,6 +6,7 @@ import gzip
 from pathlib import Path
 import re
 from typing import Any, Optional, Union
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -86,8 +87,12 @@ def load_ko_definitions(ko_list_path: Optional[Union[str, Path]]) -> dict[str, s
                     if KO_REGEX.fullmatch(ko):
                         definition = parts[-1].strip() if len(parts) > 1 else ""
                         definitions[ko] = definition
-    except Exception:
-        pass
+    except (OSError, UnicodeError) as exc:
+        warnings.warn(
+            f"Could not read KO definitions from '{path}': {exc}. "
+            "Falling back to per-tool definitions.",
+            RuntimeWarning, stacklevel=2,
+        )
     return definitions
 
 def select_kofam_scores(
@@ -883,6 +888,13 @@ def integrate_annotations(
         records.extend(extract_eggnog_records(eggnog_tsv, eggnog_min_bitscore, eggnog_max_evalue))
         active_tools.append("eggnog")
     gene_ids = read_fasta_ids(protein_fasta) if protein_fasta is not None else []
+    duplicates = [gid for gid, count in Counter(gene_ids).items() if count > 1]
+    if duplicates:
+        shown = ", ".join(duplicates[:5]) + (", ..." if len(duplicates) > 5 else "")
+        raise ValueError(
+            f"Protein FASTA '{protein_fasta}' contains {len(duplicates)} duplicate gene ID(s): {shown}. "
+            "Gene IDs (first header token) must be unique."
+        )
     records_by_gene = {gid: [] for gid in gene_ids}
     for record in records:
         gid = record["gene_id"]
@@ -906,7 +918,6 @@ def integrate_annotations(
         _resolve_gene(gene, conflict_strategy)
         summaries.append(_build_summary(gene, master_defs, evidence_defs))
         audit.extend(_build_audit(gene))
-        del gene
     evidence_df = pd.DataFrame(audit, columns=EVIDENCE_COLUMNS)
     if audit:
         evidence_df = evidence_df.sort_values(["gene_id", "ko", "method"]).reset_index(drop=True)

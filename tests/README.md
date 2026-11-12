@@ -30,8 +30,23 @@ It is test-only and is excluded from the installed package by the existing
   table in attrs, and both TSV files byte for byte.
 - Boundary cases cover duplicate ranking and ties, missing domain metrics,
   threshold equality, malformed and nonfinite values, zero E-values, gzip,
-  metadata, empty inputs, duplicate FASTA headers, extra genes, definition
-  precedence, errors, and the existing public helper signatures.
+  metadata, empty inputs, extra genes, definition precedence, errors, and the
+  existing public helper signatures.
+- Duplicate FASTA gene IDs are an intentional divergence: the reference emitted
+  one summary row per duplicate header (each repeating the same evidence), while
+  the current implementation rejects them with a `ValueError`. This is asserted
+  directly rather than compared against the reference.
+
+## Other suites
+
+- `test_methods.py`: KOfam threshold/rescue rules (`assign_hits`), hmmsearch table
+  parsing, FASTA validation, and command construction for hmmsearch, emapper.py
+  and DeepKOALA downloads, with external tools mocked.
+- `test_cli.py`: argument validation, shared integration options, the typed JSON
+  config handed to Snakemake, and dependency preflight.
+- `test_workflows.py`: `snakemake -n` dry runs of the bundled workflows; skipped
+  when `snakemake` is not on `PATH` (CI installs it).
+- `test_pathways.py`: KEGG hierarchy parsing, pathway annotation and downloads.
 
 This is exhaustive coverage of the declared finite category model, not a claim
 to enumerate every arbitrary-size annotation table or every numeric input.

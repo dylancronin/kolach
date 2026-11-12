@@ -4,13 +4,12 @@ Covers consensus adjudication, multi-tool agreement/conflict, candidate rescue,
 eggNOG multi-KO disambiguation, FASTA ordering, score selection, definition
 resolution, and table exports.
 """
-import io
 from pathlib import Path
 import tempfile
 import unittest
+import unittest.mock
 
 import numpy as np
-import pandas as pd
 
 from kolach.integrate import (
     integrate_annotations,
@@ -285,11 +284,31 @@ class TestCharacterization(unittest.TestCase):
         self.assertEqual(g2_row["consensus_level"], "unannotated")
         self.assertEqual(g2_row["accepted_ko"], "-")
 
+    def test_read_fasta_ids_keeps_order_and_duplicates(self):
+        fasta = self._write_tsv("ids.faa", ">g2 desc\nM\n>g1\nM\n>g2 again\nM\n")
+        self.assertEqual(read_fasta_ids(fasta), ["g2", "g1", "g2"])
+
+    def test_duplicate_fasta_ids_rejected(self):
+        fasta = self._write_tsv("dup.faa", ">g1\nM\n>g2\nM\n>g1\nM\n")
+        kf = self._write_tsv("kf.tsv", "gene_id\tko\tassignment\ng1\tK00001\tthreshold\n")
+        with self.assertRaisesRegex(ValueError, "1 duplicate gene ID\\(s\\): g1"):
+            integrate_annotations(protein_fasta=fasta, kofam_tsv=kf)
+
+    def test_unreadable_ko_list_warns(self):
+        # A directory in place of the file raises OSError on open.
+        bad = self.tmp / "ko_list"
+        bad.mkdir()
+        self.assertEqual(load_ko_definitions(None), {})
+        self.assertEqual(load_ko_definitions(self.tmp / "missing"), {})
+        with unittest.mock.patch("pathlib.Path.is_file", return_value=True):
+            with self.assertWarns(RuntimeWarning):
+                self.assertEqual(load_ko_definitions(bad), {})
+
     def test_export_tsv_and_evidence(self):
         kf = self._write_tsv("kf.tsv", "gene_id\tko\tassignment\tbit_score\te_value\tthreshold\tscore_type\ng1\tK00001\tthreshold\t150.0\t1e-20\t100.0\tfull\n")
         out_tsv = self.tmp / "output.tsv"
 
-        res = integrate_annotations(kofam_tsv=kf, output_tsv=out_tsv)
+        integrate_annotations(kofam_tsv=kf, output_tsv=out_tsv)
         self.assertTrue(out_tsv.is_file())
         default_ev = self.tmp / "kolach_evidence.tsv"
         self.assertTrue(default_ev.is_file())

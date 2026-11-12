@@ -1,4 +1,3 @@
-from pathlib import Path
 from kolach.pathways import annotate_pathways
 
 rule annotate_pathways:

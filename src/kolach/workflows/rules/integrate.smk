@@ -1,4 +1,3 @@
-from pathlib import Path
 from kolach.integrate import integrate_annotations
 
 rule integrate_annotations:
