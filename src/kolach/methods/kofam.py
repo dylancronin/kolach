@@ -24,7 +24,7 @@ FIELDS = ["gene_id", "ko", "assignment", "score_type", "threshold", "bit_score",
 
 def read_profiles(path):
     profiles = {}
-    with open(path) as handle:
+    with open(path, encoding="utf-8") as handle:
         for row in csv.DictReader(handle, delimiter="\t"):
             if row["threshold"] == "-":
                 continue  # anvi'o's default excludes KOs without thresholds
@@ -75,7 +75,7 @@ def download_kofam(directory):
 def count_proteins(path):
     ids = set()
     has_sequence = False
-    with open(path) as handle:
+    with open(path, encoding="utf-8") as handle:
         for line in handle:
             line = line.strip()
             if not line:
@@ -98,7 +98,7 @@ def count_proteins(path):
 
 
 def parse_hits(path):
-    with open(path) as handle:
+    with open(path, encoding="utf-8") as handle:
         for line in handle:
             if not line.strip() or line.startswith("#"):
                 continue
