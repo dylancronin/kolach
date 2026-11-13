@@ -9,8 +9,11 @@ import json
 import math
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
+
+from kolach.download import download_atomic
 
 VERSION = "5.2.9"
 RELEASE = "db_v5-2-9_5-5-2026"
@@ -50,6 +53,16 @@ def _run(command, log):
     # Some upstream stages catch errors and still return exit status zero.
     if re.search(r"(?:^|\s)(?:ERROR|CRITICAL)(?::|\s)", Path(log).read_text(), re.M):
         raise RuntimeError(f"dbCAN reported an error; see {log}")
+
+
+def check_dependencies():
+    """Fail before launching the workflow when dbCAN executables are missing."""
+    for executable in ("run_dbcan", "hmmstat", "diamond"):
+        if not shutil.which(executable):
+            raise FileNotFoundError(
+                f"The '{executable}' executable was not found in PATH. "
+                "Please activate the kolach conda environment with dbCAN installed."
+            )
 
 
 def tool_version():
@@ -99,24 +112,22 @@ def validate_database(directory):
 
 
 def download_dbcan(directory):
-    """Use the upstream fixed-release downloader; publish only validated assets."""
+    """Download the pinned upstream bundle; publish only validated assets."""
     directory = Path(directory).expanduser().resolve()
     directory.mkdir(parents=True, exist_ok=True)
-    version = tool_version()
     # Invalidate any old success marker before attempting an update.
     (directory / ".download_complete").unlink(missing_ok=True)
     with tempfile.TemporaryDirectory(prefix="download-", dir=directory) as tmp:
         stage = Path(tmp)
-        command = ["run_dbcan", "database", "--db_dir", str(stage), "--aws_s3", "--no-cgc"]
-        _run(command, directory / "download.log")
+        manifest = {"compatible_tool_version": VERSION, "release": RELEASE, "files": {}}
+        for name, remote in ASSETS.items():
+            url = f"{BASE_URL}/{remote}"
+            digest = download_atomic(url, stage / name)
+            manifest["files"][name] = {"url": url, "sha256": digest}
         validate_database(stage)
-        manifest = {"tool_version": version, "release": RELEASE, "command": command,
-                    "files": {name: {"url": f"{BASE_URL}/{remote}",
-                                     "sha256": sha256(stage / name)}
-                              for name, remote in ASSETS.items()}}
-        for name in ASSETS:
+        (stage / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        for name in [*ASSETS, "manifest.json"]:
             (stage / name).replace(directory / name)
-        (directory / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     (directory / ".download_complete").touch()
 
 

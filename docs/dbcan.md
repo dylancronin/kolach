@@ -55,7 +55,12 @@ its success marker after validating the HMM, DIAMOND, and mapping files. The
 annotation DAG requires all four assets; it does not silently download them.
 
 Download metadata (`dbcan/manifest.json`) records source URLs, the fixed release,
-checksums and tool version. Run metadata records input/database hashes, versions,
+checksums and compatible dbCAN version. Downloads use Kolach's shared atomic HTTP
+helper and stage the complete bundle before validation and publication. Failed
+transfers or validation preserve existing assets and metadata, clear the success
+marker, and remove temporary files. Downloading needs HMMER and DIAMOND for
+validation; `run_dbcan` is needed only for annotation.
+Run metadata records input/database hashes, versions,
 command, thresholds and the evidence policy. No existing shared database is
 modified during validation.
 

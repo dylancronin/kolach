@@ -25,5 +25,5 @@ rule annotate_kofam:
             heuristic_bitscore_fraction=params.heuristic_bitscore_fraction,
             heuristic_e_value=params.heuristic_e_value,
         )
-        with open(output.tsv, "w") as out_f:
+        with open(output.tsv, "w", encoding="utf-8") as out_f:
             annotate_kofam(args, out_f)

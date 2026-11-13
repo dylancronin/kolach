@@ -3,14 +3,31 @@
 This module provides annotation using eggNOG-mapper (emapper.py), mapping
 proteins to eggNOG orthologous groups and KEGG Orthologies (KOs).
 """
+import importlib.util
 import os
 from pathlib import Path
 import shutil
 import subprocess
-import sys
+import sysconfig
 import tempfile
 
 REFERENCE = "https://github.com/eggnogdb/eggnog-mapper"
+
+
+def _package_data_dir():
+    """Directory eggnog-mapper resolves as its default DATA_PATH.
+
+    eggnog-mapper sets DATA_PATH to '<parent of the eggnogmapper package>/data',
+    which is normally site-packages/data. Fall back to this interpreter's purelib
+    directory when the package cannot be located.
+    """
+    try:
+        spec = importlib.util.find_spec("eggnogmapper")
+    except (ImportError, ValueError):
+        spec = None
+    if spec is not None and spec.origin:
+        return Path(spec.origin).resolve().parent.parent / "data"
+    return Path(sysconfig.get_paths()["purelib"]) / "data"
 
 
 def ensure_package_data_dir():
@@ -21,11 +38,28 @@ def ensure_package_data_dir():
     because this is an upstream environment quirk unrelated to kolach's logic.
     """
     try:
-        data_dir = Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages" / "data"
+        data_dir = _package_data_dir()
         data_dir.mkdir(parents=True, exist_ok=True)
         return data_dir
     except OSError:
         return None
+
+
+def _optional(value):
+    """Treat None, '' and the string 'none' (any case) as an unset option."""
+    if value is None or str(value).strip().lower() in ("none", ""):
+        return None
+    return value
+
+
+def check_dependencies():
+    """Fail fast when the eggNOG-mapper executable is unavailable."""
+    if not shutil.which("emapper.py"):
+        raise FileNotFoundError(
+            "The 'emapper.py' executable was not found in PATH. "
+            "Please install eggnog-mapper (e.g. conda install -c bioconda eggnog-mapper) "
+            "or ensure your conda environment is activated."
+        )
 
 
 def annotate(args, output_file):
@@ -43,12 +77,7 @@ def annotate(args, output_file):
             - eggnog_dmnd_index_chunks: Number of chunks for processing DIAMOND seed index (or None)
         output_file: Path to destination TSV output file.
     """
-    if not shutil.which("emapper.py"):
-        raise FileNotFoundError(
-            "The 'emapper.py' executable was not found in PATH. "
-            "Please install eggnog-mapper (e.g. conda install -c bioconda eggnog-mapper) "
-            "or ensure your conda environment is activated."
-        )
+    check_dependencies()
 
     db_dir = Path(args.database_dir).expanduser().resolve() / "eggnog"
     if not db_dir.is_dir():
@@ -77,38 +106,29 @@ def annotate(args, output_file):
 
     ensure_package_data_dir()
 
-    base_tmp_dir = getattr(args, "eggnog_temp_dir", None)
-    if str(base_tmp_dir).lower() in ("none", ""):
-        base_tmp_dir = None
+    base_tmp_dir = _optional(getattr(args, "eggnog_temp_dir", None))
     if base_tmp_dir is not None:
         base_tmp_dir = str(Path(base_tmp_dir).expanduser().resolve())
         Path(base_tmp_dir).mkdir(parents=True, exist_ok=True)
 
+    threads = getattr(args, "threads", 1)
+    sensmode = _optional(getattr(args, "eggnog_sensmode", None))
+
+    block_size = _optional(getattr(args, "eggnog_dmnd_block_size", None))
+    if block_size is not None:
+        block_size = float(block_size)
+        if block_size <= 0:
+            raise ValueError(f"eggnog_dmnd_block_size must be positive, got {block_size}")
+
+    index_chunks = _optional(getattr(args, "eggnog_dmnd_index_chunks", None))
+    if index_chunks is not None:
+        index_chunks = int(index_chunks)
+        if index_chunks <= 0:
+            raise ValueError(f"eggnog_dmnd_index_chunks must be a positive integer, got {index_chunks}")
+
     with tempfile.TemporaryDirectory(prefix="kolach_eggnog_", dir=base_tmp_dir) as tmp_dir:
         tmp_dir_path = Path(tmp_dir)
         output_prefix = "eggnog_res"
-
-        threads = getattr(args, "threads", 1)
-        mode = getattr(args, "eggnog_mode", "diamond")
-        sensmode = getattr(args, "eggnog_sensmode", None)
-        if str(sensmode).lower() in ("none", ""):
-            sensmode = None
-
-        block_size = getattr(args, "eggnog_dmnd_block_size", None)
-        if str(block_size).lower() in ("none", ""):
-            block_size = None
-        if block_size is not None:
-            block_size = float(block_size)
-            if block_size <= 0:
-                raise ValueError(f"eggnog_dmnd_block_size must be positive, got {block_size}")
-
-        index_chunks = getattr(args, "eggnog_dmnd_index_chunks", None)
-        if str(index_chunks).lower() in ("none", ""):
-            index_chunks = None
-        if index_chunks is not None:
-            index_chunks = int(index_chunks)
-            if index_chunks <= 0:
-                raise ValueError(f"eggnog_dmnd_index_chunks must be a positive integer, got {index_chunks}")
 
         cmd = [
             "emapper.py",

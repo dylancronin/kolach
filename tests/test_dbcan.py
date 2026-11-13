@@ -237,26 +237,49 @@ class TestDbcan(unittest.TestCase):
 
     def test_download_marker_only_after_validation(self):
         directory = self.root / "db"
+        payload = "fixture"
 
-        def fake_download(command, log):
-            self.assertIn("--aws_s3", command)
-            self.assertIn("--no-cgc", command)
-            stage = Path(command[command.index("--db_dir") + 1])
-            for name in dbcan.ASSETS:
-                (stage / name).write_text("fixture")
+        def fake_download(url, destination):
+            self.assertEqual(url, f"{dbcan.BASE_URL}/{dbcan.ASSETS[destination.name]}")
+            destination.write_text(payload)
+            return dbcan.sha256(destination)
 
-        with patch.object(dbcan, "tool_version", return_value="5.2.9"), \
-                patch.object(dbcan, "_run", side_effect=fake_download), patch.object(dbcan, "validate_database"):
+        with patch.object(dbcan, "download_atomic", side_effect=fake_download), \
+                patch.object(dbcan, "validate_database"):
             dbcan.download_dbcan(directory)
         self.assertTrue((directory / ".download_complete").exists())
-        self.assertEqual(json.loads((directory / "manifest.json").read_text())["release"], dbcan.RELEASE)
-        with patch.object(dbcan, "tool_version", return_value="5.2.9"), \
-                patch.object(dbcan, "_run", side_effect=fake_download), \
+        manifest_text = (directory / "manifest.json").read_text()
+        manifest = json.loads(manifest_text)
+        self.assertEqual(manifest["release"], dbcan.RELEASE)
+        self.assertEqual(manifest["compatible_tool_version"], dbcan.VERSION)
+        for name in dbcan.ASSETS:
+            self.assertEqual(manifest["files"][name]["sha256"], dbcan.sha256(directory / name))
+        payload = "invalid replacement"
+        with patch.object(dbcan, "download_atomic", side_effect=fake_download), \
                 patch.object(dbcan, "validate_database", side_effect=ValueError("broken")):
             with self.assertRaises(ValueError):
                 dbcan.download_dbcan(directory)
         self.assertFalse((directory / ".download_complete").exists())
-        self.assertTrue((directory / "CAZy.dmnd").exists())
+        self.assertEqual((directory / "manifest.json").read_text(), manifest_text)
+        self.assertTrue(all((directory / name).read_text() == "fixture" for name in dbcan.ASSETS))
+
+    def test_interrupted_download_preserves_existing_bundle(self):
+        from io import BytesIO
+        from urllib.error import URLError
+
+        directory = self.root / "db"
+        directory.mkdir()
+        for name in [*dbcan.ASSETS, "manifest.json", ".download_complete"]:
+            (directory / name).write_text("previous")
+        with patch("kolach.download.urlopen", side_effect=[BytesIO(b"new asset"), URLError("interrupted")]), \
+                patch.object(dbcan, "validate_database") as validate:
+            with self.assertRaises(URLError):
+                dbcan.download_dbcan(directory)
+        validate.assert_not_called()
+        self.assertFalse((directory / ".download_complete").exists())
+        self.assertTrue(all((directory / name).read_text() == "previous"
+                            for name in [*dbcan.ASSETS, "manifest.json"]))
+        self.assertEqual(sorted(p.name for p in directory.iterdir()), sorted([*dbcan.ASSETS, "manifest.json"]))
 
     def test_database_and_process_failures(self):
         with self.assertRaises(FileNotFoundError):
@@ -275,15 +298,34 @@ class TestDbcan(unittest.TestCase):
             argv = ["kolach", command, "--databases", "dbcan", "--database-dir", str(self.root)]
             if command == "annotate":
                 argv += ["--protein-fasta", str(self.fasta)]
-            with patch.object(sys, "argv", argv), patch("kolach.cli.subprocess.run") as run:
-                run.return_value.returncode = 0
+            with patch.object(sys, "argv", argv), patch("kolach.cli.run_workflow") as run, \
+                    patch.object(dbcan, "check_dependencies"):
+                run.return_value = 0
                 main()
-                self.assertIn("databases=['dbcan']", run.call_args.args[0])
+                self.assertEqual(run.call_args.args[0], f"{command}.smk")
+                self.assertEqual(run.call_args.args[1]["databases"], ["dbcan"])
         output = self.root / "integrated.tsv"
         argv = ["kolach", "integrate", "--dbcan-table", str(self.summary()), "--output-file", str(output)]
         with patch.object(sys, "argv", argv):
             main()
         self.assertIn("dbcan_id", output.read_text().splitlines()[0])
+
+    def test_cli_preflight_reports_missing_dbcan_executable(self):
+        from kolach.cli import main
+        import contextlib
+        import io
+
+        for missing in ("run_dbcan", "hmmstat", "diamond"):
+            with self.subTest(missing=missing), \
+                    patch.object(dbcan.shutil, "which", side_effect=lambda name: None if name == missing else f"/bin/{name}"), \
+                    patch("kolach.cli.run_workflow") as run, \
+                    contextlib.redirect_stderr(io.StringIO()) as error, \
+                    self.assertRaises(SystemExit) as exit_:
+                main(["annotate", "--databases", "dbcan", "--database-dir", str(self.root),
+                      "--protein-fasta", str(self.fasta)])
+            self.assertEqual(exit_.exception.code, 1)
+            self.assertIn(missing, error.getvalue())
+            run.assert_not_called()
 
 
 @unittest.skipUnless(shutil.which("snakemake"), "Snakemake is optional")
@@ -307,7 +349,7 @@ else:
     for source in pathlib.Path(os.environ['DBCAN_FIXTURE']).glob('*'):
         shutil.copyfile(source, out / source.name)
 """
-        for name in ["run_dbcan", "hmmstat", "diamond"]:
+        for name in ["run_dbcan", "hmmstat", "hmmsearch", "diamond"]:
             path = bindir / name
             path.write_text(script)
             path.chmod(0o755)

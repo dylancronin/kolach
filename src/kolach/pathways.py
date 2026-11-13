@@ -2,8 +2,12 @@ import json
 import re
 from pathlib import Path
 from typing import Union
-from urllib.request import Request, urlopen
+from urllib.request import Request
 import pandas as pd
+
+from kolach import package_version
+from kolach.download import download_atomic
+from kolach.integrate import KO_REGEX as KO_TOKEN_REGEX
 
 
 KEGG_HIERARCHY_URL = (
@@ -12,7 +16,6 @@ KEGG_HIERARCHY_URL = (
 
 
 KO_REGEX = re.compile(r"^K\d{5}$")
-KO_TOKEN_REGEX = re.compile(r"\bK\d{5}\b")
 
 
 def is_valid_hierarchy_json(file_path: Path) -> bool:
@@ -53,28 +56,69 @@ def download_kegg_hierarchy(
     if verbose:
         print(f"[kolach] Downloading KEGG Orthology hierarchy (ko00001.json) to {dest_path}...")
 
-    # Stream download via a temporary file to avoid leaving a corrupt file on disconnect
-    temp_path = dest_path.with_suffix(".tmp")
-    req = Request(KEGG_HIERARCHY_URL, headers={"User-Agent": "kolach/0.0.0"})
-    try:
-        with urlopen(req, timeout=180) as response:
-            temp_path.write_bytes(response.read())
-        # Validate downloaded payload before replacing destination
-        if not is_valid_hierarchy_json(temp_path):
+    def validate(path: Path) -> None:
+        if not is_valid_hierarchy_json(path):
             raise ValueError(
                 "Downloaded file is not a valid KEGG hierarchy JSON (check network/permissions)."
             )
-        temp_path.replace(dest_path)
-        if verbose:
-            print(f"[kolach] Downloaded ko00001.json ({dest_path.stat().st_size / 1024 / 1024:.1f} MB).")
+
+    req = Request(KEGG_HIERARCHY_URL, headers={"User-Agent": f"kolach/{package_version()}"})
+    try:
+        download_atomic(req, dest_path, validate=validate)
     except Exception as e:
-        if temp_path.exists():
-            temp_path.unlink()
         raise RuntimeError(
             f"Failed to download KEGG hierarchy from {KEGG_HIERARCHY_URL}: {e}"
         ) from e
+    if verbose:
+        print(f"[kolach] Downloaded ko00001.json ({dest_path.stat().st_size / 1024 / 1024:.1f} MB).")
 
     return dest_path
+
+
+def _collect_kegg_hierarchy(json_path: Union[str, Path]) -> dict[str, dict[str, set[str]]]:
+    """Map each KO to the sets of level A/B/C names it appears under in ko00001.json."""
+    json_path = Path(json_path).expanduser().resolve()
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    # Sets deduplicate KOs appearing in multiple places within the hierarchy
+    raw_mapping: dict[str, dict[str, set[str]]] = {}
+
+    # Tier 1 (Level A): Top-level categories (e.g., "09100 Metabolism")
+    for cat_a_node in data.get("children", []):
+        cat_a_name = cat_a_node.get("name", "").strip()
+
+        # Tier 2 (Level B): Subcategories (e.g., "09101 Carbohydrate metabolism")
+        for cat_b_node in cat_a_node.get("children", []):
+            cat_b_name = cat_b_node.get("name", "").strip()
+
+            # Tier 3 (Level C): Pathways / Brite groups (e.g., "00010 Glycolysis ... [PATH:ko00010]")
+            for cat_c_node in cat_b_node.get("children", []):
+                cat_c_name = cat_c_node.get("name", "").strip()
+                # Remove brackets suffix like [PATH:ko00010] or [BR:ko01000]
+                clean_pathway = re.sub(r"\s*\[(PATH|BR):[^\]]+\]", "", cat_c_name).strip()
+
+                # Tier 4 (Level D): KO nodes (e.g., "K00844  HK, glk; hexokinase [EC:2.7.1.1]")
+                for ko_node in cat_c_node.get("children", []):
+                    parts = ko_node.get("name", "").strip().split(None, 1)
+                    if not (parts and KO_REGEX.match(parts[0])):
+                        continue
+                    info = raw_mapping.setdefault(parts[0], {
+                        "category": set(), "subcategory": set(), "pathway": set(),
+                    })
+                    if cat_a_name:
+                        info["category"].add(cat_a_name)
+                    if cat_b_name:
+                        info["subcategory"].add(cat_b_name)
+                    if clean_pathway:
+                        info["pathway"].add(clean_pathway)
+
+    return raw_mapping
+
+
+def _join(values: set[str]) -> str:
+    """Sorted, semicolon-separated values, or '-' when empty."""
+    return "; ".join(sorted(values)) if values else "-"
 
 
 def parse_kegg_hierarchy(json_path: Union[str, Path]) -> dict[str, dict[str, str]]:
@@ -94,62 +138,10 @@ def parse_kegg_hierarchy(json_path: Union[str, Path]) -> dict[str, dict[str, str
                 "pathway": "00010 Glycolysis / Gluconeogenesis; ..."
             }
     """
-    json_path = Path(json_path).expanduser().resolve()
-    with open(json_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    # Use sets during accumulation to automatically deduplicate KOs appearing
-    # in multiple places within the hierarchy
-    raw_mapping: dict[str, dict[str, set[str]]] = {}
-
-    # Tier 1 (Level A): Top-level categories (e.g., "09100 Metabolism")
-    for cat_a_node in data.get("children", []):
-        cat_a_name = cat_a_node.get("name", "").strip()
-
-        # Tier 2 (Level B): Subcategories (e.g., "09101 Carbohydrate metabolism")
-        for cat_b_node in cat_a_node.get("children", []):
-            cat_b_name = cat_b_node.get("name", "").strip()
-
-            # Tier 3 (Level C): Pathways / Brite groups (e.g., "00010 Glycolysis ... [PATH:ko00010]")
-            for cat_c_node in cat_b_node.get("children", []):
-                cat_c_name = cat_c_node.get("name", "").strip()
-                # Remove brackets suffix like [PATH:ko00010] or [BR:ko01000]
-                clean_pathway = re.sub(r"\s*\[(PATH|BR):[^\]]+\]", "", cat_c_name).strip()
-
-                # Tier 4 (Level D): KO nodes (e.g., "K00844  HK, glk; hexokinase [EC:2.7.1.1]")
-                for ko_node in cat_c_node.get("children", []):
-                    ko_text = ko_node.get("name", "").strip()
-                    parts = ko_text.split(None, 1)
-
-                    if parts and KO_REGEX.match(parts[0]):
-                        ko_id = parts[0]
-
-                        if ko_id not in raw_mapping:
-                            raw_mapping[ko_id] = {
-                                "categories": set(),
-                                "subcategories": set(),
-                                "pathways": set(),
-                            }
-
-                        if cat_a_name:
-                            raw_mapping[ko_id]["categories"].add(cat_a_name)
-                        if cat_b_name:
-                            raw_mapping[ko_id]["subcategories"].add(cat_b_name)
-                        if clean_pathway:
-                            raw_mapping[ko_id]["pathways"].add(clean_pathway)
-
-    # Convert sets into sorted, semicolon-separated strings for easy column population
-    kegg_map: dict[str, dict[str, str]] = {}
-    for ko_id, info in raw_mapping.items():
-        kegg_map[ko_id] = {
-            "category": "; ".join(sorted(info["categories"])) if info["categories"] else "-",
-            "subcategory": "; ".join(sorted(info["subcategories"])) if info["subcategories"] else "-",
-            "pathway": "; ".join(sorted(info["pathways"])) if info["pathways"] else "-",
-        }
-
-    return kegg_map
-
-
+    return {
+        ko_id: {level: _join(names) for level, names in info.items()}
+        for ko_id, info in _collect_kegg_hierarchy(json_path).items()
+    }
 
 
 def annotate_pathways(
@@ -186,11 +178,13 @@ def annotate_pathways(
 
     if verbose:
         print(f"[kolach] Parsing KEGG Orthology hierarchy from {json_path}...")
-    kegg_map = parse_kegg_hierarchy(json_path)
+    kegg_map = _collect_kegg_hierarchy(json_path)
     if verbose:
         print(f"[kolach] Loaded {len(kegg_map):,} KO hierarchy mappings.")
 
-    df = pd.read_csv(in_path, sep="\t", dtype=str)
+    # keep_default_na=False keeps literal cell values such as "NA" or "None" (for
+    # example gene IDs) intact instead of turning them into blanks on write-back.
+    df = pd.read_csv(in_path, sep="\t", dtype=str, keep_default_na=False)
     if ko_col not in df.columns:
         raise ValueError(
             f"Column '{ko_col}' not found in {in_path}. Available columns: {list(df.columns)}"
@@ -203,26 +197,19 @@ def annotate_pathways(
     def lookup_kos(val: str) -> tuple[str, str, str]:
         if pd.isna(val) or not val or str(val).strip() in ("", "-", "None", "nan"):
             return "-", "-", "-"
-        # Parse all KO identifiers matching standard K\d{5} regex (same as integrate.py)
+        # Same KO token pattern as integration.
         kos = KO_TOKEN_REGEX.findall(str(val))
         if not kos:
             return "-", "-", "-"
 
         cats, subcats, paths = set(), set(), set()
         for k in kos:
-            if k in kegg_map:
-                info = kegg_map[k]
-                if info["category"] != "-":
-                    cats.update(info["category"].split("; "))
-                if info["subcategory"] != "-":
-                    subcats.update(info["subcategory"].split("; "))
-                if info["pathway"] != "-":
-                    paths.update(info["pathway"].split("; "))
-
-        cat_str = "; ".join(sorted(cats)) if cats else "-"
-        subcat_str = "; ".join(sorted(subcats)) if subcats else "-"
-        path_str = "; ".join(sorted(paths)) if paths else "-"
-        return cat_str, subcat_str, path_str
+            info = kegg_map.get(k)
+            if info is not None:
+                cats |= info["category"]
+                subcats |= info["subcategory"]
+                paths |= info["pathway"]
+        return _join(cats), _join(subcats), _join(paths)
 
     results = df[ko_col].apply(lookup_kos)
     cat_series = results.apply(lambda x: x[0])
@@ -268,7 +255,3 @@ def annotate_pathways(
         )
 
     return df
-
-
-
-

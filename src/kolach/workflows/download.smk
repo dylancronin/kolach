@@ -23,9 +23,21 @@ if "kofam" in SELECTED_DBS:
     include: "rules/download_kofam.smk"
 
 if "deepkoala" in SELECTED_DBS:
+    from kolach.methods.deepkoala import resolve_release
+
     DEEPKOALA_DIR = str(DB_DIR / "deepkoala")
-    targets.append(f"{DEEPKOALA_DIR}/.download_complete")
+    # Resolve 'latest' now so a newly published release becomes a new target
+    # instead of being masked by an existing download marker.
+    DEEPKOALA_RELEASE = resolve_release(config.get("deepkoala_release", "latest"))
+    targets.append(f"{DEEPKOALA_DIR}/{DEEPKOALA_RELEASE}/manifest.json")
     include: "rules/download_deepkoala.smk"
+
+if targets:
+    # KEGG Orthology hierarchy used by --add-pathways, fetched up front so the
+    # annotation workflow does not need network access.
+    KEGG_HIERARCHY = str(DB_DIR / "ko00001.json")
+    targets.append(KEGG_HIERARCHY)
+    include: "rules/download_kegg.smk"
 
 rule all:
     default_target: True

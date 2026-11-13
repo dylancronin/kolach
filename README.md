@@ -32,7 +32,11 @@ kolach download --database-dir /path/to/databases --databases kofam deepkoala eg
 ```
 
 Optional download flags:
-- `--deepkoala-release`: Model release tag (`latest` or release tag like `202608`, default: `latest`).
+- `--deepkoala-release`: Model release tag (`latest` or release tag like `202608`, default: `latest`). `latest` is resolved against GenomeNet on every run, so re-running the download picks up newly published models.
+
+The KEGG Orthology hierarchy (`ko00001.json`) used by `--add-pathways` is downloaded alongside the selected databases, so annotation runs do not need network access.
+
+If you install kolach with pip rather than the conda environment, DeepKOALA's PyTorch dependency is an optional extra: `pip install "kolach[deepkoala]"`.
 
 ### 2. Annotate Proteins
 
@@ -72,6 +76,8 @@ kolach integrate \
     --evidence-file kolach_evidence.tsv \
     --database-dir /path/to/databases
 ```
+
+When `--protein-fasta` is given, gene IDs (the first token of each header) must be unique; duplicates are rejected.
 
 ---
 

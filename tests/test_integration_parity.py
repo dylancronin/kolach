@@ -258,13 +258,25 @@ class PipelineParity(unittest.TestCase):
             directory = Path(directory)
             fasta = directory / "genes.faa.gz"
             with gzip.open(fasta, "wt") as stream:
-                stream.write(">b description\nM\n>a\nM\n>b duplicate\nM\n")
+                stream.write(">b description\nM\n>a\nM\n")
             kofam = directory / "kofam.tsv"
             for content in ("", "gene_id\tko\n"):
                 kofam.write_text(content)
                 self.compare(protein_fasta=fasta, kofam_tsv=kofam)
             kofam.write_text("gene_id\tko\tassignment\nextra\tK00001\tthreshold\n")
             self.compare(protein_fasta=fasta, kofam_tsv=kofam)
+
+    def test_duplicate_fasta_ids_are_rejected(self):
+        # The reference emitted one summary row per duplicate header, each carrying
+        # the same evidence; duplicate IDs are now rejected as ambiguous input.
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            fasta = directory / "genes.faa"
+            fasta.write_text(">b description\nM\n>a\nM\n>b duplicate\nM\n")
+            kofam = directory / "kofam.tsv"
+            kofam.write_text("gene_id\tko\tassignment\nb\tK00001\tthreshold\n")
+            with self.assertRaisesRegex(ValueError, "duplicate gene ID"):
+                current.integrate_annotations(protein_fasta=fasta, kofam_tsv=kofam)
 
     def test_metric_boundaries_duplicates_and_definition_precedence(self):
         with tempfile.TemporaryDirectory() as directory:

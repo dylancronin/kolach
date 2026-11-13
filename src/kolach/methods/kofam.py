@@ -8,6 +8,7 @@ import gzip
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -23,7 +24,7 @@ FIELDS = ["gene_id", "ko", "assignment", "score_type", "threshold", "bit_score",
 
 def read_profiles(path):
     profiles = {}
-    with open(path) as handle:
+    with open(path, encoding="utf-8") as handle:
         for row in csv.DictReader(handle, delimiter="\t"):
             if row["threshold"] == "-":
                 continue  # anvi'o's default excludes KOs without thresholds
@@ -74,7 +75,7 @@ def download_kofam(directory):
 def count_proteins(path):
     ids = set()
     has_sequence = False
-    with open(path) as handle:
+    with open(path, encoding="utf-8") as handle:
         for line in handle:
             line = line.strip()
             if not line:
@@ -97,7 +98,7 @@ def count_proteins(path):
 
 
 def parse_hits(path):
-    with open(path) as handle:
+    with open(path, encoding="utf-8") as handle:
         for line in handle:
             if not line.strip() or line.startswith("#"):
                 continue
@@ -113,7 +114,7 @@ def assign_hits(hits, profiles, *, fraction=0.75, evalue=1e-5, rescue=True):
     """Apply initial >= thresholds, then unique-KO rescue with strict > scores."""
     fraction = float(fraction)
     evalue = float(evalue)
-    rescue = str(rescue).lower() not in ("false", "0", "none", "")
+    rescue = bool(rescue)
     if not math.isfinite(fraction) or not 0 <= fraction <= 1:
         raise ValueError("Heuristic bit-score fraction must be between 0 and 1")
     if not math.isfinite(evalue) or evalue < 0:
@@ -143,7 +144,18 @@ def assign_hits(hits, profiles, *, fraction=0.75, evalue=1e-5, rescue=True):
     return sorted(accepted, key=lambda row: (row["gene_id"], row["ko"]))
 
 
+def check_dependencies():
+    """Fail fast when the HMMER executable is unavailable."""
+    if not shutil.which("hmmsearch"):
+        raise FileNotFoundError(
+            "The 'hmmsearch' executable was not found in PATH. "
+            "Please install HMMER (e.g. conda install -c bioconda hmmer) "
+            "or ensure your conda environment is activated."
+        )
+
+
 def annotate(args, output):
+    check_dependencies()
     db = Path(args.database_dir).expanduser().resolve() / "kofam"
     profiles = read_profiles(db / "ko_list")
     fasta = Path(args.protein_fasta).expanduser().resolve()
@@ -153,7 +165,7 @@ def annotate(args, output):
         raise ValueError("Threads must be at least 1")
     with tempfile.TemporaryDirectory(prefix="kolach-kofam-") as tmp:
         table = Path(tmp) / "hits.tbl"
-        cmd = ["hmmsearch", "--cpu", str(threads), "--noali", "-o", "/dev/null",
+        cmd = ["hmmsearch", "--cpu", str(threads), "--noali", "-o", os.devnull,
                "--tblout", str(table), "-Z", str(count), "--domZ", str(count)]
         if getattr(args, "no_hmmer_prefiltering", False):
             cmd.extend(["-T", "-20", "--domT", "-20"])

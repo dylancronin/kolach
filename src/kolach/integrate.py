@@ -3,14 +3,26 @@
 from collections import Counter
 from dataclasses import dataclass, field
 import gzip
+import math
 from pathlib import Path
 import re
 from typing import Any, Optional, Union
+import warnings
 
 import numpy as np
 import pandas as pd
 
 KO_REGEX = re.compile(r"\bK\d{5}\b")
+_KO_DELIMITERS = re.compile(r"[,+;\s|]+")
+
+# Per-hit evidence status assigned by the adapters. heuristic_rescued is KOfam's
+# own tier and is never merged with below_threshold.
+THRESHOLD_PASSING = "threshold_passing"
+HEURISTIC_RESCUED = "heuristic_rescued"
+BELOW_THRESHOLD = "below_threshold"
+UNKNOWN = "unknown"
+# Deduplication preference when one tool reports a gene/KO pair more than once.
+STATUS_RANK = {THRESHOLD_PASSING: 3, HEURISTIC_RESCUED: 2, BELOW_THRESHOLD: 1, UNKNOWN: 0}
 
 EVIDENCE_COLUMNS = [
     "gene_id", "ko", "method", "bit_score", "e_value",
@@ -20,24 +32,27 @@ EVIDENCE_COLUMNS = [
     "original_status", "cross_method_status", "consensus_level", "supporting_methods",
 ]
 
-def _validate_gene_ids(values: pd.Series, path: Path, method: str) -> None:
-    invalid = values.isna() | values.astype("string").str.strip().eq("")
+def _clean_gene_ids(frame: pd.DataFrame, path: Path, method: str) -> None:
+    """Reject missing or blank gene IDs, then store them stripped."""
+    values = frame["gene_id"]
+    stripped = values.astype("string").str.strip()
+    invalid = values.isna() | stripped.eq("")
     if invalid.any():
         rows = ", ".join(str(i + 2) for i in values.index[invalid][:5])
         raise ValueError(f"{method} file '{path}' contains missing or blank gene IDs at row(s): {rows}")
+    frame["gene_id"] = stripped.astype(str)
+
+def _text(value: Any, default: str = "-") -> str:
+    """Stripped text, or `default` when the value is missing or blank."""
+    return (str(value).strip() if pd.notna(value) else "") or default
 
 def parse_kos(val: Any) -> set[str]:
     """Extract KO tokens from common tool delimiters; missing values give no KOs."""
-    if pd.isna(val) or val is None or str(val).strip() in ("", "-", "None", "nan"):
+    if pd.isna(val):
         return set()
-
-    tokens = re.split(r"[,+;\s|]+", str(val).strip())
-    kos = set()
-    for t in tokens:
-        m = KO_REGEX.search(t)
-        if m:
-            kos.add(m.group(0))
-    return kos
+    # Search per token so a token such as "K00001/K00002" still yields one KO.
+    matches = (KO_REGEX.search(token) for token in _KO_DELIMITERS.split(str(val).strip()))
+    return {match.group(0) for match in matches if match}
 
 def format_kos(kos: set[str]) -> str:
     """Sort KO identifiers for deterministic output."""
@@ -51,16 +66,22 @@ def format_metric_value(value: Any) -> str:
     return f"{numeric:.6g}" if np.isfinite(numeric) else "-"
 
 def read_fasta_ids(fasta_path: Union[str, Path]) -> list[str]:
-    """Read the first token of each header, preserving order and duplicates."""
-    fasta_path = Path(fasta_path).expanduser().resolve()
+    """Read the first token of each header in order; duplicate IDs are an error."""
     gene_ids = []
-
-    with _open_text(fasta_path) as f:
+    with _open_text(Path(fasta_path).expanduser().resolve()) as f:
         for line in f:
             if line.startswith(">"):
                 parts = line[1:].split()
                 if parts:
                     gene_ids.append(parts[0])
+    # A repeated ID would make the gene's evidence ambiguous.
+    duplicates = [gid for gid, count in Counter(gene_ids).items() if count > 1]
+    if duplicates:
+        shown = ", ".join(duplicates[:5]) + (", ..." if len(duplicates) > 5 else "")
+        raise ValueError(
+            f"Protein FASTA '{fasta_path}' contains {len(duplicates)} duplicate gene ID(s): {shown}. "
+            "Gene IDs (first header token) must be unique."
+        )
     return gene_ids
 
 def _open_text(path):
@@ -78,16 +99,19 @@ def load_ko_definitions(ko_list_path: Optional[Union[str, Path]]) -> dict[str, s
         return definitions
 
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        with _open_text(path) as f:
             for line in f:
                 parts = line.rstrip("\r\n").split("\t")
                 if len(parts) >= 2:
                     ko = parts[0].strip()
                     if KO_REGEX.fullmatch(ko):
-                        definition = parts[-1].strip() if len(parts) > 1 else ""
-                        definitions[ko] = definition
-    except Exception:
-        pass
+                        definitions[ko] = parts[-1].strip()
+    except (OSError, UnicodeError) as exc:
+        warnings.warn(
+            f"Could not read KO definitions from '{path}': {exc}. "
+            "Falling back to per-tool definitions.",
+            RuntimeWarning, stacklevel=2,
+        )
     return definitions
 
 def select_kofam_scores(
@@ -137,10 +161,7 @@ def _numeric_columns(frame, columns):
 
 def _deduplicate(frame, status_column, score_columns, ascending):
     """Prefer status before metrics, breaking ties by original input order."""
-    frame["_status_rank"] = frame[status_column].map({
-        "threshold_passing": 3, "heuristic_rescued": 2,
-        "below_threshold": 1, "unknown": 0,
-    })
+    frame["_status_rank"] = frame[status_column].map(STATUS_RANK)
     frame["_orig_idx"] = np.arange(len(frame))
     frame = frame.sort_values(
         ["gene_id", "ko", "_status_rank"] + score_columns + ["_orig_idx"],
@@ -164,14 +185,20 @@ def _rename_columns(frame, aliases, strip_hash=False):
     return frame.rename(columns=renamed)
 
 
-def _read_tool_table(path):
-    if not path.is_file() or path.stat().st_size == 0:
-        return pd.DataFrame()
-    return pd.read_csv(path, sep="\t", dtype=str)
+def _is_empty_input(path):
+    return not path.is_file() or path.stat().st_size == 0
 
 
 def _finite(value):
+    if isinstance(value, float):  # also covers np.float64
+        return math.isfinite(value)
     return pd.notna(value) and np.isfinite(value)
+
+
+def _threshold_status(score, cutoff):
+    if _finite(score) and _finite(cutoff):
+        return THRESHOLD_PASSING if score >= cutoff else BELOW_THRESHOLD
+    return UNKNOWN
 
 
 def extract_kofam_records(
@@ -180,17 +207,16 @@ def extract_kofam_records(
 ) -> list[dict]:
     """Explicit assignment wins over inferred full/domain profile status."""
     path = Path(tsv_path).expanduser().resolve()
-    if not path.is_file() or path.stat().st_size == 0:
+    if _is_empty_input(path):
         return []
-    frame = _read_tool_table(path)
+    frame = pd.read_csv(path, sep="\t", dtype=str)
     missing = {"gene_id", "ko"} - set(frame.columns)
     if missing:
         raise ValueError(f"KOfam file '{path}' missing required column(s): {', '.join(sorted(missing))}")
     if frame.empty:
         return []
-    _validate_gene_ids(frame["gene_id"], path, "KOfam")
-    for column in ("gene_id", "ko"):
-        frame[column] = frame[column].astype(str).str.strip()
+    _clean_gene_ids(frame, path, "KOfam")
+    frame["ko"] = frame["ko"].astype(str).str.strip()
     _numeric_columns(frame, ["bit_score", "e_value", "domain_bit_score", "domain_e_value", "threshold"])
     for column in ("score_type", "definition", "assignment"):
         if column not in frame.columns:
@@ -200,9 +226,9 @@ def extract_kofam_records(
         return []
     selected = []
     statuses = []
-    assignments = {"threshold": "threshold_passing", "*": "threshold_passing",
-                   "rescued": "heuristic_rescued", "below_threshold": "below_threshold",
-                   "below": "below_threshold", "none": "below_threshold"}
+    assignments = {"threshold": THRESHOLD_PASSING, "*": THRESHOLD_PASSING,
+                   "rescued": HEURISTIC_RESCUED, "below_threshold": BELOW_THRESHOLD,
+                   "below": BELOW_THRESHOLD, "none": BELOW_THRESHOLD}
     # Iterating columns avoids constructing a pandas Series for each hit.
     columns = zip(
         frame["score_type"], frame["bit_score"], frame["e_value"],
@@ -210,83 +236,76 @@ def extract_kofam_records(
         frame["assignment"],
     )
     for score_type, bit_score, e_value, domain_score, domain_evalue, threshold, assignment in columns:
-        score, evalue, kind = select_kofam_scores(
-            score_type, bit_score, e_value, domain_score, domain_evalue,
-        )
-        selected.append((score, evalue))
-        assignment = str(assignment).strip().lower() if pd.notna(assignment) else ""
-        status = assignments.get(assignment)
-        if status is None:
-            if kind != "-" and _finite(score) and _finite(threshold):
-                status = "threshold_passing" if score >= threshold else "below_threshold"
-            else:
-                status = "unknown"
-        statuses.append(status)
-    frame["_sel_bit_score"] = [score for score, _ in selected]
-    frame["_sel_e_value"] = [evalue for _, evalue in selected]
+        scores = select_kofam_scores(score_type, bit_score, e_value, domain_score, domain_evalue)
+        selected.append(scores)
+        status = assignments.get(_text(assignment, "").lower())
+        statuses.append(status or _threshold_status(scores[0], threshold))
+    frame["_selected"] = pd.Series(selected, index=frame.index, dtype=object)
+    frame["_sel_bit_score"] = [score for score, _, _ in selected]
+    frame["_sel_e_value"] = [evalue for _, evalue, _ in selected]
     frame["_original_status"] = statuses
     frame = _deduplicate(frame, "_original_status", ["_sel_bit_score", "_sel_e_value"], [False, True])
     records = []
-    for _, row in frame.iterrows():
+    for row in frame.to_dict("records"):
         threshold = row["threshold"]
-        rescued = row["_original_status"] == "heuristic_rescued"
-        cutoff = heuristic_bitscore_fraction * threshold if rescued and _finite(threshold) else threshold
+        rescued = row["_original_status"] == HEURISTIC_RESCUED
         # A nonfinite rescued cutoff remains missing, as in the upstream adapter.
-        if rescued and not _finite(threshold):
-            cutoff = np.nan
+        if rescued:
+            cutoff = heuristic_bitscore_fraction * threshold if _finite(threshold) else np.nan
+        else:
+            cutoff = threshold
         records.append(make_evidence_record(
             row["gene_id"], row["ko"], "kofam", row["_original_status"],
             bit_score=row["bit_score"], e_value=row["e_value"],
             domain_bit_score=row["domain_bit_score"], domain_e_value=row["domain_e_value"],
-            score_type=str(row["score_type"]).strip() if pd.notna(row["score_type"]) else "-",
+            score_type=_text(row["score_type"]),
             threshold=threshold, bit_score_threshold=cutoff,
             e_value_threshold=float(heuristic_e_value) if rescued else np.nan,
-            definition=str(row["definition"]).strip() if pd.notna(row["definition"]) else "-",
-            assignment=(str(row["assignment"]).strip() if pd.notna(row["assignment"]) else "") or "-",
+            definition=_text(row["definition"]),
+            assignment=_text(row["assignment"]),
+            # (bit score, E-value, score type) reused by the gene summary.
+            kofam_selected=row["_selected"],
         ))
-        if not records[-1]["definition"]:
-            records[-1]["definition"] = "-"
     return records
 
 def extract_deepkoala_records(tsv_path: Union[str, Path]) -> list[dict]:
     """Read upstream-filtered labels or predictions with threshold evidence."""
     path = Path(tsv_path).expanduser().resolve()
-    if not path.is_file() or path.stat().st_size == 0:
+    if _is_empty_input(path):
         return []
-    frame = _read_tool_table(path)
+    frame = pd.read_csv(path, sep="\t", dtype=str)
     columns = [column.lstrip("#").strip().lower() for column in frame.columns]
     simple = len(columns) == 2 and "name" in columns and "predict_label" in columns
-    if not any(column in columns for column in ("name", "gene_id")):
-        raise ValueError(f"DeepKOALA file '{path}' missing required 'name' or 'gene_id' column")
-    if not any(column in columns for column in ("predict_label", "ko")):
-        raise ValueError(f"DeepKOALA file '{path}' missing required 'predict_label' or 'ko' column")
     frame = _rename_columns(frame, {
         "gene_id": ("name", "gene_id"), "predict_label": ("predict_label", "ko"),
         "deepkoala_score": ("probability", "score"),
         "deepkoala_threshold": ("threshold",), "deepkoala_annotate": ("annotate",),
     }, strip_hash=True)
+    if "gene_id" not in frame.columns:
+        raise ValueError(f"DeepKOALA file '{path}' missing required 'name' or 'gene_id' column")
+    if "predict_label" not in frame.columns:
+        raise ValueError(f"DeepKOALA file '{path}' missing required 'predict_label' or 'ko' column")
     if frame.empty:
         return []
-    _validate_gene_ids(frame["gene_id"], path, "DeepKOALA")
-    frame["gene_id"] = frame["gene_id"].astype(str).str.strip()
+    _clean_gene_ids(frame, path, "DeepKOALA")
     _numeric_columns(frame, ["deepkoala_score", "deepkoala_threshold"])
+    if "deepkoala_annotate" not in frame.columns:
+        frame["deepkoala_annotate"] = ""
     rows = []
-    for _, row in frame.iterrows():
-        score, threshold = row["deepkoala_score"], row["deepkoala_threshold"]
-        annotation = row.get("deepkoala_annotate", "")
-        annotation = str(annotation).strip() if pd.notna(annotation) else ""
+    for gene_id, labels, score, threshold, annotation in zip(
+        frame["gene_id"], frame["predict_label"], frame["deepkoala_score"],
+        frame["deepkoala_threshold"], frame["deepkoala_annotate"],
+    ):
         if simple:
-            status, score_type = "threshold_passing", "upstream_filtered"
-        elif "*" in annotation:
-            status, score_type = "threshold_passing", "probability"
-        elif _finite(score) and _finite(threshold):
-            status = "threshold_passing" if score >= threshold else "below_threshold"
-            score_type = "probability"
+            status, score_type = THRESHOLD_PASSING, "upstream_filtered"
+        elif "*" in _text(annotation, ""):
+            status, score_type = THRESHOLD_PASSING, "probability"
         else:
-            status, score_type = "unknown", "-"
-        for ko in parse_kos(row["predict_label"]):
+            status = _threshold_status(score, threshold)
+            score_type = "-" if status == UNKNOWN else "probability"
+        for ko in parse_kos(labels):
             rows.append({
-                "gene_id": row["gene_id"], "ko": ko, "original_status": status,
+                "gene_id": gene_id, "ko": ko, "original_status": status,
                 "score_type": score_type, "deepkoala_score": score,
                 "deepkoala_threshold": threshold,
             })
@@ -294,7 +313,7 @@ def extract_deepkoala_records(tsv_path: Union[str, Path]) -> list[dict]:
         return []
     frame = _deduplicate(pd.DataFrame(rows), "original_status", ["deepkoala_score"], [False])
     records = []
-    for _, row in frame.iterrows():
+    for row in frame.to_dict("records"):
         records.append(make_evidence_record(
             row["gene_id"], row["ko"], "deepkoala", row["original_status"],
             score_type=row["score_type"], deepkoala_probability=row["deepkoala_score"],
@@ -315,13 +334,9 @@ def read_eggnog_tsv(tsv_path: Union[str, Path]) -> pd.DataFrame:
     with _open_text(path) as f:
         for idx, line in enumerate(f):
             stripped = line.strip()
-            if not stripped:
+            if not stripped or stripped.startswith("##"):
                 skip_indices.append(idx)
-                continue
-            if stripped.startswith("##"):
-                skip_indices.append(idx)
-                continue
-            if header_line is None:
+            elif header_line is None:
                 if stripped.startswith("#"):
                     first_cell = re.sub(r"\s+", "", stripped.split("\t")[0].lower())
                     if first_cell not in ("#query", "#gene_id"):
@@ -329,9 +344,8 @@ def read_eggnog_tsv(tsv_path: Union[str, Path]) -> pd.DataFrame:
                         continue
                 header_line = line.rstrip("\r\n")
                 header_idx = idx
-            else:
-                if stripped.startswith("#"):
-                    skip_indices.append(idx)
+            elif stripped.startswith("#"):
+                skip_indices.append(idx)
 
     if header_line is None:
         raise ValueError(f"eggNOG annotations file contains no valid header: '{path}'")
@@ -361,7 +375,7 @@ def extract_eggnog_records(
 ) -> list[dict]:
     """Rank duplicate hits but retain all seed sources for group disambiguation."""
     path = Path(tsv_path).expanduser().resolve()
-    if not path.is_file() or path.stat().st_size == 0:
+    if _is_empty_input(path):
         return []
     frame = read_eggnog_tsv(path)
     if frame.empty:
@@ -369,38 +383,31 @@ def extract_eggnog_records(
     frame = _rename_columns(frame, {
         "gene_id": ("query", "gene_id"), "eggnog_raw_ko": ("kegg_ko", "ko"),
         "eggnog_bit_score": ("score",), "eggnog_evalue": ("evalue",),
-        "eggnog_description": ("description",),
     })
-    _validate_gene_ids(frame["gene_id"], path, "eggNOG")
-    frame["gene_id"] = frame["gene_id"].astype(str).str.strip()
+    _clean_gene_ids(frame, path, "eggNOG")
     _numeric_columns(frame, ["eggnog_bit_score", "eggnog_evalue"])
     rows, sources_by_hit = [], {}
-    for index, (_, row) in enumerate(frame.iterrows()):
-        kos = parse_kos(row.get("eggnog_raw_ko", "-"))
-        bit_score, e_value = row["eggnog_bit_score"], row["eggnog_evalue"]
+    hits = zip(frame["gene_id"], frame["eggnog_raw_ko"], frame["eggnog_bit_score"], frame["eggnog_evalue"])
+    for index, (gene_id, raw_kos, bit_score, e_value) in enumerate(hits):
+        kos = parse_kos(raw_kos)
         if not (_finite(bit_score) and _finite(e_value)):
-            status = "unknown"
+            status = UNKNOWN
         elif bit_score >= min_bitscore and e_value <= max_evalue:
-            status = "threshold_passing"
+            status = THRESHOLD_PASSING
         else:
-            status = "below_threshold"
-        group = f"en_row{index}"
-        description = row.get("eggnog_description", "-")
-        description = str(description).strip() if pd.notna(description) else "-"
+            status = BELOW_THRESHOLD
+        source = {"group": f"en_row{index}", "is_multi": len(kos) > 1, "status": status}
         for ko in kos:
-            sources_by_hit.setdefault((row["gene_id"], ko), []).append({
-                "group": group, "is_multi": len(kos) > 1, "status": status,
-            })
+            sources_by_hit.setdefault((gene_id, ko), []).append(source)
             rows.append({
-                "gene_id": row["gene_id"], "ko": ko, "original_status": status,
+                "gene_id": gene_id, "ko": ko, "original_status": status,
                 "bit_score": bit_score, "e_value": e_value,
-                "eggnog_seed_group": group, "eggnog_description": description,
             })
     if not rows:
         return []
     frame = _deduplicate(pd.DataFrame(rows), "original_status", ["bit_score", "e_value"], [False, True])
     records = []
-    for _, row in frame.iterrows():
+    for row in frame.to_dict("records"):
         sources = sources_by_hit[(row["gene_id"], row["ko"])]
         shared = any(source["is_multi"] for source in sources)
         records.append(make_evidence_record(
@@ -408,8 +415,7 @@ def extract_eggnog_records(
             bit_score=row["bit_score"], e_value=row["e_value"], score_type="seed_hit",
             threshold=min_bitscore, bit_score_threshold=min_bitscore, e_value_threshold=max_evalue,
             eggnog_shared_seed_hit=shared, shared_seed_hit=shared,
-            eggnog_seed_group=row["eggnog_seed_group"], eggnog_sources=sources,
-            definition="-", eggnog_description=row["eggnog_description"],
+            eggnog_sources=sources, definition="-",
         ))
     return records
 
@@ -454,52 +460,44 @@ def disambiguate_eggnog(
     eggnog_filter_multi: str = "disambiguate",
 ) -> tuple[set[str], set[str], set[Any], set[Any]]:
     """Narrow passing seed groups independently; singleton sources protect KOs."""
-    en_dropped = set()
     narrowed_groups: set[Any] = set()
     unresolved_groups: set[Any] = set()
-    if "eggnog" in active_tools and en_agreed:
-        groups: dict[Any, set[str]] = {}
-        singleton_support: set[str] = set()
-        for r in tool_recs.get("eggnog", []):
-            sources = r.get("eggnog_sources") or [{
-                "group": r.get("eggnog_seed_group", id(r)),
-                "is_multi": r.get("eggnog_shared_seed_hit", False),
-                "status": r["original_status"],
-            }]
-            for source in sources:
-                if source["status"] == "threshold_passing" and source["is_multi"]:
-                    groups.setdefault(source["group"], set()).add(r["ko"])
-                elif source["status"] == "threshold_passing":
-                    singleton_support.add(r["ko"])
+    if "eggnog" not in active_tools or not en_agreed:
+        return en_agreed, set(), narrowed_groups, unresolved_groups
 
-        grouped_kos = set()
-        for kos in groups.values():
-            grouped_kos.update(kos)
-        retained = (en_agreed - grouped_kos) | singleton_support
-        trusted_other, candidate_other = set(), set()
-        for tool in active_tools:
-            if tool != "eggnog":
-                trusted_other.update(confident_kos.get(tool, set()))
-                candidate_other.update(rescued_kos.get(tool, set()))
-                candidate_other.update(candidate_kos.get(tool, set()))
+    groups: dict[Any, set[str]] = {}
+    singleton_support: set[str] = set()
+    for r in tool_recs.get("eggnog", []):
+        for source in r["eggnog_sources"]:
+            if source["status"] != THRESHOLD_PASSING:
+                continue
+            if source["is_multi"]:
+                groups.setdefault(source["group"], set()).add(r["ko"])
+            else:
+                singleton_support.add(r["ko"])
 
-        for group_id, group_kos in groups.items():
-            kept = set(group_kos)
-            if eggnog_filter_multi == "disambiguate" and len(group_kos) > 1:
-                overlap = group_kos & trusted_other
-                if not overlap:
-                    overlap = group_kos & candidate_other
-                if overlap:
-                    kept = overlap
-                    narrowed_groups.add(group_id)
-                else:
-                    unresolved_groups.add(group_id)
-            retained |= kept
+    retained = (en_agreed - set().union(*groups.values())) | singleton_support
+    trusted_other, candidate_other = set(), set()
+    for tool in active_tools:
+        if tool != "eggnog":
+            trusted_other.update(confident_kos.get(tool, set()))
+            candidate_other.update(rescued_kos.get(tool, set()))
+            candidate_other.update(candidate_kos.get(tool, set()))
 
-        en_agreed = en_agreed & retained
-        # Drop a KO globally only when none of its independent sources survives.
-        en_dropped = set(confident_kos.get("eggnog", set())) - en_agreed
+    for group_id, group_kos in groups.items():
+        kept = group_kos
+        if eggnog_filter_multi == "disambiguate" and len(group_kos) > 1:
+            overlap = (group_kos & trusted_other) or (group_kos & candidate_other)
+            if overlap:
+                kept = overlap
+                narrowed_groups.add(group_id)
+            else:
+                unresolved_groups.add(group_id)
+        retained |= kept
 
+    en_agreed = en_agreed & retained
+    # Drop a KO globally only when none of its independent sources survives.
+    en_dropped = set(confident_kos.get("eggnog", set())) - en_agreed
     return en_agreed, en_dropped, narrowed_groups, unresolved_groups
 
 @dataclass(slots=True)
@@ -530,9 +528,9 @@ class GeneAnnotation:
 def _categorize_gene(gene):
     gene.tool_records = {tool: [] for tool in gene.active_tools}
     categories = {
-        "threshold_passing": gene.confident,
-        "below_threshold": gene.candidates,
-        "heuristic_rescued": gene.rescued,
+        THRESHOLD_PASSING: gene.confident,
+        BELOW_THRESHOLD: gene.candidates,
+        HEURISTIC_RESCUED: gene.rescued,
     }
     for record in gene.records:
         tool = record["method"]
@@ -558,13 +556,19 @@ def _disambiguate_gene(gene, strategy):
         gene.confident["eggnog"] = retained
 
 
+def _secondary(gene, tool):
+    """A tool's sub-threshold KOs: KOfam's heuristic rescues, others' candidates."""
+    if tool not in gene.active_tools:
+        return set()
+    return (gene.rescued if tool == "kofam" else gene.candidates).get(tool, set())
+
+
 def _set_decision(gene, selected, alternatives, level, evidence):
     """Only a unique selected KO is accepted; ambiguity stays in alternatives."""
     gene.accepted_ko = next(iter(selected)) if len(selected) == 1 else "-"
     gene.alternatives = set(alternatives)
     # Rescue is a KOfam assignment, even when another tool wins consensus.
-    if "kofam" in gene.active_tools:
-        gene.alternatives.update(gene.rescued.get("kofam", set()))
+    gene.alternatives.update(_secondary(gene, "kofam"))
     if gene.accepted_ko == "-":
         gene.alternatives.update(selected)
     else:
@@ -578,9 +582,7 @@ def _resolve_gene(gene, conflict_strategy="multiple", priority_order=None):
              if tool in gene.confident}
     dropped = gene.eggnog_dropped
     if not calls:
-        kofam = gene.rescued.get("kofam", set()) if "kofam" in gene.active_tools else set()
-        deepkoala = gene.candidates.get("deepkoala", set()) if "deepkoala" in gene.active_tools else set()
-        eggnog = gene.candidates.get("eggnog", set()) if "eggnog" in gene.active_tools else set()
+        kofam, deepkoala, eggnog = (_secondary(gene, tool) for tool in ("kofam", "deepkoala", "eggnog"))
         # Preserve the scientific policy: KOfam rescue takes precedence even
         # when DeepKOALA and eggNOG agree on a different candidate.
         if kofam:
@@ -603,14 +605,13 @@ def _resolve_gene(gene, conflict_strategy="multiple", priority_order=None):
 
     if len(calls) == 1:
         tool, selected = next(iter(calls.items()))
-        supporters = []
-        for other, kos, label in [
-            ("deepkoala", gene.candidates.get("deepkoala", set()), "deepkoala(candidate)"),
-            ("eggnog", gene.candidates.get("eggnog", set()), "eggnog(candidate)"),
-            ("kofam", gene.rescued.get("kofam", set()), "kofam(rescued)"),
-        ]:
-            if other != tool and other in gene.active_tools and selected & kos:
-                supporters.append(label)
+        supporters = [
+            label for other, label in [
+                ("deepkoala", "deepkoala(candidate)"), ("eggnog", "eggnog(candidate)"),
+                ("kofam", "kofam(rescued)"),
+            ]
+            if other != tool and selected & _secondary(gene, other)
+        ]
         level = "single_tool_with_candidate" if supporters else "single_tool"
         _set_decision(gene, selected, dropped, level, ",".join([tool] + supporters))
         return
@@ -676,9 +677,10 @@ def _build_summary(gene, master_ko_defs, evidence_defs):
     }
     kofam = []
     for record in gene.tool_records.get("kofam", []):
-        if record["original_status"] not in ("threshold_passing", "heuristic_rescued"):
+        if record["original_status"] not in (THRESHOLD_PASSING, HEURISTIC_RESCUED):
             continue
-        bit_score, e_value, score_type = select_kofam_scores(
+        # Records from the KOfam adapter carry their selection; others recompute it.
+        bit_score, e_value, score_type = record.get("kofam_selected") or select_kofam_scores(
             record.get("score_type"), record.get("bit_score"), record.get("e_value"),
             record.get("domain_bit_score"), record.get("domain_e_value"),
         )
@@ -702,12 +704,13 @@ def _build_summary(gene, master_ko_defs, evidence_defs):
     ]:
         records = sorted(
             (record for record in gene.tool_records.get(tool, [])
-             if record["original_status"] in ("threshold_passing", "below_threshold")),
+             if record["original_status"] in (THRESHOLD_PASSING, BELOW_THRESHOLD)),
             key=lambda record: record["ko"],
         )
-        passing = {record["ko"] for record in records if record["original_status"] == "threshold_passing"}
         if tool == "eggnog":
             passing = gene.eggnog_retained
+        else:
+            passing = {record["ko"] for record in records if record["original_status"] == THRESHOLD_PASSING}
         row[tool + "_ko"] = format_kos(passing)
         row[tool + "_candidate_ko"] = format_kos({record["ko"] for record in records})
         for column, key in metrics:
@@ -731,38 +734,38 @@ def build_gene_summary_row(
 
 def _cross_status(gene, record, supporting, accepted):
     ko, method, status = record["ko"], record["method"], record["original_status"]
-    if status == "unknown":
-        return "unknown"
+    if status == UNKNOWN:
+        return UNKNOWN
     if method == "eggnog" and ko in gene.eggnog_dropped:
         return "disambiguated_dropped"
     if ko in accepted:
-        if status == "heuristic_rescued":
-            return "heuristic_rescued"
-        if status == "below_threshold":
+        if status == HEURISTIC_RESCUED:
+            return HEURISTIC_RESCUED
+        if status == BELOW_THRESHOLD:
             return "rescued"
-        if status == "threshold_passing":
+        if status == THRESHOLD_PASSING:
             if method == "eggnog" and _has_source(record, gene.narrowed_groups):
                 return "disambiguated_retained"
             return "accepted"
-        return "unknown"
+        return UNKNOWN
     if ko in gene.alternatives:
-        if status == "heuristic_rescued":
-            return "heuristic_rescued"
-        if status == "below_threshold":
+        if status == HEURISTIC_RESCUED:
+            return HEURISTIC_RESCUED
+        if status == BELOW_THRESHOLD:
             return "rescued" if supporting else "below_threshold_unrescued"
-        if status == "threshold_passing":
+        if status == THRESHOLD_PASSING:
             if gene.consensus_level.startswith("conflict"):
                 return "conflict"
             if method == "eggnog" and _has_source(record, gene.unresolved_groups):
                 return "unresolved_multi_ko"
             return "alternative"
-        return "unknown"
-    return "below_threshold_unrescued" if status == "below_threshold" else "unselected"
+        return UNKNOWN
+    return "below_threshold_unrescued" if status == BELOW_THRESHOLD else "unselected"
 
 
 def _has_source(record, groups):
     for source in record.get("eggnog_sources", []):
-        if source["group"] in groups and source["status"] == "threshold_passing":
+        if source["group"] in groups and source["status"] == THRESHOLD_PASSING:
             return True
     return False
 
@@ -776,9 +779,6 @@ def _build_audit(gene, accepted=None):
         row = {column: record.get(column, np.nan) for column in EVIDENCE_COLUMNS}
         row.update({
             "gene_id": gene.gene_id, "consensus_level": gene.consensus_level,
-            "score_type": record.get("score_type", "-"),
-            "bit_score_threshold": record.get("bit_score_threshold", record.get("threshold", np.nan)),
-            "eggnog_shared_seed_hit": bool(record.get("eggnog_shared_seed_hit", record.get("shared_seed_hit", False))),
             "cross_method_status": _cross_status(gene, record, supporting, accepted),
             "supporting_methods": ",".join(sorted(supporting)) or "-",
         })
@@ -796,7 +796,7 @@ def annotate_evidence_records(
     # Supporting records may differ from recs in this legacy helper interface.
     for tool in active_tools:
         for record in tool_recs.get(tool, []):
-            if record["original_status"] in ("threshold_passing", "heuristic_rescued", "below_threshold"):
+            if record["original_status"] in (THRESHOLD_PASSING, HEURISTIC_RESCUED, BELOW_THRESHOLD):
                 gene.supporting.setdefault(record["ko"], set()).add(tool)
     gene.accepted_ko = accepted_ko
     gene.alternatives = alt_set
@@ -819,13 +819,15 @@ def export_tables(
             continue
         path = Path(destination).expanduser().resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
-        exported = frame.copy()
-        for column in exported.columns:
-            if pd.api.types.is_float_dtype(exported[column]):
-                exported[column] = exported[column].apply(lambda value: "-" if pd.isna(value) else str(value))
-            else:
-                exported[column] = exported[column].fillna("-")
+        exported = pd.DataFrame({column: _export_column(frame[column]) for column in frame.columns})
         exported.to_csv(path, sep="\t", index=False)
+
+
+def _export_column(values: pd.Series) -> pd.Series:
+    if pd.api.types.is_float_dtype(values):
+        # astype(str) formats each float with str(), matching the summary text.
+        return values.astype(str).where(values.notna(), "-")
+    return values.fillna("-")
 
 def integrate_annotations(
     protein_fasta: Optional[Union[str, Path]] = None,
@@ -920,7 +922,6 @@ def integrate_annotations(
         _resolve_gene(gene, conflict_strategy)
         summaries.append(_build_summary(gene, master_defs, evidence_defs))
         audit.extend(_build_audit(gene))
-        del gene
     evidence_df = pd.DataFrame(audit, columns=EVIDENCE_COLUMNS)
     if audit:
         evidence_df = evidence_df.sort_values(["gene_id", "ko", "method"]).reset_index(drop=True)

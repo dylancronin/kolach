@@ -1,9 +1,9 @@
 """Unit tests for kolach.pathways KEGG hierarchy parsing and pathway annotation."""
+import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
-import pandas as pd
 
 from kolach.pathways import parse_kegg_hierarchy, annotate_pathways
 
@@ -169,6 +169,51 @@ class TestPathways(unittest.TestCase):
         no_children = self.tmp / "no_children.json"
         no_children.write_text('{"name": "test"}', encoding="utf-8")
         self.assertFalse(is_valid_hierarchy_json(no_children))
+
+    def test_literal_na_values_survive_round_trip(self):
+        in_tsv = self.tmp / "na.tsv"
+        in_tsv.write_text(
+            "gene_id\taccepted_ko\tdefinition\n"
+            "NA\tK00844\tNone\n"
+            "nan\t-\t\n",
+            encoding="utf-8",
+        )
+        out_tsv = self.tmp / "na_out.tsv"
+        annotate_pathways(in_tsv, out_tsv, self.tmp, verbose=False)
+        lines = out_tsv.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(lines[1].startswith("NA\tK00844\tNone\t09100 Metabolism\t"))
+        self.assertEqual(lines[2], "nan\t-\t\t-\t-\t-")
+
+    def test_ko_in_multiple_pathways_is_merged(self):
+        hierarchy = json.loads(self.json_path.read_text(encoding="utf-8"))
+        hierarchy["children"][1]["children"][0]["children"][0]["children"].append(
+            {"name": "K00844  HK; hexokinase"})
+        self.json_path.write_text(json.dumps(hierarchy), encoding="utf-8")
+        mapping = parse_kegg_hierarchy(self.json_path)
+        self.assertEqual(mapping["K00844"]["category"], "09100 Metabolism; 09180 Brite Hierarchies")
+        self.assertEqual(mapping["K00844"]["pathway"], "00010 Glycolysis / Gluconeogenesis; 02000 Transporters")
+
+    def test_failed_download_leaves_no_partial_file(self):
+        from unittest import mock
+        from kolach import download, pathways
+
+        db = self.tmp / "fresh_db"
+
+        class Broken(io.BytesIO):
+            def read(self, *args):
+                raise OSError("connection reset")
+
+        with mock.patch.object(download, "urlopen", return_value=Broken()):
+            with self.assertRaises(RuntimeError):
+                pathways.download_kegg_hierarchy(db, verbose=False)
+        self.assertEqual(list(db.iterdir()), [])
+
+        payload = json.dumps(self.mock_hierarchy).encode()
+        with mock.patch.object(download, "urlopen", return_value=io.BytesIO(payload)) as fake:
+            path = pathways.download_kegg_hierarchy(db, verbose=False)
+        self.assertEqual(path.read_bytes(), payload)
+        self.assertEqual([p.name for p in db.iterdir()], ["ko00001.json"])
+        self.assertTrue(fake.call_args[0][0].get_header("User-agent").startswith("kolach"))
 
     def test_strict_ko_regex_validation(self):
         # Tokens like K1234, K123456, Kabcde should not match or get annotated

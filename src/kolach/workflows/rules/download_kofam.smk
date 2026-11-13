@@ -1,3 +1,4 @@
+from pathlib import Path
 from kolach.methods.kofam import download_kofam
 
 rule download_kofam:
