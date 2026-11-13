@@ -325,10 +325,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--dbcan-table", default=None,
         help="Normalized dbcan_overview.tsv (supplementary evidence, not a KO voter).",
     )
-    integrate_parser.add_argument(
-        "--dbcan-evidence-table", default=None,
-        help="Optional dbCAN domain/alignment evidence table to merge into kolach_evidence.tsv.",
-    )
 
     integrate_parser.add_argument(
         "--output-file",
@@ -505,7 +501,6 @@ def main(argv=None):
             deepkoala_tsv=args.deepkoala_table,
             eggnog_tsv=args.eggnog_table,
             dbcan_tsv=args.dbcan_table,
-            dbcan_evidence_tsv=args.dbcan_evidence_table,
             output_tsv=args.output_file,
             evidence_tsv=args.evidence_file,
             database_dir=args.database_dir,

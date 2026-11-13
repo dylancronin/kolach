@@ -123,10 +123,9 @@ kolach integrate --protein-fasta proteins.faa \
   --dbcan-table results/dbcan_overview.tsv --output-file combined.tsv
 ```
 
-For domain evidence during standalone re-integration, also pass
-`--dbcan-evidence-table results/kolach_evidence.tsv`. A retained
-`dbcan_evidence.tsv` from a raw-output run is also accepted.
-The overview alone adds summary columns; it cannot reconstruct domain records.
+Standalone integration of an overview adds summary columns only. Domain evidence
+is merged automatically into `kolach_evidence.tsv` by `kolach annotate`; no
+separate evidence input is needed on the command line.
 
 Python callers can pass the optional `dbcan_tsv` and `dbcan_evidence_tsv` arguments to
 `integrate_annotations()`. dbCAN never changes KO votes, accepted calls,
