@@ -841,12 +841,15 @@ def integrate_annotations(
     eggnog_filter_multi: str = "disambiguate", conflict_strategy: str = "multiple",
     heuristic_bitscore_fraction: float = 0.75, heuristic_e_value: float = 1e-5,
     dbcan_tsv: Optional[Union[str, Path]] = None,
+    dbcan_evidence_tsv: Optional[Union[str, Path]] = None,
 ) -> pd.DataFrame:
     """Return the gene summary and its audit DataFrame in attrs["evidence"]."""
     if conflict_strategy not in {"multiple", "priority"}:
         raise ValueError("conflict_strategy must be 'multiple' or 'priority'")
     if eggnog_filter_multi not in {"disambiguate", "none"}:
         raise ValueError("eggnog_filter_multi must be 'disambiguate' or 'none'")
+    if dbcan_evidence_tsv is not None and dbcan_tsv is None:
+        raise ValueError("dbCAN evidence requires a dbCAN overview table")
     parameters = {
         "eggnog_min_bitscore": eggnog_min_bitscore, "eggnog_max_evalue": eggnog_max_evalue,
         "heuristic_bitscore_fraction": heuristic_bitscore_fraction, "heuristic_e_value": heuristic_e_value,
@@ -940,6 +943,25 @@ def integrate_annotations(
         for column in SUMMARY_COLUMNS:
             default = "0" if column == "dbcan_tools_count" else "-"
             result[column] = [lookup.get(gid, {}).get(column, default) for gid in gene_ids]
+    if dbcan_evidence_tsv is not None:
+        from kolach.methods.dbcan import read_evidence
+
+        dbcan_audit = []
+        levels = dict(zip(result.gene_id, result.consensus_level))
+        feature_types = {"hmm": "cazy_family", "dbCANsub": "cazy_subfamily", "diamond": "cazy_alignment"}
+        for record in read_evidence(dbcan_evidence_tsv, [row["gene_id"] for row in dbcan_rows]):
+            row = dict(record)
+            row.update(
+                method="dbcan", dbcan_method=record["method"], ko="-",
+                feature_type=feature_types[record["method"]], original_status=THRESHOLD_PASSING,
+                cross_method_status="supplementary", consensus_level=levels[record["gene_id"]],
+                supporting_methods="-",
+            )
+            dbcan_audit.append(row)
+        extra_columns = ["feature_type", "feature_id", "query_start", "query_end", "coverage",
+                         "ec", "substrate", "dbcan_method", "source_row"]
+        evidence_df = pd.DataFrame([*audit, *dbcan_audit], columns=[*EVIDENCE_COLUMNS, *extra_columns])
+        evidence_df = evidence_df.sort_values(["gene_id", "ko", "method"], kind="stable").reset_index(drop=True)
     result.attrs["evidence"] = evidence_df
     export_tables(result, evidence_df, output_tsv, evidence_tsv)
     return result

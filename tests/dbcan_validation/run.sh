@@ -28,7 +28,7 @@ diamond version
 # Real Kolach workflow; searches only dbCAN and retains the original gene IDs.
 /usr/bin/time -v python -m kolach.cli annotate \
     --databases dbcan --protein-fasta ../anvio_validation/proteins.faa \
-    --database-dir db --output-dir kolach_output --threads 4 \
+    --database-dir db --output-dir kolach_output --threads 4 --dbcan-keep-raw \
     > kolach.log 2>&1
 
 # Actual, unmodified DRAM2 Nextflow process, with the same host tools and DBs.

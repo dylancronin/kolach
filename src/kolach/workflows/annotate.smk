@@ -11,9 +11,9 @@ supplementary_targets = []
 
 if "dbcan" in SELECTED_DBS:
     DBCAN_DIR = str(DB_DIR / "dbcan")
-    targets.append(f"{OUTDIR}/dbcan_annotations.tsv")
+    targets.append(f"{OUTDIR}/dbcan_overview.tsv")
     include: "rules/annotate_dbcan.smk"
-    supplementary_targets.extend(path for path in rules.annotate_dbcan.output if path not in targets)
+    supplementary_targets.extend(rules.annotate_dbcan.output.raw)
 
 if "kofam" in SELECTED_DBS:
     KOFAM_DIR = str(DB_DIR / "kofam")

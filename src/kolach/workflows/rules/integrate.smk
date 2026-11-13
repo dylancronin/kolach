@@ -3,7 +3,8 @@ from kolach.integrate import integrate_annotations
 rule integrate_annotations:
     input:
         fasta=PROTEIN_FASTA,
-        tables=targets
+        tables=targets,
+        dbcan_evidence=[f"{OUTDIR}/.dbcan_evidence.tsv"] if "dbcan" in SELECTED_DBS else []
     output:
         tsv=temp(f"{OUTDIR}/.kolach_annotations_raw.tsv") if ADD_PATHWAYS else f"{OUTDIR}/kolach_annotations.tsv",
         evidence=f"{OUTDIR}/kolach_evidence.tsv"
@@ -25,7 +26,8 @@ rule integrate_annotations:
             kofam_tsv=kofam_file,
             deepkoala_tsv=deepkoala_file,
             eggnog_tsv=eggnog_file,
-            dbcan_tsv=f"{OUTDIR}/dbcan_annotations.tsv" if "dbcan" in SELECTED_DBS else None,
+            dbcan_tsv=f"{OUTDIR}/dbcan_overview.tsv" if "dbcan" in SELECTED_DBS else None,
+            dbcan_evidence_tsv=input.dbcan_evidence[0] if input.dbcan_evidence else None,
             output_tsv=output.tsv,
             evidence_tsv=output.evidence,
             database_dir=params.database_dir,

@@ -164,10 +164,10 @@ class TestDbcan(unittest.TestCase):
         with patch.object(dbcan, "validate_database"), patch.object(dbcan, "tool_version", return_value="5.2.9"), \
                 patch.object(dbcan, "sha256", return_value="checksum"), patch.object(dbcan, "_run", side_effect=fake_run), \
                 patch.object(dbcan.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "diamond 2.2.6\n")):
-            dbcan.annotate(argparse.Namespace(protein_fasta=self.fasta, database_dir=self.root, threads="4"), output)
+            dbcan.annotate(argparse.Namespace(protein_fasta=self.fasta, database_dir=self.root, threads="4", dbcan_keep_raw=True), output)
             note = output.parent / "dbcan" / "user-notes.txt"
             note.write_text("preserve me")
-            dbcan.annotate(argparse.Namespace(protein_fasta=self.fasta, database_dir=self.root, threads="4"), output)
+            dbcan.annotate(argparse.Namespace(protein_fasta=self.fasta, database_dir=self.root, threads="4", dbcan_keep_raw=True), output)
             self.assertEqual(note.read_text(), "preserve me")
         command = calls[0]
         self.assertEqual(command[command.index("--threads") + 1], "4")
@@ -177,6 +177,64 @@ class TestDbcan(unittest.TestCase):
         self.assertEqual(len(dbcan.read_summary(output)), 2)
         metadata = json.loads((output.parent / "dbcan_metadata.json").read_text())
         self.assertEqual(metadata["protein_fasta"]["sha256"], "checksum")
+
+    def test_default_outputs_are_compact(self):
+        output = self.root / "out" / "dbcan_overview.tsv"
+
+        def fake_run(command, log):
+            native_fixture(command[command.index("--output_dir") + 1])
+            Path(log).touch()
+
+        with patch.object(dbcan, "validate_database"), patch.object(dbcan, "tool_version", return_value=dbcan.VERSION), \
+                patch.object(dbcan, "_run", side_effect=fake_run):
+            dbcan.annotate(argparse.Namespace(protein_fasta=self.fasta, database_dir=self.root, threads=1), output)
+        self.assertEqual(sorted(p.name for p in output.parent.iterdir()),
+                         [".dbcan_evidence.tsv", "dbcan_overview.tsv"])
+        self.assertEqual(len(dbcan.read_evidence(output.parent / ".dbcan_evidence.tsv", ["001", "empty"])), 5)
+
+    def test_domain_evidence_merges_without_changing_ko_calls(self):
+        summary = self.summary()
+        _, records = dbcan.parse_outputs(self.native, ["001", "empty"])
+        evidence = self.root / "domains.tsv"
+        dbcan.write_table(evidence, dbcan.EVIDENCE_COLUMNS, records)
+        kofam = self.root / "kofam.tsv"
+        kofam.write_text("gene_id\tko\tassignment\n001\tK00001\tthreshold\n")
+        baseline = integrate_annotations(protein_fasta=self.fasta, kofam_tsv=kofam)
+        result = integrate_annotations(protein_fasta=self.fasta, kofam_tsv=kofam, dbcan_tsv=summary,
+                                       dbcan_evidence_tsv=evidence, output_tsv=self.root / "combined.tsv")
+        pd.testing.assert_frame_equal(baseline, result[baseline.columns])
+        audit = result.attrs["evidence"]
+        ko = audit[audit.method != "dbcan"][baseline.attrs["evidence"].columns].reset_index(drop=True)
+        pd.testing.assert_frame_equal(baseline.attrs["evidence"], ko, check_dtype=False)
+        domains = audit[audit.method == "dbcan"]
+        self.assertEqual(len(domains), 5)
+        self.assertEqual(set(domains.ko), {"-"})
+        self.assertEqual(set(domains.cross_method_status), {"supplementary"})
+        self.assertEqual(set(domains.source_row), {row["source_row"] for row in records})
+        self.assertEqual(set(domains.feature_type), {"cazy_family", "cazy_subfamily", "cazy_alignment"})
+        roundtrip = integrate_annotations(protein_fasta=self.fasta, kofam_tsv=kofam, dbcan_tsv=summary,
+                                          dbcan_evidence_tsv=self.root / "kolach_evidence.tsv")
+        pd.testing.assert_frame_equal(result, roundtrip)
+        pd.testing.assert_frame_equal(audit, roundtrip.attrs["evidence"])
+        with self.assertRaisesRegex(ValueError, "overview"):
+            integrate_annotations(dbcan_evidence_tsv=evidence)
+        for column, value in [("gene_id", "unknown"), ("method", "unknown"), ("query_start", "0")]:
+            bad = [dict(row) for row in records]
+            bad[0][column] = value
+            dbcan.write_table(evidence, dbcan.EVIDENCE_COLUMNS, bad)
+            with self.subTest(column=column), self.assertRaises(ValueError):
+                integrate_annotations(dbcan_tsv=summary, dbcan_evidence_tsv=evidence)
+
+    def test_empty_domain_evidence_keeps_all_unannotated_genes(self):
+        native_fixture(self.native, empty=True)
+        evidence = self.root / "domains.tsv"
+        dbcan.write_table(evidence, dbcan.EVIDENCE_COLUMNS, [])
+        result = integrate_annotations(protein_fasta=self.fasta, dbcan_tsv=self.summary(),
+                                       dbcan_evidence_tsv=evidence, output_tsv=self.root / "combined.tsv")
+        self.assertEqual(list(result.gene_id), ["001", "empty"])
+        self.assertTrue(result.attrs["evidence"].empty)
+        self.assertEqual(set(result.dbcan_tools_count), {"0"})
+        self.assertIn("feature_id", (self.root / "kolach_evidence.tsv").read_text().splitlines()[0])
 
     def test_output_collision_guards_preserve_inputs(self):
         database = self.root / "dbcan"
@@ -221,7 +279,7 @@ class TestDbcan(unittest.TestCase):
         asset.write_text("original database")
         out = self.root / "results"
         out.mkdir()
-        for filename in ("dbcan_evidence.tsv", "dbcan_metadata.json"):
+        for filename in ("dbcan_evidence.tsv", ".dbcan_evidence.tsv", "dbcan_metadata.json"):
             for hardlink in (False, True):
                 with self.subTest(filename=filename, hardlink=hardlink):
                     link = out / filename
@@ -374,10 +432,23 @@ else:
         summary = out / "kolach_annotations.tsv"
         self.assertTrue(summary.exists())
         self.assertIn("dbcan_id", summary.read_text().splitlines()[0])
+        self.assertEqual(sorted(p.name for p in out.iterdir()),
+                         ["dbcan_overview.tsv", "kolach_annotations.tsv", "kolach_evidence.tsv"])
+        with open(out / "kolach_evidence.tsv") as handle:
+            audit = list(csv.DictReader(handle, delimiter="\t"))
+        self.assertEqual(len(audit), 5)
+        self.assertEqual({row["method"] for row in audit}, {"dbcan"})
         timestamp = summary.stat().st_mtime_ns
         result = subprocess.run(cmd, env=env, cwd=self.root, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(summary.stat().st_mtime_ns, timestamp)
+        (out / "kolach_evidence.tsv").unlink()
+        result = subprocess.run(cmd, env=env, cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        with open(out / "kolach_evidence.tsv") as handle:
+            self.assertEqual(len(list(csv.DictReader(handle, delimiter="\t"))), 5)
+        self.assertFalse((out / ".dbcan_evidence.tsv").exists())
+        self.assertFalse((out / "dbcan").exists())
         (db / "dbCAN.hmm").write_text("changed fixture")
         result = subprocess.run(cmd, env=env, cwd=self.root, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -399,6 +470,10 @@ else:
             rows = list(csv.DictReader(handle, delimiter="\t"))
         self.assertEqual(rows[0]["accepted_ko"], "K00001")
         self.assertEqual(rows[0]["dbcan_id"], "GH13;GH5")
+        # Raw output is retained only when requested, and missing raw files repair.
+        mixed.append("--dbcan-keep-raw")
+        result = subprocess.run(mixed, env=env, cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         # Every advertised deliverable must be repaired when removed, even
         # when the summary consumed by integration is still present.
         repair = [out / "dbcan_evidence.tsv", out / "dbcan_metadata.json", out / "dbcan" / "overview.tsv"]

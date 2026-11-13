@@ -189,6 +189,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     annotate_parser.add_argument(
+        "--dbcan-keep-raw",
+        action="store_true",
+        help="Keep dbCAN native search files and run metadata (default: discard after integration).",
+    )
+
+    annotate_parser.add_argument(
         "--threads",
         type=positive_int,
         default=1,
@@ -317,7 +323,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     integrate_parser.add_argument(
         "--dbcan-table", default=None,
-        help="Normalized dbcan_annotations.tsv (supplementary evidence, not a KO voter).",
+        help="Normalized dbcan_overview.tsv (supplementary evidence, not a KO voter).",
+    )
+    integrate_parser.add_argument(
+        "--dbcan-evidence-table", default=None,
+        help="Optional dbCAN domain/alignment evidence table to merge into kolach_evidence.tsv.",
     )
 
     integrate_parser.add_argument(
@@ -412,6 +422,7 @@ def annotate_config(args) -> dict:
         "device": args.device,
         "batch_size": args.batch_size,
         "detail": args.detail,
+        "dbcan_keep_raw": args.dbcan_keep_raw,
         "eggnog_mode": args.eggnog_mode,
         "eggnog_min_bitscore": args.eggnog_min_bitscore,
         "eggnog_max_evalue": args.eggnog_max_evalue,
@@ -494,6 +505,7 @@ def main(argv=None):
             deepkoala_tsv=args.deepkoala_table,
             eggnog_tsv=args.eggnog_table,
             dbcan_tsv=args.dbcan_table,
+            dbcan_evidence_tsv=args.dbcan_evidence_table,
             output_tsv=args.output_file,
             evidence_tsv=args.evidence_file,
             database_dir=args.database_dir,

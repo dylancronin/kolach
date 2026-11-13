@@ -266,6 +266,32 @@ def read_summary(path):
     return [{key: row[key] for key in ["gene_id", *SUMMARY_COLUMNS]} for row in rows]
 
 
+def read_evidence(path, gene_ids):
+    """Read domain evidence with the same inventory and numeric checks as searches."""
+    rows = _read_table(path, EVIDENCE_COLUMNS)
+    # A standard Kolach evidence table can be reused without retaining raw files.
+    if rows and "dbcan_method" in rows[0]:
+        rows = [{**row, "method": row["dbcan_method"]} for row in rows if row["method"] == "dbcan"]
+    inventory = set(gene_ids)
+    for row in rows:
+        if row["gene_id"] not in inventory:
+            raise ValueError(f"Unknown dbCAN evidence gene ID: {row['gene_id']!r}")
+        if row["method"] not in {"hmm", "dbCANsub", "diamond"}:
+            raise ValueError(f"Unknown dbCAN evidence method: {row['method']!r}")
+        if not row["feature_id"] or row["feature_id"] == "-":
+            raise ValueError("Missing dbCAN evidence feature ID")
+        _number(row["query_start"], "query start", minimum=1, integer=True)
+        _number(row["query_end"], "query end", minimum=float(row["query_start"]), integer=True)
+        _number(row["e_value"], "E-value")
+        if row["method"] == "diamond":
+            _number(row["bit_score"], "bit score")
+        else:
+            _number(row["coverage"], "coverage", maximum=1)
+        if not isinstance(json.loads(row["source_row"]), dict):
+            raise ValueError("dbCAN source row must be a JSON object")
+    return [{column: row[column] for column in EVIDENCE_COLUMNS} for row in rows]
+
+
 def _check_output_paths(database, fasta, output, published):
     """Refuse collisions before running searches or replacing any output."""
     if published.is_symlink():
@@ -273,7 +299,8 @@ def _check_output_paths(database, fasta, output, published):
     destination = published.resolve()
     if destination.is_relative_to(database) or database.is_relative_to(destination):
         raise ValueError("dbCAN database and native output directories must not overlap")
-    products = [output, output.parent / "dbcan_evidence.tsv", output.parent / "dbcan_metadata.json"]
+    products = [output, output.parent / "dbcan_evidence.tsv", output.parent / ".dbcan_evidence.tsv",
+                output.parent / "dbcan_metadata.json"]
     if fasta.is_relative_to(destination) or any(fasta == path.resolve() for path in products):
         raise ValueError("dbCAN output paths must not contain or overwrite the input FASTA")
     protected = [fasta, *(database / name for name in ASSETS), database / "manifest.json"]
@@ -296,6 +323,7 @@ def annotate(args, output):
     database = (Path(args.database_dir).expanduser().resolve() / "dbcan").resolve()
     output = Path(output).expanduser().resolve()
     published = output.parent / "dbcan"
+    keep_raw = bool(getattr(args, "dbcan_keep_raw", False))
     _check_output_paths(database, fasta, output, published)
     gene_ids = read_fasta_ids(fasta)
     if not gene_ids or len(gene_ids) != len(set(gene_ids)):
@@ -314,6 +342,12 @@ def annotate(args, output):
                "--methods", "diamond,hmm,dbCANsub"]
     _run(command, native / "run.log")
     summaries, evidence = parse_outputs(native, gene_ids, id_map)
+    _check_output_paths(database, fasta, output, published)
+    write_table(output, ["gene_id", *SUMMARY_COLUMNS], summaries)
+    write_table(output.parent / ".dbcan_evidence.tsv", EVIDENCE_COLUMNS, evidence)
+    if not keep_raw:
+        shutil.rmtree(native)
+        return
     metadata = {
         "tool_version": version, "command": command, "threads": threads,
         "diamond_version": subprocess.run(["diamond", "version"], check=True,
@@ -338,6 +372,5 @@ def annotate(args, output):
         path.replace(published / path.name)
     (published / OWNER_FILE).write_text(OWNER_TEXT)
     native.rmdir()
-    write_table(output, ["gene_id", *SUMMARY_COLUMNS], summaries)
     write_table(output.parent / "dbcan_evidence.tsv", EVIDENCE_COLUMNS, evidence)
     (output.parent / "dbcan_metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")

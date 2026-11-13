@@ -243,13 +243,13 @@ class PipelineParity(unittest.TestCase):
                 # NaN defaults do not compare equal, even for identical signatures.
                 actual = inspect.signature(getattr(current, name))
                 if name == "integrate_annotations":
-                    # The only intentional API extension is an optional trailing
-                    # supplementary table; every original parameter stays intact.
+                    # Optional supplementary tables leave every original parameter intact.
                     parameters = list(actual.parameters.values())
-                    self.assertEqual(parameters[-1].name, "dbcan_tsv")
-                    self.assertIsNone(parameters[-1].default)
-                    self.assertEqual(parameters[-1].kind, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-                    actual = actual.replace(parameters=parameters[:-1])
+                    self.assertEqual([p.name for p in parameters[-2:]], ["dbcan_tsv", "dbcan_evidence_tsv"])
+                    for parameter in parameters[-2:]:
+                        self.assertIsNone(parameter.default)
+                        self.assertEqual(parameter.kind, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+                    actual = actual.replace(parameters=parameters[:-2])
                 self.assertEqual(str(actual), str(inspect.signature(function)), name)
 
     def test_empty_and_fasta_ordering(self):

@@ -42,7 +42,10 @@ def main():
         assert audited == actual, (method, "lost normalized evidence")
     assert canonical(read(native / "overview.tsv")) == canonical(read(reference / "genome_overview.tsv"))
     report["upstream_overview_equal"] = True
-    summary = {r["gene_id"]: r for r in read(kolach / "dbcan_annotations.tsv")}
+    summary_path = kolach / "dbcan_overview.tsv"
+    if not summary_path.exists():
+        summary_path = kolach / "dbcan_annotations.tsv"  # Original validation artifacts.
+    summary = {r["gene_id"]: r for r in read(summary_path)}
     for row in read(reference / "genome_overview.tsv"):
         gene = mapping[row["Gene ID"]]
         assert summary[gene]["dbcan_recommended"] == row["Recommend Results"]
@@ -78,11 +81,16 @@ def main():
                   eggnog_tsv=validation / "kolach_output/eggnog_annotations.tsv",
                   deepkoala_tsv=validation / "kolach_output/deepkoala_annotations.tsv")
     baseline = integrate_annotations(**kwargs)
-    enriched = integrate_annotations(**kwargs, dbcan_tsv=kolach / "dbcan_annotations.tsv",
+    enriched = integrate_annotations(**kwargs, dbcan_tsv=summary_path,
+                                     dbcan_evidence_tsv=kolach / "dbcan_evidence.tsv",
                                      output_tsv=kolach / "kolach_annotations_with_ko.tsv")
     import pandas as pd
     pd.testing.assert_frame_equal(baseline, enriched[baseline.columns])
-    pd.testing.assert_frame_equal(baseline.attrs["evidence"], enriched.attrs["evidence"])
+    combined_evidence = enriched.attrs["evidence"]
+    ko_evidence = combined_evidence[combined_evidence.method != "dbcan"][baseline.attrs["evidence"].columns]
+    pd.testing.assert_frame_equal(baseline.attrs["evidence"], ko_evidence.reset_index(drop=True), check_dtype=False)
+    domains = combined_evidence[combined_evidence.method == "dbcan"]
+    assert canonical(domains["source_row"].tolist()) == canonical([row["source_row"] for row in evidence])
     import re
     pairs = {(r.gene_id, ko) for r in enriched.itertuples()
              for ko in re.findall(r"K\d{5}", r.accepted_ko + ";" + r.alternative_kos)}
