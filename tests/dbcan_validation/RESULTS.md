@@ -53,7 +53,8 @@ gene-prediction job was repeated.
 
 - Full suite: **57 tests passed** in 334 seconds, including the exhaustive
   integration parity checks. The frozen reference was not edited; the public
-  signature check permits only the new optional trailing `dbcan_tsv=None`.
+  signature check permits only the new optional trailing `dbcan_tsv=None` and
+  `dbcan_evidence_tsv=None` parameters.
 - Latest dbCAN-specific suite: **14 tests passed**, including a real Snakemake
   DAG with executable stand-ins, mixed KOfam/dbCAN integration, pathway enrichment,
   unchanged-input reuse, database-change reruns, and missing-asset detection.

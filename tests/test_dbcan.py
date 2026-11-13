@@ -4,6 +4,7 @@ import csv
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -37,6 +38,34 @@ def native_fixture(directory, empty=False):
     ]
     for name, columns, values in tables:
         dbcan.write_table(directory / name, columns, [] if empty else [dict(zip(columns, row)) for row in values])
+
+
+GENE_TOKEN = re.compile(r"(?<![\w.])001(?![\w.])")
+
+
+def search_fixture(directory):
+    """Write the native fixture using the reversible IDs from gene_ids.tsv."""
+    directory = Path(directory)
+    native_fixture(directory)
+    with open(directory / "gene_ids.tsv") as handle:
+        search = {row["gene_id"]: row["search_id"] for row in csv.DictReader(handle, delimiter="\t")}
+    for name in ("dbCAN_hmm_results.tsv", "dbCANsub_hmm_results.tsv", "diamond.out", "overview.tsv"):
+        path = directory / name
+        path.write_text(GENE_TOKEN.sub(search["001"], path.read_text()))
+
+
+def fake_run(command, log):
+    search_fixture(command[command.index("--output_dir") + 1])
+    Path(log).touch()
+
+
+def symlinks_supported():
+    with tempfile.TemporaryDirectory() as directory:
+        try:
+            (Path(directory) / "link").symlink_to(directory, target_is_directory=True)
+        except OSError:
+            return False
+    return True
 
 
 class TestDbcan(unittest.TestCase):
@@ -156,13 +185,12 @@ class TestDbcan(unittest.TestCase):
         output = self.root / "out" / "dbcan_annotations.tsv"
         calls = []
 
-        def fake_run(command, log):
+        def recording_run(command, log):
             calls.append(command)
-            native_fixture(command[command.index("--output_dir") + 1])
-            Path(log).touch()
+            fake_run(command, log)
 
         with patch.object(dbcan, "validate_database"), patch.object(dbcan, "tool_version", return_value="5.2.9"), \
-                patch.object(dbcan, "sha256", return_value="checksum"), patch.object(dbcan, "_run", side_effect=fake_run), \
+                patch.object(dbcan, "sha256", return_value="checksum"), patch.object(dbcan, "_run", side_effect=recording_run), \
                 patch.object(dbcan.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "diamond 2.2.6\n")):
             dbcan.annotate(argparse.Namespace(protein_fasta=self.fasta, database_dir=self.root, threads="4", dbcan_keep_raw=True), output)
             note = output.parent / "dbcan" / "user-notes.txt"
@@ -180,11 +208,6 @@ class TestDbcan(unittest.TestCase):
 
     def test_default_outputs_are_compact(self):
         output = self.root / "out" / "dbcan_overview.tsv"
-
-        def fake_run(command, log):
-            native_fixture(command[command.index("--output_dir") + 1])
-            Path(log).touch()
-
         with patch.object(dbcan, "validate_database"), patch.object(dbcan, "tool_version", return_value=dbcan.VERSION), \
                 patch.object(dbcan, "_run", side_effect=fake_run):
             dbcan.annotate(argparse.Namespace(protein_fasta=self.fasta, database_dir=self.root, threads=1), output)
@@ -236,6 +259,7 @@ class TestDbcan(unittest.TestCase):
         self.assertEqual(set(result.dbcan_tools_count), {"0"})
         self.assertIn("feature_id", (self.root / "kolach_evidence.tsv").read_text().splitlines()[0])
 
+    @unittest.skipUnless(symlinks_supported(), "symlinks unavailable")
     def test_output_collision_guards_preserve_inputs(self):
         database = self.root / "dbcan"
         database.mkdir()
@@ -272,6 +296,7 @@ class TestDbcan(unittest.TestCase):
             dbcan.annotate(argparse.Namespace(protein_fasta=fasta, database_dir=self.root, threads=1), out / "dbcan_annotations.tsv")
         self.assertEqual(fasta.read_text(), ">original\nAAAA\n")
 
+    @unittest.skipUnless(symlinks_supported(), "symlinks unavailable")
     def test_sidecar_symlinks_and_hardlinks_cannot_overwrite_sources(self):
         database = self.root / "dbcan"
         database.mkdir()
@@ -350,6 +375,70 @@ class TestDbcan(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 dbcan.tool_version()
 
+    def test_unmapped_search_ids_are_rejected(self):
+        mapping = dbcan.prepare_input(self.fasta, self.native, ["001", "empty"])
+        # Outputs still carry the original ID, as if the renaming were skipped.
+        with self.assertRaisesRegex(ValueError, "unknown gene ID"):
+            dbcan.parse_outputs(self.native, ["001", "empty"], mapping)
+
+    def test_fasta_structure_errors(self):
+        for text in [">\nAAAA\n>001\nAAAA\n", "AAAA\n>001\nAAAA\n"]:
+            with self.subTest(text=text):
+                fasta = self.root / "bad.faa"
+                fasta.write_text(text)
+                with self.assertRaises(ValueError):
+                    dbcan.prepare_input(fasta, self.native, ["001"])
+
+    def test_preliminary_ec_and_decimal_coordinates(self):
+        path = self.native / "dbCANsub_hmm_results.tsv"
+        path.write_text(path.read_text().replace("3.2.1.4:3", "2.4.1.n2:3").replace("\t110\t", "\t110.0\t"))
+        rows, evidence = dbcan.parse_outputs(self.native, ["001", "empty"])
+        self.assertIn("GH5;EC:2.4.1.n2", rows[0]["dbcan_family_ec"])
+        self.assertEqual(len(evidence), 5)
+
+    def test_diamond_keeps_non_family_labels(self):
+        path = self.native / "diamond.out"
+        path.write_text(path.read_text().replace("AA12345.1|GH13|CBM20", "AA12345.1|GH13|cohesin|3.2.1.1"))
+        rows, _ = dbcan.parse_outputs(self.native, ["001", "empty"])
+        self.assertEqual(rows[0]["dbcan_cazy_id"], "GH13;cohesin")
+
+    def test_rerun_removes_stale_raw_outputs(self):
+        output = self.root / "out" / "dbcan_overview.tsv"
+        args = argparse.Namespace(protein_fasta=self.fasta, database_dir=self.root, threads=1, dbcan_keep_raw=True)
+        with patch.object(dbcan, "validate_database"), patch.object(dbcan, "tool_version", return_value=dbcan.VERSION), \
+                patch.object(dbcan, "sha256", return_value="checksum"), patch.object(dbcan, "_run", side_effect=fake_run), \
+                patch.object(dbcan.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "diamond 2.2.6\n")):
+            dbcan.annotate(args, output)
+            note = output.parent / "dbcan" / "user-notes.txt"
+            note.write_text("preserve me")
+            args.dbcan_keep_raw = False
+            dbcan.annotate(args, output)
+            # The old search-ID map and sidecars no longer describe this run.
+            self.assertEqual(sorted(p.name for p in (output.parent / "dbcan").iterdir()),
+                             [dbcan.OWNER_FILE, "user-notes.txt"])
+            self.assertFalse((output.parent / "dbcan_evidence.tsv").exists())
+            self.assertFalse((output.parent / "dbcan_metadata.json").exists())
+            note.unlink()
+            dbcan.annotate(args, output)
+            self.assertFalse((output.parent / "dbcan").exists())
+
+    def test_partial_overview_and_mismatched_evidence_rejected(self):
+        summary = self.summary()
+        fasta = self.root / "more.faa"
+        fasta.write_text(self.fasta.read_text() + ">extra\nAAAA\n")
+        with self.assertRaisesRegex(ValueError, "covers 2 of 3"):
+            integrate_annotations(protein_fasta=fasta, dbcan_tsv=summary)
+        _, records = dbcan.parse_outputs(self.native, ["001", "empty"])
+        evidence = self.root / "domains.tsv"
+        dbcan.write_table(evidence, dbcan.EVIDENCE_COLUMNS, [r for r in records if r["method"] != "diamond"])
+        with self.assertRaisesRegex(ValueError, "disagree"):
+            integrate_annotations(protein_fasta=self.fasta, dbcan_tsv=summary, dbcan_evidence_tsv=evidence)
+        rows = dbcan.read_summary(summary)
+        rows[0]["dbcan_tools_count"] = "2"
+        dbcan.write_table(summary, ["gene_id", *dbcan.SUMMARY_COLUMNS], rows)
+        with self.assertRaisesRegex(ValueError, "tool count"):
+            dbcan.read_summary(summary)
+
     def test_cli_forwarding(self):
         from kolach.cli import main
         for command in ["download", "annotate"]:
@@ -396,7 +485,7 @@ class TestDbcanWorkflow(unittest.TestCase):
         bindir = self.root / "bin"
         bindir.mkdir()
         script = """#!/usr/bin/env python3
-import os, sys, pathlib, shutil
+import csv, os, re, sys, pathlib
 if pathlib.Path(sys.argv[0]).name != 'run_dbcan':
     raise SystemExit(0)
 if sys.argv[1] == 'version':
@@ -404,8 +493,11 @@ if sys.argv[1] == 'version':
 else:
     out = pathlib.Path(sys.argv[sys.argv.index('--output_dir')+1])
     out.mkdir(parents=True, exist_ok=True)
+    with open(out / 'gene_ids.tsv') as handle:
+        search = {r['gene_id']: r['search_id'] for r in csv.DictReader(handle, delimiter='\\t')}
     for source in pathlib.Path(os.environ['DBCAN_FIXTURE']).glob('*'):
-        shutil.copyfile(source, out / source.name)
+        text = re.sub(r'(?<![\\w.])001(?![\\w.])', search['001'], source.read_text())
+        (out / source.name).write_text(text)
 """
         for name in ["run_dbcan", "hmmstat", "hmmsearch", "diamond"]:
             path = bindir / name

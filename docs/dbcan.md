@@ -76,7 +76,10 @@ Successful default runs remove temporary dbCAN search files and intermediate
 evidence after integration. They leave no dbCAN raw-output directory or separate
 metadata/evidence files. Add `--dbcan-keep-raw` to retain `dbcan/`,
 `dbcan_metadata.json`, and `dbcan_evidence.tsv` for inspection.
-Existing files from earlier runs are not deleted when this option is omitted.
+Each successful run removes raw files published by an earlier run (files listed in
+the ownership marker, plus `dbcan_metadata.json` and `dbcan_evidence.tsv`), so a
+stale search-ID map can never sit beside a newer overview. Other files you add to
+`dbcan/` are kept.
 
 In the combined evidence table, dbCAN rows have `method=dbcan`, `ko=-`, and
 `cross_method_status=supplementary`. Their `dbcan_method` identifies `hmm`,
@@ -97,8 +100,15 @@ that every reported family is supported by every method.
 
 Subfamily EC frequency suffixes (`:count`) are preserved in `dbcan_sub_ec`.
 They are removed only from explicit family/EC features. A domain with multiple
-possible families does not generate correlated pairs. `dbcan_cazy_id` retains
-DIAMOND family IDs separately from the family HMM evidence in `dbcan_id`.
+possible families does not generate correlated pairs. Preliminary EC numbers such as
+`2.4.1.n2` are accepted. `dbcan_cazy_id` retains every DIAMOND target label except
+the accession and EC numbers (including non-family modules such as `cohesin`),
+separately from the family HMM evidence in `dbcan_id`.
+
+Summary columns are per-protein sets: they do not record how many times a domain
+occurs, and composition, EC and substrate values are not linked to the subfamily
+they came from. Use the evidence rows (one per domain/alignment, with the native
+row as JSON) when copy number or per-domain pairing matters.
 
 dbCAN's pandas readers can coerce numeric-looking identifiers. Kolach uses
 reversible search IDs, preserving every amino-acid sequence, and restores the
@@ -130,8 +140,10 @@ separate evidence input is needed on the command line.
 Python callers can pass the optional `dbcan_tsv` and `dbcan_evidence_tsv` arguments to
 `integrate_annotations()`. dbCAN never changes KO votes, accepted calls,
 alternatives or existing KO evidence values. Omitting dbCAN preserves the old schema.
-With FASTA supplied, unknown dbCAN genes are rejected; otherwise the supplied
-tables' gene inventories are combined. Duplicate summary gene IDs are rejected.
+With FASTA supplied, the dbCAN overview must cover exactly the FASTA genes, so an
+unsearched gene cannot look like a gene without hits; otherwise the supplied
+tables' gene inventories are combined. Duplicate summary gene IDs are rejected, tool counts must match the listed methods,
+and merged evidence must report the same methods per gene as the overview.
 KEGG pathway enrichment preserves the supplementary columns.
 
 The specialisation engines are not included on this branch. The DRAM2-compatible

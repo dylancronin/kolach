@@ -909,6 +909,10 @@ def integrate_annotations(
             if gid not in records_by_gene:
                 records_by_gene[gid] = []
                 gene_ids.append(gid)
+        # A partial overview would make unsearched genes look like genes without hits.
+        if inventory is not None and len(dbcan_rows) != len(inventory):
+            raise ValueError(f"dbCAN overview covers {len(dbcan_rows)} of {len(inventory)} "
+                             "protein FASTA genes; rerun dbCAN on this FASTA")
     ko_list = None
     if database_dir:
         directory = Path(database_dir).expanduser().resolve()
@@ -958,6 +962,13 @@ def integrate_annotations(
                 supporting_methods="-",
             )
             dbcan_audit.append(row)
+        # Summary and evidence must come from the same dbCAN run.
+        found = {gid: set() for gid in lookup}
+        for row in dbcan_audit:
+            found[row["gene_id"]].add(row["dbcan_method"])
+        for gid, methods in found.items():
+            if (";".join(sorted(methods)) or "-") != lookup[gid]["dbcan_methods"]:
+                raise ValueError(f"dbCAN evidence and overview disagree on methods for {gid!r}")
         extra_columns = ["feature_type", "feature_id", "query_start", "query_end", "coverage",
                          "ec", "substrate", "dbcan_method", "source_row"]
         evidence_df = pd.DataFrame([*audit, *dbcan_audit], columns=[*EVIDENCE_COLUMNS, *extra_columns])
