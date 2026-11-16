@@ -438,6 +438,31 @@ class TestDbcan(unittest.TestCase):
             dbcan.annotate(args, output)
             self.assertFalse((output.parent / "dbcan").exists())
 
+    def test_compact_rerun_migrates_legacy_raw_outputs(self):
+        output = self.root / "out" / "dbcan_overview.tsv"
+        published = output.parent / "dbcan"
+        native_fixture(published)
+        for name in ("gene_ids.tsv", "input.faa", "uniInput.faa", "run.log", "dbCANsub_hmm_raw.tsv"):
+            (published / name).write_text("old search data")
+        (published / dbcan.OWNER_FILE).write_text(dbcan.OWNER_TEXT)
+        note = published / "user-notes.txt"
+        note.write_text("preserve me")
+        for name in dbcan.RAW_SIDECARS:
+            (output.parent / name).write_text("old metadata")
+        args = argparse.Namespace(protein_fasta=self.fasta, database_dir=self.root, threads=1)
+        with patch.object(dbcan, "validate_database"), patch.object(dbcan, "tool_version", return_value=dbcan.VERSION), \
+                patch.object(dbcan, "_run", side_effect=fake_run):
+            dbcan.annotate(args, output)
+            self.assertEqual(sorted(path.name for path in published.iterdir()),
+                             [dbcan.OWNER_FILE, "user-notes.txt"])
+            self.assertEqual(note.read_text(), "preserve me")
+            self.assertTrue(all(not (output.parent / name).exists() for name in dbcan.RAW_SIDECARS))
+            # After migration, an empty file list must not trigger legacy cleanup again.
+            user_input = published / "input.faa"
+            user_input.write_text("user-added file")
+            dbcan.annotate(args, output)
+            self.assertEqual(user_input.read_text(), "user-added file")
+
     def test_partial_overview_and_mismatched_evidence_rejected(self):
         summary = self.summary()
         fasta = self.root / "more.faa"

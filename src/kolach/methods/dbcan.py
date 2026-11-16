@@ -43,6 +43,12 @@ EC = re.compile(r"\d+\.(?:\d+|-)\.(?:\d+|-)\.(?:n?\d+|-)")
 OWNER_FILE = ".kolach_dbcan_native"
 OWNER_TEXT = "Kolach dbCAN native outputs v1\n"
 RAW_SIDECARS = ("dbcan_evidence.tsv", "dbcan_metadata.json")
+# Older ownership markers did not list generated files. Limit migration cleanup
+# to the outputs produced by the pinned dbCAN wrapper; keep unrelated files.
+LEGACY_RAW_FILES = (
+    "dbCAN_hmm_results.tsv", "dbCANsub_hmm_raw.tsv", "dbCANsub_hmm_results.tsv",
+    "diamond.out", "gene_ids.tsv", "input.faa", "overview.tsv", "run.log", "uniInput.faa",
+)
 
 
 def sha256(path):
@@ -344,12 +350,15 @@ def _clear_raw_outputs(published, sidecars=()):
     """Remove files a previous Kolach run published; leave any user-added files."""
     marker = published / OWNER_FILE
     if marker.is_file():
-        for name in marker.read_text().splitlines()[1:]:
+        contents = marker.read_text()
+        names = LEGACY_RAW_FILES if contents == OWNER_TEXT else contents.splitlines()[1:]
+        for name in names:
             path = published / name
             if name and path.parent == published and (path.is_file() or path.is_symlink()):
                 path.unlink()
         if any(path != marker for path in published.iterdir()):
-            marker.write_text(OWNER_TEXT)  # Still Kolach's folder, with user files kept.
+            # An explicit empty list distinguishes this from a legacy marker.
+            marker.write_text(OWNER_TEXT + "\n")
         else:
             marker.unlink()
             published.rmdir()
