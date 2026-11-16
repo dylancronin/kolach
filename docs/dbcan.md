@@ -80,8 +80,6 @@ Each successful run removes raw files published by an earlier run (files listed 
 the ownership marker, plus `dbcan_metadata.json` and `dbcan_evidence.tsv`), so a
 stale search-ID map can never sit beside a newer overview. Other files you add to
 `dbcan/` are kept.
-For older ownership markers without a file list, cleanup removes only the known
-native filenames produced by the pinned dbCAN wrapper.
 
 In the combined evidence table, dbCAN rows have `method=dbcan`, `ko=-`, and
 `cross_method_status=supplementary`. Their `dbcan_method` identifies `hmm`,

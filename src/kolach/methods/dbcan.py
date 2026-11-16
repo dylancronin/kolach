@@ -3,6 +3,7 @@
 Reference: DRAM2 4536cd93, modules/nf-core/rundbcan/cazymeannotation.
 Only upstream-filtered hits are imported; recommendations are kept separately.
 """
+from collections import namedtuple
 import csv
 import hashlib
 import json
@@ -23,11 +24,12 @@ ASSETS = {
     "dbCAN-sub.hmm": "dbCAN_sub.hmm",
     "fam-substrate-mapping.tsv": "fam-substrate-mapping.tsv",
 }
-SUMMARY_COLUMNS = [
+# Summary columns that collect the distinct values seen across a gene's hits.
+SET_COLUMNS = [
     "dbcan_id", "dbcan_sub_id", "dbcan_sub_composition", "dbcan_sub_ec",
-    "dbcan_sub_substrate", "dbcan_family_ec", "dbcan_cazy_id",
-    "dbcan_methods", "dbcan_tools_count", "dbcan_recommended",
+    "dbcan_sub_substrate", "dbcan_family_ec", "dbcan_cazy_id", "dbcan_methods",
 ]
+SUMMARY_COLUMNS = [*SET_COLUMNS, "dbcan_tools_count", "dbcan_recommended"]
 EVIDENCE_COLUMNS = [
     "gene_id", "method", "feature_id", "query_start", "query_end",
     "e_value", "coverage", "bit_score", "ec", "substrate", "source_row",
@@ -38,17 +40,12 @@ COMBINED_EVIDENCE_NAMES = {
         "feature_id", "query_start", "query_end", "coverage", "ec", "substrate", "source_row",
     )
 }
-FAMILY = re.compile(r"(?:GH|GT|CBM|AA|CE|PL)\d+(?:_\d+)?")
+# Captures the family of a (sub)family name, e.g. GH13 from GH13_1.
+FAMILY = re.compile(r"((?:GH|GT|CBM|AA|CE|PL)\d+)(?:_\d+)?")
 EC = re.compile(r"\d+\.(?:\d+|-)\.(?:\d+|-)\.(?:n?\d+|-)")
 OWNER_FILE = ".kolach_dbcan_native"
 OWNER_TEXT = "Kolach dbCAN native outputs v1\n"
 RAW_SIDECARS = ("dbcan_evidence.tsv", "dbcan_metadata.json")
-# Older ownership markers did not list generated files. Limit migration cleanup
-# to the outputs produced by the pinned dbCAN wrapper; keep unrelated files.
-LEGACY_RAW_FILES = (
-    "dbCAN_hmm_results.tsv", "dbCANsub_hmm_raw.tsv", "dbCANsub_hmm_results.tsv",
-    "diamond.out", "gene_ids.tsv", "input.faa", "overview.tsv", "run.log", "uniInput.faa",
-)
 
 
 def sha256(path):
@@ -161,17 +158,18 @@ def _number(value, label, minimum=0, maximum=None, integer=False):
     return number
 
 
-# method: (file, gene, feature, start, end, e-value columns, summary column)
+# Native column names for one search; `score` is coverage (HMMs) or bit score (DIAMOND).
+Source = namedtuple("Source", "file gene feature start end e_value score")
 SOURCES = {
-    "hmm": ("dbCAN_hmm_results.tsv", "Target Name", "HMM Name",
-            "Target From", "Target To", "i-Evalue", "dbcan_id"),
-    "dbCANsub": ("dbCANsub_hmm_results.tsv", "Target Name", "Subfam Name",
-                 "Target From", "Target To", "i-Evalue", "dbcan_sub_id"),
-    "diamond": ("diamond.out", "Gene ID", "CAZy ID",
-                "Gene Start", "Gene End", "E Value", "dbcan_cazy_id"),
+    "hmm": Source("dbCAN_hmm_results.tsv", "Target Name", "HMM Name",
+                  "Target From", "Target To", "i-Evalue", "Coverage"),
+    "dbCANsub": Source("dbCANsub_hmm_results.tsv", "Target Name", "Subfam Name",
+                       "Target From", "Target To", "i-Evalue", "Coverage"),
+    "diamond": Source("diamond.out", "Gene ID", "CAZy ID",
+                      "Gene Start", "Gene End", "E Value", "Bit Score"),
 }
-SUBFAMILY_FIELDS = {"Subfam Composition": "dbcan_sub_composition",
-                    "Subfam EC": "dbcan_sub_ec", "Substrate": "dbcan_sub_substrate"}
+# Extra columns required in the subfamily table.
+SUBFAMILY_COLUMNS = ("Subfam Composition", "Subfam EC", "Substrate")
 
 
 def _validate_record(record):
@@ -187,79 +185,85 @@ def _validate_record(record):
         _number(record["coverage"], "coverage", maximum=1)
 
 
+def _add_features(summary, method, gene, feature, row):
+    """Add the summary values contributed by one native hit to a gene's sets."""
+    summary["dbcan_methods"].add(method)
+    if method == "hmm":
+        summary["dbcan_id"] |= _parts(feature)
+    elif method == "diamond":
+        # Labels after the CAZy accession, minus EC numbers.
+        labels = _parts(feature.partition("|")[2], "|")
+        summary["dbcan_cazy_id"] |= {label for label in labels if not EC.fullmatch(label)}
+    elif method == "dbCANsub":
+        sub_ec = _parts(row["Subfam EC"])
+        ecs = {part.split(":")[0] for part in sub_ec}
+        if any(not EC.fullmatch(ec) for ec in ecs):
+            raise ValueError(f"Malformed subfamily EC for {gene}: {row['Subfam EC']}")
+        summary["dbcan_sub_id"] |= _parts(feature)
+        summary["dbcan_sub_ec"] |= sub_ec
+        summary["dbcan_sub_composition"] |= _parts(row["Subfam Composition"])
+        summary["dbcan_sub_substrate"] |= _parts(row["Substrate"])
+        # The family is encoded in the domain's subfamily name; its composition
+        # field lists source-sequence counts, not families. Ambiguous
+        # multi-family domains do not establish correlated family/EC pairs.
+        families = set(FAMILY.findall(feature))
+        if len(families) == 1:
+            (family,) = families
+            summary["dbcan_family_ec"] |= {f"{family};EC:{ec}" for ec in ecs}
+    else:
+        raise ValueError(f"Unknown dbCAN method: {method!r}")
+
+
+def _restore(to_gene, source_gene):
+    # With a search-ID map, every upstream ID must be one Kolach issued.
+    if source_gene not in to_gene:
+        raise ValueError(f"dbCAN returned unknown gene ID: {source_gene!r}")
+    return to_gene[source_gene]
+
+
 def parse_outputs(native, gene_ids, id_map=None):
     """Return stable summaries and all native records, without dropping domains."""
     native = Path(native)
     if len(gene_ids) != len(set(gene_ids)):
         raise ValueError("Duplicate gene IDs in dbCAN protein inventory")
-    def restore(source_gene):
-        # With a search-ID map, every upstream ID must be one Kolach issued.
-        gene = id_map.get(source_gene) if id_map else source_gene
-        if gene not in genes:
-            raise ValueError(f"dbCAN returned unknown gene ID: {source_gene!r}")
-        return gene
-
-    feature_columns = ["dbcan_id", "dbcan_sub_id", *SUBFAMILY_FIELDS.values(),
-                       "dbcan_family_ec", "dbcan_cazy_id"]
-    genes = {gene: {col: set() for col in feature_columns} for gene in gene_ids}
-    methods = {gene: set() for gene in gene_ids}
+    genes = {gene: {column: set() for column in SET_COLUMNS} for gene in gene_ids}
+    to_gene = {search: gene for search, gene in (id_map or {g: g for g in gene_ids}).items() if gene in genes}
     evidence = []
-    for method, (filename, gene_col, feature_col, start_col, end_col, evalue_col,
-                 summary_col) in SOURCES.items():
-        required = [gene_col, feature_col, start_col, end_col, evalue_col,
-                    "Bit Score" if method == "diamond" else "Coverage"]
-        if method == "dbCANsub":
-            required += list(SUBFAMILY_FIELDS)
-        for row in _read_table(native / filename, required):
-            gene = restore(row[gene_col])
-            feature = row[feature_col].removesuffix(".hmm")
-            record = dict(zip(EVIDENCE_COLUMNS, [
-                gene, method, feature, row[start_col], row[end_col], row[evalue_col],
-                row.get("Coverage", "-"), row.get("Bit Score", "-"),
-                row.get("Subfam EC", "-"), row.get("Substrate", "-"),
-                json.dumps(row, sort_keys=True, separators=(",", ":")),
-            ]))
+    for method, source in SOURCES.items():
+        required = [source.gene, source.feature, source.start, source.end, source.e_value,
+                    source.score, *(SUBFAMILY_COLUMNS if method == "dbCANsub" else ())]
+        for row in _read_table(native / source.file, required):
+            gene = _restore(to_gene, row[source.gene])
+            feature = row[source.feature].removesuffix(".hmm")
+            record = {
+                "gene_id": gene, "method": method, "feature_id": feature,
+                "query_start": row[source.start], "query_end": row[source.end],
+                "e_value": row[source.e_value], "coverage": row.get("Coverage", "-"),
+                "bit_score": row.get("Bit Score", "-"), "ec": row.get("Subfam EC", "-"),
+                "substrate": row.get("Substrate", "-"),
+                "source_row": json.dumps(row, sort_keys=True, separators=(",", ":")),
+            }
             _validate_record(record)
-            summary = genes[gene]
-            methods[gene].add(method)
-            if method == "diamond":
-                labels = (part.strip() for part in feature.split("|")[1:])
-                summary[summary_col].update(
-                    part for part in labels if part not in ("", "-") and not EC.fullmatch(part))
-            else:
-                summary[summary_col].update(_parts(feature))
-            if method == "dbCANsub":
-                for source, dest in SUBFAMILY_FIELDS.items():
-                    summary[dest].update(_parts(row[source]))
-                # The family is encoded in the domain's subfamily name; its
-                # composition field lists source-sequence counts, not families.
-                families = {match.split("_")[0] for match in FAMILY.findall(feature)}
-                ecs = {part.split(":")[0] for part in _parts(row["Subfam EC"])}
-                if any(not EC.fullmatch(ec) for ec in ecs):
-                    raise ValueError(f"Malformed subfamily EC for {gene}: {row['Subfam EC']}")
-                # Ambiguous multi-family domains do not establish correlated pairs.
-                if len(families) == 1:
-                    summary["dbcan_family_ec"].update(f"{next(iter(families))};EC:{ec}" for ec in ecs)
+            _add_features(genes[gene], method, gene, feature, row)
             evidence.append(record)
     recommended = {}
     for row in _read_table(native / "overview.tsv", ["Gene ID", "#ofTools", "Recommend Results"]):
-        gene = restore(row["Gene ID"])
+        gene = _restore(to_gene, row["Gene ID"])
         if gene in recommended:
             raise ValueError(f"Duplicate overview gene ID: {gene!r}")
         count = _number(row["#ofTools"], "tool count", maximum=3, integer=True)
-        if count != len(methods[gene]):
+        if count != len(genes[gene]["dbcan_methods"]):
             raise ValueError(f"Inconsistent overview method count for {gene}")
         recommended[gene] = row["Recommend Results"] or "-"
-    if any(methods[gene] and gene not in recommended for gene in genes):
+    if any(found["dbcan_methods"] and gene not in recommended for gene, found in genes.items()):
         raise ValueError("dbCAN overview omits genes with search hits")
-    summaries = []
-    for gene, values in genes.items():
-        row = {col: ("|" if col == "dbcan_family_ec" else ";").join(sorted(value)) or "-"
-               for col, value in values.items()}
-        row.update(dbcan_methods=";".join(sorted(methods[gene])) or "-",
-                   dbcan_tools_count=str(len(methods[gene])),
-                   dbcan_recommended=recommended.get(gene, "-"))
-        summaries.append({"gene_id": gene, **{col: row[col] for col in SUMMARY_COLUMNS}})
+    summaries = [{
+        "gene_id": gene,
+        **{column: ("|" if column == "dbcan_family_ec" else ";").join(sorted(found[column])) or "-"
+           for column in SET_COLUMNS},
+        "dbcan_tools_count": str(len(found["dbcan_methods"])),
+        "dbcan_recommended": recommended.get(gene, "-"),
+    } for gene, found in genes.items()]
     evidence.sort(key=lambda row: (row["gene_id"], row["method"], float(row["query_start"]),
                                    row["feature_id"], row["source_row"]))
     return summaries, evidence
@@ -350,15 +354,13 @@ def _clear_raw_outputs(published, sidecars=()):
     """Remove files a previous Kolach run published; leave any user-added files."""
     marker = published / OWNER_FILE
     if marker.is_file():
-        contents = marker.read_text()
-        names = LEGACY_RAW_FILES if contents == OWNER_TEXT else contents.splitlines()[1:]
-        for name in names:
+        # The marker lists the generated files after its header line.
+        for name in marker.read_text().splitlines()[1:]:
             path = published / name
             if name and path.parent == published and (path.is_file() or path.is_symlink()):
                 path.unlink()
         if any(path != marker for path in published.iterdir()):
-            # An explicit empty list distinguishes this from a legacy marker.
-            marker.write_text(OWNER_TEXT + "\n")
+            marker.write_text(OWNER_TEXT)
         else:
             marker.unlink()
             published.rmdir()
