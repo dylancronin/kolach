@@ -948,16 +948,16 @@ def integrate_annotations(
             default = "0" if column == "dbcan_tools_count" else "-"
             result[column] = [lookup.get(gid, {}).get(column, default) for gid in gene_ids]
     if dbcan_evidence_tsv is not None:
-        from kolach.methods.dbcan import read_evidence
+        from kolach.methods.dbcan import COMBINED_EVIDENCE_NAMES, read_evidence
 
         dbcan_audit = []
         levels = dict(zip(result.gene_id, result.consensus_level))
         feature_types = {"hmm": "cazy_family", "dbCANsub": "cazy_subfamily", "diamond": "cazy_alignment"}
         for record in read_evidence(dbcan_evidence_tsv, [row["gene_id"] for row in dbcan_rows]):
-            row = dict(record)
+            row = {COMBINED_EVIDENCE_NAMES.get(column, column): value for column, value in record.items()}
             row.update(
                 method="dbcan", dbcan_method=record["method"], ko="-",
-                feature_type=feature_types[record["method"]], original_status=THRESHOLD_PASSING,
+                dbcan_feature_type=feature_types[record["method"]], original_status=THRESHOLD_PASSING,
                 cross_method_status="supplementary", consensus_level=levels[record["gene_id"]],
                 supporting_methods="-",
             )
@@ -969,8 +969,7 @@ def integrate_annotations(
         for gid, methods in found.items():
             if (";".join(sorted(methods)) or "-") != lookup[gid]["dbcan_methods"]:
                 raise ValueError(f"dbCAN evidence and overview disagree on methods for {gid!r}")
-        extra_columns = ["feature_type", "feature_id", "query_start", "query_end", "coverage",
-                         "ec", "substrate", "dbcan_method", "source_row"]
+        extra_columns = ["dbcan_feature_type", *COMBINED_EVIDENCE_NAMES.values(), "dbcan_method"]
         evidence_df = pd.DataFrame([*audit, *dbcan_audit], columns=[*EVIDENCE_COLUMNS, *extra_columns])
         evidence_df = evidence_df.sort_values(["gene_id", "ko", "method"], kind="stable").reset_index(drop=True)
     result.attrs["evidence"] = evidence_df

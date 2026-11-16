@@ -83,10 +83,14 @@ stale search-ID map can never sit beside a newer overview. Other files you add t
 
 In the combined evidence table, dbCAN rows have `method=dbcan`, `ko=-`, and
 `cross_method_status=supplementary`. Their `dbcan_method` identifies `hmm`,
-`dbCANsub`, or `diamond`. Additional columns retain feature type/ID, query
-coordinates, coverage, EC, substrate, and the complete native row as JSON.
+`dbCANsub`, or `diamond`. All dbCAN-specific columns use the `dbcan_` prefix:
+`dbcan_feature_type`, `dbcan_feature_id`, `dbcan_query_start`, `dbcan_query_end`,
+`dbcan_coverage`, `dbcan_ec`, `dbcan_substrate`, `dbcan_method`, and
+`dbcan_source_row` (the complete native row as JSON).
 The existing bit score and E-value columns hold the search metrics. These rows
 do not participate in KO consensus. KO-only runs retain the existing schema.
+The separate normalized `dbcan_evidence.tsv` retains its short column names;
+the prefix is applied when merging into the combined evidence table.
 
 The summary columns are `dbcan_id`, `dbcan_sub_id`, `dbcan_sub_composition`,
 `dbcan_sub_ec`, `dbcan_sub_substrate`, `dbcan_family_ec`, `dbcan_cazy_id`,

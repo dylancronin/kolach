@@ -32,6 +32,12 @@ EVIDENCE_COLUMNS = [
     "gene_id", "method", "feature_id", "query_start", "query_end",
     "e_value", "coverage", "bit_score", "ec", "substrate", "source_row",
 ]
+# Names used when domain evidence shares a table with KO evidence.
+COMBINED_EVIDENCE_NAMES = {
+    column: f"dbcan_{column}" for column in (
+        "feature_id", "query_start", "query_end", "coverage", "ec", "substrate", "source_row",
+    )
+}
 FAMILY = re.compile(r"(?:GH|GT|CBM|AA|CE|PL)\d+(?:_\d+)?")
 EC = re.compile(r"\d+\.(?:\d+|-)\.(?:\d+|-)\.(?:n?\d+|-)")
 OWNER_FILE = ".kolach_dbcan_native"
@@ -74,9 +80,11 @@ def tool_version():
     return VERSION
 
 
-def _read_table(path, required):
+def _read_table(path, required, aliases=None):
     with open(path, newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
+        if reader.fieldnames and aliases:
+            reader.fieldnames = [aliases.get(column, column) for column in reader.fieldnames]
         if not reader.fieldnames or not set(required) <= set(reader.fieldnames):
             raise ValueError(f"Missing required columns in {path}: {required}")
         if len(reader.fieldnames) != len(set(reader.fieldnames)):
@@ -291,7 +299,8 @@ def read_summary(path):
 
 def read_evidence(path, gene_ids):
     """Read domain evidence with the same inventory and numeric checks as searches."""
-    rows = _read_table(path, EVIDENCE_COLUMNS)
+    rows = _read_table(path, EVIDENCE_COLUMNS,
+                       aliases={combined: native for native, combined in COMBINED_EVIDENCE_NAMES.items()})
     # A standard Kolach evidence table can be reused without retaining raw files.
     if rows and "dbcan_method" in rows[0]:
         rows = [{**row, "method": row["dbcan_method"]} for row in rows if row["method"] == "dbcan"]

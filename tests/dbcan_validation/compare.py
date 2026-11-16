@@ -90,7 +90,7 @@ def main():
     ko_evidence = combined_evidence[combined_evidence.method != "dbcan"][baseline.attrs["evidence"].columns]
     pd.testing.assert_frame_equal(baseline.attrs["evidence"], ko_evidence.reset_index(drop=True), check_dtype=False)
     domains = combined_evidence[combined_evidence.method == "dbcan"]
-    assert canonical(domains["source_row"].tolist()) == canonical([row["source_row"] for row in evidence])
+    assert canonical(domains["dbcan_source_row"].tolist()) == canonical([row["source_row"] for row in evidence])
     import re
     pairs = {(r.gene_id, ko) for r in enriched.itertuples()
              for ko in re.findall(r"K\d{5}", r.accepted_ko + ";" + r.alternative_kos)}

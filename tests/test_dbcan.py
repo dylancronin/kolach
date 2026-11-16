@@ -233,12 +233,27 @@ class TestDbcan(unittest.TestCase):
         self.assertEqual(len(domains), 5)
         self.assertEqual(set(domains.ko), {"-"})
         self.assertEqual(set(domains.cross_method_status), {"supplementary"})
-        self.assertEqual(set(domains.source_row), {row["source_row"] for row in records})
-        self.assertEqual(set(domains.feature_type), {"cazy_family", "cazy_subfamily", "cazy_alignment"})
+        self.assertEqual(set(domains.dbcan_source_row), {row["source_row"] for row in records})
+        self.assertEqual(set(domains.dbcan_feature_type), {"cazy_family", "cazy_subfamily", "cazy_alignment"})
+        extra_columns = set(audit.columns) - set(baseline.attrs["evidence"].columns)
+        self.assertEqual(extra_columns, {
+            "dbcan_feature_type", "dbcan_feature_id", "dbcan_query_start", "dbcan_query_end",
+            "dbcan_coverage", "dbcan_ec", "dbcan_substrate", "dbcan_method", "dbcan_source_row",
+        })
+        self.assertTrue(audit.loc[audit.method != "dbcan", list(extra_columns)].isna().all().all())
         roundtrip = integrate_annotations(protein_fasta=self.fasta, kofam_tsv=kofam, dbcan_tsv=summary,
                                           dbcan_evidence_tsv=self.root / "kolach_evidence.tsv")
         pd.testing.assert_frame_equal(result, roundtrip)
         pd.testing.assert_frame_equal(audit, roundtrip.attrs["evidence"])
+        # Previously exported combined tables remain readable after the rename.
+        legacy = audit.rename(columns={
+            column: column.removeprefix("dbcan_") for column in extra_columns if column != "dbcan_method"
+        })
+        legacy_path = self.root / "legacy_evidence.tsv"
+        legacy.to_csv(legacy_path, sep="\t", index=False, na_rep="-")
+        legacy_result = integrate_annotations(protein_fasta=self.fasta, kofam_tsv=kofam, dbcan_tsv=summary,
+                                              dbcan_evidence_tsv=legacy_path)
+        pd.testing.assert_frame_equal(audit, legacy_result.attrs["evidence"])
         with self.assertRaisesRegex(ValueError, "overview"):
             integrate_annotations(dbcan_evidence_tsv=evidence)
         for column, value in [("gene_id", "unknown"), ("method", "unknown"), ("query_start", "0")]:
@@ -257,7 +272,8 @@ class TestDbcan(unittest.TestCase):
         self.assertEqual(list(result.gene_id), ["001", "empty"])
         self.assertTrue(result.attrs["evidence"].empty)
         self.assertEqual(set(result.dbcan_tools_count), {"0"})
-        self.assertIn("feature_id", (self.root / "kolach_evidence.tsv").read_text().splitlines()[0])
+        self.assertIn("dbcan_feature_id", (self.root / "kolach_evidence.tsv").read_text().splitlines()[0])
+        self.assertEqual(dbcan.read_evidence(self.root / "kolach_evidence.tsv", ["001", "empty"]), [])
 
     @unittest.skipUnless(symlinks_supported(), "symlinks unavailable")
     def test_output_collision_guards_preserve_inputs(self):
