@@ -23,6 +23,22 @@ conda env create -f environment.yaml
 conda activate kolach
 ```
 
+The environment includes dbCAN 5.2.9 and the external search tools. To update an
+existing environment from this checkout:
+
+```bash
+conda env update -n kolach -f environment.yaml
+conda activate kolach
+python -m pip install -e .
+```
+
+Installing with `python -m pip install .` (or `python -m pip install -e .` for
+development) also installs dbCAN 5.2.9 and its Python dependencies. Pip does not
+install Snakemake, HMMER, DIAMOND, MMseqs2, eggNOG-mapper, or DeepKOALA; use
+`environment.yaml` for the complete tool environment. DeepKOALA's PyTorch
+dependency is available through `python -m pip install "kolach[deepkoala]"`.
+Download annotation databases separately with `kolach download`.
+
 ---
 
 ## Usage
@@ -37,8 +53,6 @@ Optional download flags:
 - `--deepkoala-release`: Model release tag (`latest` or release tag like `202608`, default: `latest`). `latest` is resolved against GenomeNet on every run, so re-running the download picks up newly published models.
 
 The KEGG Orthology hierarchy (`ko00001.json`) used by `--add-pathways` is downloaded alongside the selected databases, so annotation runs do not need network access.
-
-If you install kolach with pip rather than the conda environment, DeepKOALA's PyTorch dependency is an optional extra: `pip install "kolach[deepkoala]"`.
 
 ### 2. Annotate Proteins
 

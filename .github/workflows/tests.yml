@@ -27,7 +27,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       # snakemake enables the workflow dry-run tests in tests/test_workflows.py.
-      - run: python -m pip install pandas numpy "snakemake>=9,<10"
+      - run: python -m pip install -e . "snakemake>=9,<10"
+      - name: Check installed dependencies and dbCAN CLI
+        run: |
+          python -m pip check
+          run_dbcan version
+          python -c "import dbcan.IO.fasta, dbcan.annotation.diamond, dbcan.annotation.pyhmmer_search"
       - run: python -m unittest discover -s tests -v
         env:
           PYTHONPATH: src

@@ -36,10 +36,12 @@ AnnoGuild's verified CAZy product or import its specialisation classifier.
 
 ## Usage
 
-Create the environment from the updated `environment.yaml` (dbCAN 5.2.9 is pinned).
-Existing installations without dbCAN continue to support all KO-only commands.
-For an existing installation, install dbCAN into a separate environment and put
-its `run_dbcan` executable on PATH alongside Kolach's tools.
+Create or update the `kolach` environment using the [installation instructions](../README.md#installation).
+Both `environment.yaml` and Kolach's package requirements pin dbCAN to 5.2.9,
+so installing Kolach also installs the `run_dbcan` executable and its Python
+dependencies in the same environment. HMMER and DIAMOND are supplied by the conda
+environment and must be installed separately when using pip alone. No separate
+dbCAN environment or PATH adjustment is needed.
 
 ```sh
 kolach download --databases dbcan --database-dir kolach-db

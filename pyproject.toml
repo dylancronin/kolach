@@ -8,6 +8,7 @@ version = "0.2.1"
 description = "Assign KEGG Orthology identifiers to proteins."
 requires-python = ">=3.11"
 dependencies = [
+    "dbcan==5.2.9",
     "numpy",
     "pandas>=2.0.0",
     "tqdm>=4.60.0",
