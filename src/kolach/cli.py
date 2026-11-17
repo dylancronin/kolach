@@ -285,6 +285,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_integration_options(annotate_parser)
 
+    # Genome grouping is explicit: a protein file may represent one MAG or many.
+    annotate_parser.add_argument("--add-specialisations", action="store_true",
+                                 help="Evaluate genome-level pathways and AnnoGuild guilds after annotation.")
+    annotate_group = annotate_parser.add_mutually_exclusive_group()
+    annotate_group.add_argument("--genome-id", help="Genome ID when all input proteins belong to one genome.")
+    annotate_group.add_argument("--gene-genome-map", help="TSV mapping gene_id to genome for mixed inputs.")
+    annotate_parser.add_argument("--markers", help="Optional gene-level refined marker TSV (gene_id, feature, optional genome).")
+    annotate_parser.add_argument("--cazy-product", help="Optional legacy verified CAZy Boolean product matrix.")
+
     # ------------------------------------------------------
     # Integrate subcommand
     # ------------------------------------------------------
@@ -385,6 +394,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Column name containing KO identifiers to annotate (default: 'accepted_ko').",
     )
 
+    # Specialisation uses the bundled EMERGE rules; it does not download databases.
+    specialise_parser = subparsers.add_parser(
+        "specialise", help="Evaluate genome-level metabolic pathways and AnnoGuild specialisations."
+    )
+    specialise_parser.add_argument("--annotation-table", required=True)
+    specialise_parser.add_argument("--output-dir", required=True)
+    specialise_group = specialise_parser.add_mutually_exclusive_group()
+    specialise_group.add_argument("--genome-id", help="All annotation rows belong to this genome.")
+    specialise_group.add_argument("--genome-column", help="Genome column in a combined table (default: genome).")
+    specialise_group.add_argument("--gene-genome-map", help="TSV with gene_id and genome columns.")
+    specialise_parser.add_argument("--ko-column", default="accepted_ko")
+    specialise_parser.add_argument("--markers", help="Refined features: gene_id, feature, optional genome.")
+    specialise_parser.add_argument("--product", help="Classify an existing refined Boolean product instead of evaluating pathways.")
+    specialise_parser.add_argument("--cazy-product", help="Verified legacy CAZy Boolean calls; must include all assessed genomes.")
+    specialise_parser.add_argument("--reaction-threshold", type=fraction, default=0.7)
+    specialise_parser.add_argument("--ko-threshold", type=fraction, default=0.6)
+    specialise_parser.add_argument("--reactions-file", help="Custom reaction TSV (pathway, reaction_id, definition).")
+    specialise_parser.add_argument("--pathways-file", help="Custom EMERGE refined pathway TSV.")
+
     return parser
 
 
@@ -425,8 +453,10 @@ def annotate_config(args) -> dict:
         "eggnog_filter_multi": args.eggnog_filter_multi,
         "conflict_strategy": args.conflict_strategy,
         "add_pathways": args.add_pathways,
+        "add_specialisations": args.add_specialisations,
     }
-    for key in ("eggnog_sensmode", "eggnog_temp_dir", "eggnog_dmnd_block_size", "eggnog_dmnd_index_chunks"):
+    for key in ("eggnog_sensmode", "eggnog_temp_dir", "eggnog_dmnd_block_size", "eggnog_dmnd_index_chunks",
+                "genome_id", "gene_genome_map", "markers", "cazy_product"):
         value = getattr(args, key)
         if value is not None:
             config[key] = value
@@ -472,6 +502,14 @@ def main(argv=None):
 
     if args.command == "integrate" and args.add_pathways and not args.database_dir:
         parser.error("integrate --add-pathways requires --database-dir")
+
+    if args.command == "annotate":
+        if args.add_specialisations and not (args.genome_id or args.gene_genome_map):
+            parser.error("annotate --add-specialisations requires --genome-id or --gene-genome-map")
+        if not args.add_specialisations and any((args.genome_id, args.gene_genome_map, args.markers, args.cazy_product)):
+            parser.error("Genome grouping and supplemental inputs require --add-specialisations")
+    if args.command == "specialise" and args.product and any((args.reactions_file, args.pathways_file)):
+        parser.error("--product cannot be combined with custom rule files")
 
     if args.command == "download":
         returncode = run_workflow("download.smk", download_config(args), cores=1)
@@ -520,6 +558,22 @@ def main(argv=None):
                 output_tsv=args.output_file,
                 database_dir=args.database_dir,
             )
+
+    elif args.command == "specialise":
+        from kolach.metabolism.specialise import specialise
+
+        try:
+            paths = specialise(
+                args.annotation_table, args.output_dir,
+                genome_id=args.genome_id, genome_column=args.genome_column,
+                gene_genome_map=args.gene_genome_map, ko_column=args.ko_column,
+                markers=args.markers, product_table=args.product, cazy_product=args.cazy_product,
+                reaction_threshold=args.reaction_threshold, ko_threshold=args.ko_threshold,
+                reactions_file=args.reactions_file, pathways_file=args.pathways_file,
+            )
+        except (ValueError, OSError, KeyError) as error:
+            parser.error(str(error))
+        print(f"[kolach] Wrote specialisations to {paths['specialisations']}")
 
     elif args.command == "pathway":
         from kolach.pathways import annotate_pathways

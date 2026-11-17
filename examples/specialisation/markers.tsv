@@ -1,0 +1,11 @@
+genome	gene_id	feature
+METHANOTROPH	methanotroph_1	marker:pmoA
+METHANOTROPH	methanotroph_2	marker:pmoB
+METHANOTROPH	methanotroph_3	marker:pmoC
+NITROGEN	nitrogen_1	marker:amoA
+NITROGEN	nitrogen_2	marker:amoB
+NITROGEN	nitrogen_3	marker:amoC
+NITROGEN	nitrogen_5	marker:nxrA
+NITROGEN	nitrogen_6	marker:nxrB
+SULFATE	sulfate_4	marker:dsrA
+SULFATE	sulfate_5	marker:dsrB

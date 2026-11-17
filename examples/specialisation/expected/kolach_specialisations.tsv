@@ -1,0 +1,11 @@
+genome	specialisation	nitrogen_specialisation	sulfur_specialisation
+EMPTY		None detected	
+FERMENTER	fermenter	None detected	
+GENERALIST	generalist	None detected	
+HOMOACETOGEN	homoacetogen	None detected	
+MACROMOLECULE	macromolecule_degrader	None detected	
+METHANOGEN	methanogen	None detected	
+METHANOTROPH	methanotroph	None detected	
+MONOMER	monomer_degrader	None detected	
+NITROGEN		comammox	
+SULFATE		None detected	sulfate_reducer
