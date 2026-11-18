@@ -7,7 +7,6 @@ import io
 import json
 import os
 from pathlib import Path
-import sys
 import tarfile
 import tempfile
 import unittest
@@ -162,9 +161,25 @@ class TestGraftmRun(unittest.TestCase):
         self.assertEqual(got["001", "amoA_pmoA"]["gate_source"], "accepted")
         self.assertEqual((got["g2", "dsrA"]["marker"], got["g2", "dsrA"]["gate_source"]), ("rdsrA", "alternative"))
         self.assertEqual((got["g3", "norZ_norB"]["status"], got["g3", "norZ_norB"]["unresolved_reason"]),
-                         ("unresolved", "nitric_oxide_dismutase"))
+                         ("excluded", "nitric_oxide_dismutase"))
         self.assertEqual(got["g4", "mmoX_sMMO"]["status"], "not_placed")
-        self.assertFalse((self.root / "out" / "graftm").exists())
+        self.assertFalse((self.root / "out" / ".graftm_work").exists())
+        self.assertTrue((self.root / "out" / "kolach_graftm_markers.tsv.log").is_file())
+
+    def test_one_function_per_protein(self):
+        # dsrA accepted, dsrB alternative: the accepted package wins.
+        self.annotations.write_text("gene_id\taccepted_ko\talternative_kos\n"
+                                    "001\tK11180\tK11181\n"
+                                    "g2\t-\tK00370;K00371\n")  # narG and narH, both alternative
+        self.placements = {"dsrA": {"MAAA": "Root; dsrA; Chloroflexota"},
+                           "dsrB": {"MAAA": "Root; dsrB; Chloroflexota"},
+                           "narG_nxrA": {"MCCC": "Root; NarG_Mixed"},
+                           "narH_nxrB": {"MCCC": "Root; NarH_Proteobacteria"}}
+        got = {(row["gene_id"], row["package"]): row for row in self.run_graftm()}
+        self.assertEqual(got["001", "dsrA"]["status"], "refined")
+        self.assertEqual((got["001", "dsrB"]["status"], got["001", "dsrB"]["feature"]), ("superseded", ""))
+        self.assertEqual({got["g2", p]["unresolved_reason"] for p in ("narG_nxrA", "narH_nxrB")},
+                         {"competing_packages"})
 
     def test_missing_package_clade_is_rejected(self):
         taxonomy = self.packages / "dsrA.gpkg" / "dsrA.gpkg.refpkg" / "dsrA_taxonomy.csv"

@@ -34,7 +34,10 @@ environment; no GraftM code is copied into Kolach.
 The GraftM package bundle downloaded by `kolach download --databases graftm`
 contains eight packages built for the EMERGE temporal paper
 (`temporal_paper_202505/GraftM-analysis`) and the public GraftM package
-`7.60.mmoX_sMMO` (https://data.ace.uq.edu.au/public/graftm/7/). The placement
+`7.60.mmoX_sMMO` (https://data.ace.uq.edu.au/public/graftm/7/). The EMERGE
+packages' reference sequences include UniProt UniRef90 (release 2022_01)
+sequences, available under CC BY 4.0 (https://www.uniprot.org/help/license);
+UniProt Consortium, "UniProt: the Universal Protein Knowledgebase". The placement
 lookup in `src/kolach/metabolism/data/graftm_placements.tsv` lists every clade
 of those packages and is derived from the temporal paper's
 `update_annotations.R`, with the corrections described in

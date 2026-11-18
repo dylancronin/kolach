@@ -186,7 +186,11 @@ def add_markers(genomes: dict, marker_table) -> None:
     columns, rows = read_tsv(marker_table)
     if not {"gene_id", "feature"} <= set(columns):
         raise ValueError("Marker table requires gene_id and feature columns")
+    excluded = []
     if "status" in columns:
+        # GraftM placed these among non-target homologues (e.g. sHMO, NO
+        # dismutase): the gate KO is removed from the gene's evidence.
+        excluded = [row for row in rows if row["status"] == "excluded"]
         rows = [row for row in rows if row["status"] == "refined"]
     locations = {}
     for genome, genes in genomes.items():
@@ -207,6 +211,11 @@ def add_markers(genomes: dict, marker_table) -> None:
         if any(len(old) == len(feature) == 7 and old[:6] == feature[:6] and old != feature for old in previous):
             raise ValueError(f"Conflicting refinements for {gene}: {previous} and {feature}")
         previous.add(feature)
+    for row in excluded:
+        candidates = [row["genome"]] if "genome" in columns else locations.get(row["gene_id"], [])
+        if len(candidates) != 1 or row["gene_id"] not in genomes.get(candidates[0], {}):
+            raise ValueError(f"Unknown or ambiguous marker gene: {row['gene_id']!r}; supply its genome")
+        genomes[candidates[0]][row["gene_id"]].discard(row["gate_ko"])
     for (genome, gene), features in updates.items():
         # Mirrors AnnoGuild's replacement, rather than keeping both AMO and pMMO
         # evidence via the ambiguous parent KO after a specific refinement.
@@ -237,24 +246,31 @@ def write_tsv(path, columns, rows):
         writer.writerows(rows)
 
 
-def marker_summary(marker_table, genomes: dict) -> dict:
-    """Per-genome counts of GraftM outcomes (refined/unresolved/not_placed)."""
+GRAFTM_STATUSES = ("refined", "excluded", "unresolved", "superseded", "not_placed")
+
+
+def marker_summary(marker_table, genomes: dict) -> tuple[dict, dict]:
+    """Per-genome GraftM outcome counts (one per protein and package), and the
+    gate KOs of proteins left unrefined (unresolved or not placed)."""
     columns, rows = read_tsv(marker_table)
     gene_genome = {gene: genome for genome, genes in genomes.items() for gene in genes}
-    counts = {genome: {"refined": 0, "unresolved": 0, "not_placed": 0} for genome in genomes}
+    counts = {genome: dict.fromkeys(GRAFTM_STATUSES, 0) for genome in genomes}
+    unrefined = {genome: set() for genome in genomes}
     if "status" in columns:
         for row in rows:
             genome = row.get("genome") or gene_genome.get(row["gene_id"])
             if genome in counts and row["status"] in counts[genome]:
                 counts[genome][row["status"]] += 1
-    return counts
+                if row["status"] in ("unresolved", "not_placed") and row.get("gate_ko"):
+                    unrefined[genome].add(row["gate_ko"])
+    return counts, unrefined
 
 
 def specialise(annotation_table, output_dir, *, genome_id=None, genome_column=None,
                gene_genome_map=None, ko_column="accepted_ko", markers=None,
                cazy_from_dbcan=False, product_table=None, cazy_product=None,
                reaction_threshold=0.7, ko_threshold=0.6, reactions_file=None,
-               pathways_file=None) -> dict[str, Path]:
+               pathways_file=None, graftm_manifest=None) -> dict[str, Path]:
     """Run the complete genome-level analysis; no databases or network required.
 
     `kolach annotate --add-specialisations` supplies `markers` (the GraftM table)
@@ -269,6 +285,7 @@ def specialise(annotation_table, output_dir, *, genome_id=None, genome_column=No
 
     # 1. Aggregate the selected accepted annotations and optional refinements.
     genomes = read_annotations(annotation_table, ko_column, genome_id, genome_column, gene_genome_map)
+    marker_counts, unrefined_gates = marker_summary(markers, genomes) if markers else ({}, {})
     if markers:
         add_markers(genomes, markers)
     features = {genome: set().union(*genes.values()) for genome, genes in genomes.items()}
@@ -292,7 +309,12 @@ def specialise(annotation_table, output_dir, *, genome_id=None, genome_column=No
                 # are unavailable. An unsuccessful rule needing an unassessed
                 # refinement is unresolved, not a claim that the pathway is absent.
                 required = set(filter(None, result["required_refinements"].split(";")))
-                assessed = markers is not None or required <= features[genome]
+                # With GraftM results, a refinement is unresolved only when a
+                # protein carrying its gate KO could not be refined.
+                if markers is None:
+                    assessed = required <= features[genome]
+                else:
+                    assessed = not any(ko[:6] in unrefined_gates[genome] for ko in required)
                 result["assessment"] = "supported" if result["called"] else "not_detected" if assessed else "unresolved_refinement"
                 products[genome][rule.pathway_id] = result["called"]
                 details.append({"genome": genome, **result})
@@ -300,9 +322,10 @@ def specialise(annotation_table, output_dir, *, genome_id=None, genome_column=No
     # 3. CAZy substrates: DRAM2 family/EC rules on dbCAN evidence, or an
     # imported legacy matrix (API only).
     cazy_details = None
+    signature_calls = {}
     if cazy_from_dbcan:
         gene_genomes = {gene: genome for genome, genes in genomes.items() for gene in genes}
-        calls, cazy_details = cazy_rules.call_substrates(
+        calls, signature_calls, cazy_details = cazy_rules.call_substrates(
             cazy_rules.read_gene_pairs(annotation_table, gene_genomes, genomes))
         for name in cazy_rules.POLYMER_GROUPS:
             if name not in pathway_names:
@@ -325,18 +348,19 @@ def specialise(annotation_table, output_dir, *, genome_id=None, genome_column=No
     assessments = []
     cazy_assessment = ("dbcan" if cazy_from_dbcan else "imported_product" if cazy_product
                        or any(name.startswith("CAZy") for name in pathway_names) else "unassessed")
-    marker_counts = marker_summary(markers, genomes) if markers else {}
     for genome, calls in products.items():
         labels = classify_specialisation(calls, features[genome])
         specialisations.append({"genome": genome, **labels})
         counts = marker_counts.get(genome, {})
+        # Comparison only: the primary label if CAZy used signature pairs only.
+        signature_label = (classify_specialisation({**calls, **signature_calls[genome]}, features[genome])["specialisation"]
+                           if genome in signature_calls else "")
         assessments.append({
             "genome": genome,
             "cazy_assessment": cazy_assessment,
             "refinement_assessment": "imported_product" if product_table else "assessed" if markers is not None else "partial_or_unassessed",
-            "graftm_refined": counts.get("refined", ""),
-            "graftm_unresolved": counts.get("unresolved", ""),
-            "graftm_not_placed": counts.get("not_placed", ""),
+            **{f"graftm_{status}": counts.get(status, "") for status in GRAFTM_STATUSES},
+            "specialisation_cazy_signature_only": signature_label,
             "supported_pathways": ";".join(name for name, call in calls.items() if call),
             "nitrogen_roles": ";".join(role for name, role in NITROGEN_ROLES if calls.get(name)),
             "sulfur_roles": ";".join(role for name, role in SULFUR_ROLES if calls.get(name)),
@@ -379,6 +403,11 @@ def specialise(annotation_table, output_dir, *, genome_id=None, genome_column=No
                             if markers else "selected KO column only; alternative_kos are never added"),
         "cazy_policy": ("DRAM2 family/EC substrate rules on dbCAN evidence; polymer groups only"
                         if cazy_from_dbcan else "imported_product" if cazy_product else "unassessed"),
+        "cazy_rules_source": cazy_rules.RULES_SOURCE if cazy_from_dbcan else None,
+        "cazy_polymer_groups": {name: list(aliases) for name, aliases in cazy_rules.POLYMER_GROUPS.items()}
+                               if cazy_from_dbcan else None,
+        "graftm_bundle": (json.loads(Path(graftm_manifest).read_text(encoding="utf-8"))
+                          if graftm_manifest and Path(graftm_manifest).is_file() else None),
         "pathway_evaluation": "imported_product" if product_table else "legacy_compatible",
         "inputs": {name: {"path": str(Path(path).resolve()), "sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest()}
                    for name, path in {**inputs, **rule_inputs}.items() if path is not None},

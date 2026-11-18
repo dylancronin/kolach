@@ -31,21 +31,25 @@ holding several genomes, give `--gene-genome-map` (columns `gene_id`, `genome`);
 every gene must be mapped. Names are never guessed from gene IDs. Running a
 directory of genome FASTAs in one call is planned.
 
-`--add-specialisations` adds `dbcan` to `--databases` if it is missing. The
-GraftM tools (`graftM`, `pplacer`, `guppy`, `hmmsearch`, `hmmalign`) are in the
-kolach environment. GraftM is pip-installed so HMMER stays at 3.4; its bioconda
-recipe pins 3.2.1.
+`--add-specialisations` adds `dbcan` to `--databases` if it is missing, and a
+gene/genome map is checked against the FASTA before any search starts.
+`environment.yaml` installs the GraftM tools (`graftM`, `pplacer`, `guppy`,
+`hmmsearch`, `hmmalign`); update an existing environment with
+`conda env update -f environment.yaml`. GraftM is pip-installed so HMMER stays
+at 3.4; its bioconda recipe pins 3.2.1. HMMER 3.4 reproduced all recorded
+HMMER 3.2.1 placements (see `tests/annoguild_validation/`).
 
 To re-evaluate a finished run, e.g. with other thresholds, without repeating
 any search:
 
 ```bash
-kolach specialise --annotation-dir results --genome-id MAG001 --ko-threshold 0.5
+kolach specialise --annotation-dir results --output-dir results_ko05 --ko-threshold 0.5
 ```
 
 It reads `kolach_annotations.tsv` (with its dbCAN columns) and
-`kolach_graftm_markers.tsv` from that directory and writes there unless
-`--output-dir` is given.
+`kolach_graftm_markers.tsv`, reuses the genome grouping recorded by the annotate
+run (or `--genome-id` / `--gene-genome-map`), and writes to a separate
+`--output-dir` so the workflow's own reports are never overwritten.
 
 ## 2. Which KOs count
 
@@ -146,8 +150,9 @@ The `missing_features` report lists missing KOs in the selected KO-coverage
 route. For an entirely absent reaction it lists all alternative candidates,
 without adding them to the denominator. With no observed route it lists all
 pathway candidates. A failed pathway that needs a refined feature is labelled
-`unresolved_refinement` only when no marker table was available; with GraftM
-results it is `not_detected`.
+`unresolved_refinement` when a protein carrying that feature's gate KO could not
+be refined (GraftM unresolved or no hit), or when no marker table exists;
+otherwise it is `not_detected`.
 
 ## 5. Marker refinement with GraftM
 
@@ -177,21 +182,28 @@ The method follows the temporal-paper workflow
   `metabolism/data/graftm_placements.tsv` with its function, or a reason it has
   none. Placements are matched exactly by (package, placement). Installing the
   packages checks that the packages and the table list the same clades.
+- **One function per protein.** Paralogous packages (dsrA/dsrB, narG/narH,
+  amoA/B/C) can all place one protein when their KOs are among its
+  alternatives. The package gated by the accepted KO wins and the others are
+  `superseded`; if no accepted-gated package refines it, competing refinements
+  are all `unresolved`.
 - **Effect on evidence.** A refined accepted KO is replaced by its feature
   (K10944 becomes K109440). A protein confirmed from an alternative KO gains the
-  feature beside its accepted KO. Unresolved and unplaced proteins change
-  nothing: the shared KO stays, and rules needing a refined feature ignore it.
+  feature beside its accepted KO. A protein placed among non-target homologues
+  (`excluded`: the mmoX outgroup `Homologues_mmoX`, i.e. sHMO homologues, and
+  `Nod`, nitric oxide dismutase) loses its accepted gate KO, so it no longer
+  supports e.g. methanotrophy. Unresolved and unplaced proteins change nothing:
+  the shared KO stays, and rules needing a refined feature ignore it.
 
-Unresolved placements: the root; `unknown*`/`Unknown` clades; the mmoX outgroup
-(`Homologues_mmoX`, sHMO homologues); and `Nod` (nitric oxide dismutase) in the
-norZ/norB package.
+Unresolved placements: the root and `unknown*`/`Unknown` clades.
 
 Corrections relative to earlier code:
 
 | Source | Problem | Now |
 |---|---|---|
-| AnnoGuild substring matching | `"dsrA" in "Root; rdsrA; …"`, so every rdsrA/rdsrB became dsrA/dsrB (249 of the temporal-paper placements) | rdsrA/rdsrB |
-| AnnoGuild substring matching | `Root; Homologues_mmoX` (outgroup) became mmoX | unresolved |
+| AnnoGuild substring matching | `"dsrA" in "Root; rdsrA; …"`, so every rdsrA/rdsrB became dsrA/dsrB (249 of the 1,414 dsrA/dsrB placements in the temporal paper's `emerge_all_read_tax.tsv`) | rdsrA/rdsrB |
+| AnnoGuild substring matching | `Root; Homologues_mmoX` (outgroup) became mmoX | excluded |
+| AnnoGuild (all proteins placed) | One protein could be refined by several paralogous packages | one function per protein |
 | AnnoGuild substring matching | Clades absent from the EMERGE set (e.g. `NarG_Archaea`) worked only if a substring happened to match | every clade listed |
 | Temporal-paper lookup | Joined on placement alone, so a bare `Root` in any package became norB | unresolved |
 | Temporal-paper lookup | qNor clades mapped to norB (K045610). The norB reaction requires norC (K02305), which single-subunit qNor lacks; the qNor reaction is K045611 alone | qNor → norZ (K045611) |
@@ -200,8 +212,10 @@ The qNor mapping is a scientific decision recorded here for review.
 
 `kolach_graftm_markers.tsv` has one row per gated protein and package:
 `gene_id, package, gate_ko, gate_source (accepted|alternative), placement,
-marker, feature, status (refined|unresolved|not_placed), unresolved_reason`.
-The assessment report counts each status per genome.
+marker, feature, status (refined|excluded|unresolved|superseded|not_placed),
+unresolved_reason`. GraftM's logs are kept in `kolach_graftm_markers.tsv.log`.
+The assessment report counts each status per genome (rows, i.e. protein and
+package pairs).
 
 Packages: eight EMERGE packages from the temporal paper and the public GraftM
 `7.60.mmoX_sMMO` package, distributed as one reproducible bundle
@@ -236,20 +250,24 @@ cannot count twice. **This grouping is provisional.**
 | CAZy-Fructan | Fructan |
 | CAZy-Starch_glycogen | StarchSpecific, StarchGlycogen |
 | CAZy-Chitin | Chitin |
-| CAZy-Microbial_cell_wall | Microbially-derived |
 
-Not counted: `PlantPolymerMixed` (not substrate-specific), oligosaccharides,
+Not counted: `Microbially-derived` (peptidoglycan; it includes GH23/GH102–104
+lytic transglycosylases that nearly every bacterium uses on its own cell wall,
+so it would make almost every genome a macromolecule degrader),
+`PlantPolymerMixed` (not substrate-specific), oligosaccharides,
 disaccharides, β-glucosides and oligosaccharide oxidation. They still appear in
 `kolach_cazy_substrates.tsv` as `CAZy_other-*` rows. DRAM2 rules that mix KOs
 with family/EC pairs (cellobiose, sucrose, trehalose, lactose, other
 disaccharides) are not evaluated. AnnoGuild's generalist threshold was three of
-18 legacy categories; three of nine is stricter.
+18 legacy categories; three of eight is stricter.
 
 `kolach_cazy_substrates.tsv` lists every substrate per genome with the matched
 pairs and genes, plus `called_signature_only`: the call using only pairs unique
-to one polymer group and outside AnnoGuild's low-matching families (GH63, GH49,
-GH127, CE2, GH23, PL30, PL8, PL33, GH88, GH67, GH98, CE4). That column is for
-comparison and never affects the guild labels.
+to one substrate (over all DRAM2 family/EC rules, as AnnoGuild did over its
+categories) and outside AnnoGuild's low-matching families (GH63, GH49, GH127,
+CE2, GH23, PL30, PL8, PL33, GH88, GH67, GH98, CE4). The assessment report's
+`specialisation_cazy_signature_only` gives the primary label under those
+signature-only calls. Both are for comparison and never affect the guild labels.
 
 ## 7. Convert supported pathways to guild labels
 
@@ -289,13 +307,13 @@ in the assessment report.
 
 | File | Contents |
 |---|---|
-| `kolach_product_refined.tsv` | Legacy Boolean matrix: genome, 55 pathways, nine CAZy polymer columns |
+| `kolach_product_refined.tsv` | Legacy Boolean matrix: genome, 55 pathways, eight CAZy polymer columns |
 | `kolach_specialisations.tsv` | Exactly genome, specialisation, nitrogen_specialisation, sulfur_specialisation |
 | `kolach_metabolic_pathways.tsv` | Coverage, signatures, route, supporting/missing evidence and assessment |
-| `kolach_specialisation_assessment.tsv` | Evidence sources, GraftM status counts, supported pathways, all N/S roles, heuristic flags |
+| `kolach_specialisation_assessment.tsv` | Evidence sources, GraftM status counts, signature-only CAZy label, supported pathways, all N/S roles, heuristic flags |
 | `kolach_cazy_substrates.tsv` | Every DRAM2 substrate per genome, with matched pairs and genes |
-| `kolach_graftm_markers.tsv` | GraftM outcome per gated protein and package |
-| `kolach_specialisation_metadata.json` | Source/version, thresholds, policies and SHA-256 hashes of inputs and rules |
+| `kolach_graftm_markers.tsv` (+ `.log`) | GraftM outcome per gated protein and package; GraftM logs |
+| `kolach_specialisation_metadata.json` | Sources (AnnoGuild and dram-rules commits, GraftM bundle manifest), thresholds, policies and SHA-256 hashes of inputs and rules |
 
 Booleans remain `True`/`False`. Missing primary and sulfur labels are empty;
 missing nitrogen retains `None detected`. Legacy schemas are preserved; the

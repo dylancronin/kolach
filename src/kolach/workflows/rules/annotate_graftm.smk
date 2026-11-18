@@ -8,9 +8,12 @@ rule annotate_graftm:
         packages=f"{GRAFTM_DIR}/.download_complete",
         placements=str(PLACEMENTS_FILE)
     output:
-        markers=f"{OUTDIR}/kolach_graftm_markers.tsv"
+        markers=f"{OUTDIR}/kolach_graftm_markers.tsv",
+        log=f"{OUTDIR}/kolach_graftm_markers.tsv.log"
+    params:
+        package_dir=GRAFTM_DIR
     threads:
         int(config.get("threads", 1))
     run:
-        annotate_graftm(input.fasta, input.annotations, GRAFTM_DIR, output.markers,
-                        threads=threads, workdir=f"{OUTDIR}/graftm")
+        annotate_graftm(input.fasta, input.annotations, params.package_dir, output.markers,
+                        threads=threads, workdir=f"{OUTDIR}/.graftm_work")

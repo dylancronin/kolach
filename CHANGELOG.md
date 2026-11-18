@@ -10,7 +10,8 @@
   legacy imports for parity checks.
 - The genome is named after the protein FASTA by default (`--genome-id`
   overrides it). `dbcan` is added to `--databases` automatically.
-- `kolach specialise` re-evaluates a finished `--annotation-dir`.
+- `kolach specialise` re-evaluates a finished `--annotation-dir` into a
+  separate `--output-dir`.
 - Specialisation settings travel in the JSON workflow config.
 
 ### Added
@@ -19,17 +20,21 @@
   when the package's KO is their accepted or alternative KO; placements are
   interpreted by an exact lookup of every package clade. `kolach download
   --databases graftm` installs a reproducible, checksum-pinned bundle of the
-  eight EMERGE packages plus the public mmoX package.
+  eight EMERGE packages plus the public mmoX package. Each protein gets at
+  most one function; proteins placed among non-target homologues (sHMO, NO
+  dismutase) lose their accepted gate KO.
 - CAZy substrate calls (`metabolism/cazy.py`) from Kolach's dbCAN family/EC
-  pairs using DRAM2's `rules_common.tsv` (dram-rules `3257b86`). Nine polymer
-  groups feed the guild labels (provisional grouping); every substrate is
-  reported in `kolach_cazy_substrates.tsv`.
+  pairs using DRAM2's `rules_common.tsv` (dram-rules `3257b86`). Eight polymer
+  groups feed the guild labels (provisional grouping; peptidoglycan excluded);
+  every substrate is reported in `kolach_cazy_substrates.tsv`, with a
+  signature-only comparison label.
 - GraftM installed in the kolach environment via pip, keeping HMMER 3.4.
 
 ### Corrected
 
 - AnnoGuild substring matching called every rdsrA/rdsrB placement dsrA/dsrB
-  and the mmoX outgroup (`Homologues_mmoX`) mmoX.
+  and the mmoX outgroup (`Homologues_mmoX`) mmoX, and let one protein be
+  refined by several paralogous packages.
 - The temporal-paper lookup mapped bare `Root` placements in any package to
   norB, and qNor clades to norB; qNor now maps to norZ (K045611). `Nod`
   placements are unresolved.

@@ -54,6 +54,9 @@ BUNDLE_NAME = f"kolach-graftm-packages-v{BUNDLE_VERSION}.tar.gz"
 BUNDLE_URL = f"https://github.com/dylancronin/kolach/releases/download/graftm-packages-v{BUNDLE_VERSION}/{BUNDLE_NAME}"
 BUNDLE_SHA256 = "40c4136d6e91cf6c673638deae466aa54b3b4cb68605021610ee438c3c27cfec"
 PLACEMENTS_FILE = Path(__file__).resolve().parents[1] / "metabolism" / "data" / "graftm_placements.tsv"
+# Placements that identify a non-target homologue: the gate KO is then removed
+# from an accepted call rather than merely left unrefined.
+EXCLUDING_REASONS = {"outgroup_homologue", "nitric_oxide_dismutase"}
 MARKER_COLUMNS = [
     "gene_id", "package", "gate_ko", "gate_source", "placement",
     "marker", "feature", "status", "unresolved_reason",
@@ -259,15 +262,45 @@ def interpret(package, placement, table) -> dict:
     if marker:
         return {"placement": placement, "marker": marker, "feature": MARKER_FEATURES[marker],
                 "status": "refined", "unresolved_reason": ""}
-    return {"placement": placement, "marker": "", "feature": "", "status": "unresolved",
+    status = "excluded" if reason in EXCLUDING_REASONS else "unresolved"
+    return {"placement": placement, "marker": "", "feature": "", "status": status,
             "unresolved_reason": reason}
+
+
+def resolve_multiple(rows):
+    """Allow one refined function per protein.
+
+    Paralogous packages (dsrA/dsrB, narG/narH, amoA/B/C) can all place one
+    protein when their KOs are among its alternatives. The package gated by
+    the accepted KO wins; refinements reached only through alternative KOs are
+    then superseded. With no accepted-gated refinement, competing refinements
+    are all unresolved.
+    """
+    refined = {}
+    for row in rows:
+        if row["status"] == "refined":
+            refined.setdefault(row["gene_id"], []).append(row)
+    for gene, candidates in refined.items():
+        if len(candidates) < 2:
+            continue
+        accepted = [row for row in candidates if row["gate_source"] == "accepted"]
+        for row in candidates:
+            if accepted and row is not accepted[0]:
+                row.update(status="superseded", unresolved_reason=f"accepted_gate_refined_by_{accepted[0]['package']}")
+            elif not accepted:
+                row.update(status="unresolved", unresolved_reason="competing_packages")
+            if row["status"] != "refined":
+                row.update(marker="", feature="")
+    return rows
 
 
 def annotate(protein_fasta, annotation_table, package_dir, output, threads=1, workdir=None):
     """Place gated proteins with every package and write the marker table.
 
-    Every gated protein gets one row per package: refined, unresolved, or
-    not_placed (GraftM's own search did not keep it).
+    Every gated protein gets one row per package with a status: refined,
+    excluded (placed among non-target homologues), unresolved, superseded (see
+    resolve_multiple) or not_placed (GraftM's own search did not keep it).
+    GraftM logs are kept beside the table as <output>.log.
     """
     table = load_placements()
     package_dir = Path(package_dir)
@@ -275,7 +308,7 @@ def annotate(protein_fasta, annotation_table, package_dir, output, threads=1, wo
     gated = gate_genes(annotation_table)
     sequences = read_fasta(protein_fasta, {gene for genes in gated.values() for gene, _ in genes})
     output = Path(output)
-    workdir = Path(workdir or output.parent / "graftm")
+    workdir = Path(workdir or output.parent / ".graftm_work")
     if workdir.exists():
         shutil.rmtree(workdir)
     workdir.mkdir(parents=True)
@@ -310,9 +343,13 @@ def annotate(protein_fasta, annotation_table, package_dir, output, threads=1, wo
                 row.update({"placement": "", "marker": "", "feature": "", "status": "not_placed",
                             "unresolved_reason": "no_graftm_hit"})
             rows.append(row)
+    resolve_multiple(rows)
     with open(output, "w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=MARKER_COLUMNS, delimiter="\t", lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
+    with open(f"{output}.log", "w", encoding="utf-8") as handle:
+        for log in sorted(workdir.glob("*.log")):
+            handle.write(f"==> {log.stem} <==\n{log.read_text(errors='replace')}\n")
     shutil.rmtree(workdir)
     return output

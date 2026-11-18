@@ -19,7 +19,7 @@ from unittest.mock import patch
 
 from kolach.metabolism import cazy
 from kolach.metabolism.evaluate import (
-    Expression, PathwayRule, evaluate_pathway, expression_tokens, load_rules,
+    PathwayRule, evaluate_pathway, expression_tokens, load_rules,
     parse_expression, signature_present,
 )
 from kolach.metabolism.specialise import (
@@ -251,13 +251,20 @@ class TestInputsAndOutputs(unittest.TestCase):
     def test_cazy_rules_and_matching(self):
         rules = cazy.load_cazy_rules()
         self.assertEqual(len(rules), 23)
-        self.assertEqual(len(cazy.POLYMER_GROUPS), 9)
+        self.assertEqual(len(cazy.POLYMER_GROUPS), 8)
+        # Peptidoglycan lytic enzymes are housekeeping; reported but not counted.
+        self.assertNotIn("Microbially-derived", {a for aliases in cazy.POLYMER_GROUPS.values() for a in aliases})
+        # Signature uniqueness spans every substrate: GH18;EC:3.2.1.200 is in
+        # Chitin and Chitooligosaccharides, so it is not a signature.
+        signatures = cazy.signature_pairs(rules)
+        self.assertNotIn("GH18;EC:3.2.1.200", signatures)
+        self.assertNotIn("GH23;EC:3.2.1.14", signatures)  # Low-matching family.
         self.assertIn("GH13;EC:3.2.1.1", rules["StarchGlycogen"])
         self.assertEqual(cazy.gene_pairs("GH13;EC:3.2.1.1|gt2;ec:2.4.1.n2"), {"GH13;EC:3.2.1.1", "GT2;EC:2.4.1.N2"})
         self.assertEqual(cazy.gene_pairs("-"), set())
         with self.assertRaises(ValueError):
             cazy.gene_pairs("GH13")
-        products, details = cazy.call_substrates({
+        products, signature_products, details = cazy.call_substrates({
             "A": {"g1": {"GH13;EC:3.2.1.1"}, "g2": {"GH9;EC:3.2.1.4"}},
             # A partial EC matches only the same partial EC; family alone is not enough.
             "B": {"g1": {"GH13;EC:3.2.1.-"}, "g2": {"GH5;EC:3.2.1.4"}},
@@ -270,6 +277,7 @@ class TestInputsAndOutputs(unittest.TestCase):
         self.assertEqual((starch["genes"], starch["matched_pairs"]), ("g1", "GH13;EC:3.2.1.1"))
         self.assertTrue(any(row["substrate"].startswith("CAZy_other-") and not row["counts_toward_guild"]
                             for row in details))
+        self.assertEqual(set(signature_products["A"]), set(cazy.POLYMER_GROUPS))
 
     def test_specialise_with_dbcan_cazy_reaches_generalist(self):
         degradation = [rule for rule in load_rules() if "degradation" in rule.pathway_id][:3]
@@ -283,6 +291,16 @@ class TestInputsAndOutputs(unittest.TestCase):
         self.assertTrue(product["MAG"]["CAZy-Chitin"])
         self.assertEqual(sum(value for name, value in product["MAG"].items() if name.startswith("CAZy")), 3)
         self.assertIn("MAG\tgeneralist", paths["specialisations"].read_text())
+        assessment = next(csv.DictReader(open(paths["assessment"]), delimiter="\t"))
+        # All three pairs are unique to one substrate, so the signature-only
+        # comparison agrees; a shared pair (GH18;EC:3.2.1.200) would not count.
+        self.assertEqual(assessment["specialisation_cazy_signature_only"], "generalist")
+        shared = self.write("s.tsv", "gene_id\taccepted_ko\tdbcan_family_ec\n" + "\n".join(rows[:-1])
+                            + "\nc3\t-\tGH18;EC:3.2.1.200\n")
+        paths = specialise(shared, self.tmp / "shared", genome_id="MAG", cazy_from_dbcan=True)
+        assessment = next(csv.DictReader(open(paths["assessment"]), delimiter="\t"))
+        self.assertIn("MAG\tgeneralist", paths["specialisations"].read_text())
+        self.assertNotEqual(assessment["specialisation_cazy_signature_only"], "generalist")
         self.assertIn("dbcan", paths["assessment"].read_text())
         self.assertTrue(paths["cazy"].is_file())
         # A genome present only in the gene/genome map is assessed with no evidence.
@@ -298,6 +316,28 @@ class TestInputsAndOutputs(unittest.TestCase):
         with self.assertRaises(ValueError):
             specialise(table, self.tmp / "c", genome_id="MAG", cazy_from_dbcan=True,
                        cazy_product=self.write("c.tsv", "genome\tCAZy-A\nMAG\tTrue\n"))
+
+    def test_graftm_exclusion_removes_accepted_gate_ko(self):
+        genomes = {"MAG": {"m1": {"K16157"}, "m2": {"K16157"}, "m3": {"K00001"}}}
+        table = self.write("m.tsv", "gene_id\tpackage\tgate_ko\tgate_source\tplacement\tmarker\tfeature\tstatus\tunresolved_reason\n"
+                           "m1\tmmoX_sMMO\tK16157\taccepted\tRoot; Homologues_mmoX\t\t\texcluded\toutgroup_homologue\n"
+                           "m2\tmmoX_sMMO\tK16157\taccepted\tRoot\t\t\tunresolved\troot_placement\n"
+                           "m3\tmmoX_sMMO\tK16157\talternative\tRoot; Homologues_mmoX\t\t\texcluded\toutgroup_homologue\n")
+        add_markers(genomes, table)
+        # An sHMO homologue is not mmoX; an unresolved placement keeps the accepted KO.
+        self.assertEqual(genomes["MAG"], {"m1": set(), "m2": {"K16157"}, "m3": {"K00001"}})
+
+    def test_unrefined_gate_gene_makes_refinement_unresolved(self):
+        annotations = self.write("a.tsv", "gene_id\taccepted_ko\ng1\tK10944\ng2\tK10945\n")
+        markers = self.write("m.tsv", "gene_id\tpackage\tgate_ko\tgate_source\tplacement\tmarker\tfeature\tstatus\tunresolved_reason\n"
+                             "g1\tamoA_pmoA\tK10944\taccepted\tRoot\t\t\tunresolved\troot_placement\n"
+                             "g2\tamoB_pmoB\tK10945\taccepted\t\t\t\tnot_placed\tno_graftm_hit\n")
+        paths = specialise(annotations, self.tmp / "out", genome_id="MAG", markers=markers)
+        rows = {r["pathway"]: r["assessment"] for r in csv.DictReader(open(paths["pathways"]), delimiter="\t")}
+        self.assertEqual(rows["carbon_redox-dissimilatory_methanotrophy"], "unresolved_refinement")
+        self.assertEqual(rows["sulfur_redox-dissimilatory_sulfate_reduction"], "not_detected")
+        assessment = next(csv.DictReader(open(paths["assessment"]), delimiter="\t"))
+        self.assertEqual((assessment["graftm_unresolved"], assessment["graftm_not_placed"]), ("1", "1"))
 
     def test_import_existing_product_and_cazy(self):
         annotation = self.write("a.tsv", "gene_id\tko_id\tgenome\ng1\tK109440\tMAG\n")
@@ -335,27 +375,41 @@ class TestInputsAndOutputs(unittest.TestCase):
         directory.mkdir()
         (directory / "kolach_annotations.tsv").write_text(
             "gene_id\taccepted_ko\talternative_kos\tdbcan_family_ec\ng1\tK10944\t-\tGH13;EC:3.2.1.1\n")
-        argv = ["kolach", "specialise", "--annotation-dir", str(directory), "--genome-id", "MAG"]
+        rerun = self.tmp / "rerun"
+        argv = ["kolach", "specialise", "--annotation-dir", str(directory), "--output-dir", str(rerun)]
         with patch.object(sys, "argv", argv), patch("sys.stderr", new_callable=io.StringIO), \
                 self.assertRaises(SystemExit) as error:
-            main()  # No GraftM table yet.
-        self.assertEqual(error.exception.code, 2)
+            main()  # No GraftM table yet: a runtime error, exit 1.
+        self.assertEqual(error.exception.code, 1)
         (directory / "kolach_graftm_markers.tsv").write_text(
-            "gene_id\tpackage\tgate_ko\tgate_source\tplacement\tmarker\tfeature\tstatus\tunresolved_reason\n"
-            "g1\tamoA_pmoA\tK10944\taccepted\tRoot; pmoA_Mixed\tpmoA\tK109440\trefined\t\n")
+            "gene_id\tpackage\tgate_ko\tgate_source\tplacement\tmarker\tfeature\tstatus\tunresolved_reason\ng1\tamoA_pmoA\tK10944\taccepted\tRoot; pmoA_Mixed\tpmoA\tK109440\trefined\t\n")
+        with patch.object(sys, "argv", argv), patch("sys.stderr", new_callable=io.StringIO), \
+                self.assertRaises(SystemExit) as error:
+            main()  # No recorded genome and none given.
+        self.assertEqual(error.exception.code, 1)
+        (directory / "kolach_specialisation_metadata.json").write_text(json.dumps({"genome_id": "MAG"}))
         with patch.object(sys, "argv", argv), patch("sys.stdout", new_callable=io.StringIO):
-            main()
-        _, product = read_product(directory / "kolach_product_refined.tsv")
+            main()  # Reuses the recorded genome.
+        _, product = read_product(rerun / "kolach_product_refined.tsv")
         self.assertTrue(product["MAG"]["CAZy-Starch_glycogen"])
+        self.assertFalse((directory / "kolach_product_refined.tsv").exists())
         for argv in [["kolach", "annotate", "--protein-fasta", "a.faa", "--database-dir", "db", "--genome-id", "X"],
                      ["kolach", "annotate", "--protein-fasta", "a.faa", "--database-dir", "db",
                       "--add-specialisations", "--markers", "m.tsv"],
                      ["kolach", "specialise", "--annotation-dir", "d"],
-                     ["kolach", "specialise", "--annotation-dir", "d", "--genome-id", "M", "--ko-threshold", "nan"]]:
+                     ["kolach", "specialise", "--annotation-dir", "d", "--output-dir", "d"],
+                     ["kolach", "specialise", "--annotation-dir", "d", "--output-dir", "o", "--ko-threshold", "nan"]]:
             with self.subTest(argv=argv), patch.object(sys, "argv", argv), \
                     patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(SystemExit) as error:
                 main()
             self.assertEqual(error.exception.code, 2)
+
+    def test_gene_genome_map_checked_before_searches(self):
+        from kolach.cli import check_gene_genome_map
+        mapping = self.write("map.tsv", "gene_id\tgenome\ng1\tA\n")
+        check_gene_genome_map(mapping, ["g1"])
+        with self.assertRaisesRegex(ValueError, "no genome"):
+            check_gene_genome_map(mapping, ["g1", "g2"])
 
     def test_annotate_config_for_specialisations(self):
         from kolach.cli import annotate_config, build_parser

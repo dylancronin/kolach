@@ -34,4 +34,5 @@ rule specialise_genomes:
             gene_genome_map=params.genome_map,
             markers=input.markers,
             cazy_from_dbcan=True,
+            graftm_manifest=f"{GRAFTM_DIR}/manifest.json",
         )

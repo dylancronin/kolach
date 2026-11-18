@@ -1,8 +1,8 @@
 """Genome-level CAZy substrate calls from Kolach's dbCAN family/EC evidence.
 
 Substrate definitions are DRAM2's current CAZy rules (dram-rules
-`rules_common.tsv`, pinned in `data/dram_rules/manifest.json`), not AnnoGuild's
-legacy `DRAM_CAZy_definitions.tsv`. Each DRAM2 substrate rule is an OR list of
+`rules_common.tsv`, pinned in RULES_SOURCE), not AnnoGuild's legacy
+`DRAM_CAZy_definitions.tsv`. Each DRAM2 substrate rule is an OR list of
 `FAMILY;EC:x.x.x.x` pairs. A genome has a substrate when any of its proteins
 carries one of those pairs in the `dbcan_family_ec` annotation column.
 
@@ -24,10 +24,21 @@ import re
 from .evaluate import DATA_DIR
 
 RULES_FILE = DATA_DIR / "dram_rules" / "rules_common.tsv"
+RULES_SOURCE = {
+    "repository": "https://github.com/BortonWrightonLabs/dram-rules",
+    "commit": "3257b8604ab6e40c00e811d6ba0211b44dcf5648",
+    "path": "src/dram_rules/data/rules_common.tsv",
+    "sha256": "9b0530148470801987460e46d6508ed5197c4d0177d334584eaedef50a626c41",
+    "license": "MIT",
+}
 
 # Product column -> DRAM2 rule aliases. Subcategories of one polymer are merged
 # so they cannot be counted twice toward the generalist threshold.
 # Provisional: chosen for this release and expected to be revisited.
+# DRAM2's "Microbially-derived" (peptidoglycan) rule is deliberately not a
+# group: it includes GH23/GH102-104 lytic transglycosylases that nearly every
+# bacterium uses for its own cell wall, which would make almost every genome a
+# macromolecule degrader. It is still reported as CAZy_other-Microbially-derived.
 POLYMER_GROUPS = {
     "CAZy-Cellulose": ("Cellulose",),
     "CAZy-Hemicellulose": ("Hemicellulose-Xylan", "Hemicellulose-Other"),
@@ -37,7 +48,6 @@ POLYMER_GROUPS = {
     "CAZy-Fructan": ("Fructan",),
     "CAZy-Starch_glycogen": ("StarchSpecific", "StarchGlycogen"),
     "CAZy-Chitin": ("Chitin",),
-    "CAZy-Microbial_cell_wall": ("Microbially-derived",),
 }
 # Families AnnoGuild judged to match poorly; used only by the signature-only
 # comparison column, never by the guild calls.
@@ -87,9 +97,10 @@ def substrate_groups(rules) -> dict[str, tuple]:
 
 
 def signature_pairs(rules) -> set[str]:
-    """Pairs that belong to exactly one polymer group and a well-matching family."""
+    """Pairs unique to one substrate (over all family/EC rules), as in AnnoGuild,
+    excluding its low-matching families."""
     owners = {}
-    for group, aliases in POLYMER_GROUPS.items():
+    for group, aliases in substrate_groups(rules).items():
         for alias in aliases:
             for pair in rules[alias]:
                 owners.setdefault(pair, set()).add(group)
@@ -112,15 +123,16 @@ def call_substrates(genome_gene_pairs: dict, rules=None):
     """Evaluate substrates per genome.
 
     `genome_gene_pairs` is {genome: {gene: set(pairs)}}. Returns the polymer
-    product columns {genome: {column: bool}} and detail rows for every substrate.
+    product columns {genome: {column: bool}}, the same columns using signature
+    pairs only (for comparison), and detail rows for every substrate.
     """
     rules = rules or load_cazy_rules()
     groups = substrate_groups(rules)
     signatures = signature_pairs(rules)
-    products, details = {}, []
+    products, signature_products, details = {}, {}, []
     for genome in sorted(genome_gene_pairs):
         genes = genome_gene_pairs[genome]
-        products[genome] = {}
+        products[genome], signature_products[genome] = {}, {}
         for group, aliases in groups.items():
             wanted = set().union(*(rules[alias] for alias in aliases))
             matched = {gene: genes[gene] & wanted for gene in sorted(genes) if genes[gene] & wanted}
@@ -129,13 +141,14 @@ def call_substrates(genome_gene_pairs: dict, rules=None):
             polymer = group in POLYMER_GROUPS
             if polymer:
                 products[genome][group] = called
+                signature_products[genome][group] = bool(pairs & signatures)
             details.append({
                 "genome": genome, "substrate": group, "dram2_rules": ";".join(aliases),
                 "counts_toward_guild": polymer, "called": called,
                 "called_signature_only": bool(pairs & signatures) if polymer else "",
                 "matched_pairs": ";".join(sorted(pairs)), "genes": ";".join(matched),
             })
-    return products, details
+    return products, signature_products, details
 
 
 def read_gene_pairs(annotation_table, gene_genomes: dict, genomes=()) -> dict:

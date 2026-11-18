@@ -405,9 +405,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--annotation-dir", required=True,
         help="Output directory of `kolach annotate --add-specialisations` (reads kolach_annotations.tsv "
         "and kolach_graftm_markers.tsv).")
-    specialise_parser.add_argument("--output-dir", help="Where to write results (default: --annotation-dir).")
-    specialise_group = specialise_parser.add_mutually_exclusive_group(required=True)
-    specialise_group.add_argument("--genome-id", help="All annotation rows belong to this genome.")
+    specialise_parser.add_argument(
+        "--output-dir", required=True,
+        help="Where to write results; must differ from --annotation-dir so the workflow's own reports stay intact.")
+    specialise_group = specialise_parser.add_mutually_exclusive_group()
+    specialise_group.add_argument(
+        "--genome-id", help="All annotation rows belong to this genome (default: the genome recorded by the annotate run).")
     specialise_group.add_argument("--gene-genome-map", help="TSV with gene_id and genome columns.")
     specialise_parser.add_argument("--reaction-threshold", type=fraction, default=0.7,
                                    help="Minimum fraction of a route's reactions present (default: 0.7).")
@@ -486,6 +489,19 @@ def genome_name(protein_fasta) -> str:
     return name
 
 
+def check_gene_genome_map(path, gene_ids) -> None:
+    """Fail before any search if the map does not cover every FASTA gene."""
+    from kolach.metabolism.evaluate import read_tsv
+
+    columns, rows = read_tsv(path)
+    if not {"gene_id", "genome"} <= set(columns):
+        raise ValueError(f"{path} needs gene_id and genome columns")
+    mapped = {row["gene_id"] for row in rows if row["genome"]}
+    missing = [gene for gene in gene_ids if gene not in mapped]
+    if missing:
+        raise ValueError(f"{len(missing)} FASTA gene(s) have no genome in {path}, e.g. {missing[:3]}")
+
+
 def check_annotation_dependencies(databases, specialisations=False) -> None:
     """Fail before launching the workflow if a selected method cannot run."""
     for db in databases:
@@ -547,7 +563,9 @@ def main(argv=None):
             check_annotation_dependencies(config["databases"], args.add_specialisations)
             # Duplicate IDs would only be rejected at the integrate step, after
             # every annotation method has already run.
-            read_fasta_ids(args.protein_fasta)
+            gene_ids = read_fasta_ids(args.protein_fasta)
+            if args.gene_genome_map:
+                check_gene_genome_map(args.gene_genome_map, gene_ids)
         except (OSError, ImportError, ValueError) as exc:
             parser.exit(1, f"kolach annotate: error: {exc}\n")
         returncode = run_workflow("annotate.smk", config, cores=args.threads)
@@ -589,19 +607,30 @@ def main(argv=None):
         directory = Path(args.annotation_dir)
         annotations = directory / "kolach_annotations.tsv"
         markers = directory / "kolach_graftm_markers.tsv"
+        if Path(args.output_dir).resolve() == directory.resolve():
+            parser.error("--output-dir must differ from --annotation-dir")
         try:
             for path in (annotations, markers):
                 if not path.is_file():
                     raise FileNotFoundError(f"{path} not found; run `kolach annotate --add-specialisations` first")
+            genome_id, genome_map = args.genome_id, args.gene_genome_map
+            if genome_id is None and genome_map is None:
+                # Reuse the grouping the annotate run recorded.
+                metadata = directory / "kolach_specialisation_metadata.json"
+                recorded = json.loads(metadata.read_text(encoding="utf-8")) if metadata.is_file() else {}
+                genome_id = recorded.get("genome_id")
+                genome_map = (recorded.get("inputs", {}).get("genome_map") or {}).get("path")
+                if genome_id is None and genome_map is None:
+                    raise ValueError("No recorded genome; give --genome-id or --gene-genome-map")
             paths = specialise(
-                annotations, args.output_dir or directory,
-                genome_id=args.genome_id, gene_genome_map=args.gene_genome_map,
+                annotations, args.output_dir,
+                genome_id=genome_id, gene_genome_map=genome_map,
                 markers=markers, cazy_from_dbcan=True,
                 reaction_threshold=args.reaction_threshold, ko_threshold=args.ko_threshold,
                 reactions_file=args.reactions_file, pathways_file=args.pathways_file,
             )
         except (ValueError, OSError, KeyError) as error:
-            parser.error(str(error))
+            parser.exit(1, f"kolach specialise: error: {error}\n")
         print(f"[kolach] Wrote specialisations to {paths['specialisations']}")
 
     elif args.command == "pathway":
