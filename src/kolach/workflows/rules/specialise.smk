@@ -20,6 +20,7 @@ rule specialise_genomes:
         annotations=f"{OUTDIR}/kolach_annotations.tsv",
         markers=f"{OUTDIR}/kolach_graftm_markers.tsv",
         genome_map=[GENE_GENOME_MAP] if GENE_GENOME_MAP else [],
+        graftm_manifest=f"{GRAFTM_DIR}/manifest.json",
         rules=SPECIALISATION_RULES
     output:
         [f"{OUTDIR}/{filename}" for filename in SPECIALISATION_FILES]
@@ -34,5 +35,5 @@ rule specialise_genomes:
             gene_genome_map=params.genome_map,
             markers=input.markers,
             cazy_from_dbcan=True,
-            graftm_manifest=f"{GRAFTM_DIR}/manifest.json",
+            graftm_manifest=input.graftm_manifest,
         )

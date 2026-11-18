@@ -12,8 +12,9 @@ names its function. This module follows the temporal-paper workflow
   every clade in every package, never by substring matching. Substring matching
   turned every rdsrA/rdsrB into dsrA/dsrB, and every mmoX outgroup homologue into
   mmoX.
-- Placements without a functional clade (the root, unknown clades, outgroups)
-  are reported as unresolved and refine nothing.
+- Placements without a functional clade (the root, unknown clades) are
+  unresolved and refine nothing. Placements among non-target homologues (the
+  mmoX outgroup, NO dismutase) are excluded and remove the accepted gate KO.
 """
 import csv
 import gzip
@@ -254,7 +255,7 @@ def read_placements(path) -> dict:
 
 
 def interpret(package, placement, table) -> dict:
-    """Map one placement to a marker row (status refined or unresolved)."""
+    """Map one placement to a marker row (status refined, excluded or unresolved)."""
     if (package, placement) not in table:
         return {"placement": placement, "marker": "", "feature": "", "status": "unresolved",
                 "unresolved_reason": "placement_not_in_lookup"}
@@ -312,6 +313,23 @@ def annotate(protein_fasta, annotation_table, package_dir, output, threads=1, wo
     if workdir.exists():
         shutil.rmtree(workdir)
     workdir.mkdir(parents=True)
+    try:
+        rows = _place_all(gated, sequences, package_dir, table, workdir, threads)
+    finally:
+        # Keep GraftM's logs beside the table whether or not placement succeeded.
+        with open(f"{output}.log", "w", encoding="utf-8") as handle:
+            for log in sorted(workdir.glob("*.log")):
+                handle.write(f"==> {log.stem} <==\n{log.read_text(errors='replace')}\n")
+    resolve_multiple(rows)
+    with open(output, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=MARKER_COLUMNS, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+    shutil.rmtree(workdir)
+    return output
+
+
+def _place_all(gated, sequences, package_dir, table, workdir, threads):
     rows = []
     for package, genes in gated.items():
         if not genes:
@@ -343,13 +361,4 @@ def annotate(protein_fasta, annotation_table, package_dir, output, threads=1, wo
                 row.update({"placement": "", "marker": "", "feature": "", "status": "not_placed",
                             "unresolved_reason": "no_graftm_hit"})
             rows.append(row)
-    resolve_multiple(rows)
-    with open(output, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=MARKER_COLUMNS, delimiter="\t", lineterminator="\n")
-        writer.writeheader()
-        writer.writerows(rows)
-    with open(f"{output}.log", "w", encoding="utf-8") as handle:
-        for log in sorted(workdir.glob("*.log")):
-            handle.write(f"==> {log.stem} <==\n{log.read_text(errors='replace')}\n")
-    shutil.rmtree(workdir)
-    return output
+    return rows

@@ -150,9 +150,9 @@ The `missing_features` report lists missing KOs in the selected KO-coverage
 route. For an entirely absent reaction it lists all alternative candidates,
 without adding them to the denominator. With no observed route it lists all
 pathway candidates. A failed pathway that needs a refined feature is labelled
-`unresolved_refinement` when a protein carrying that feature's gate KO could not
-be refined (GraftM unresolved or no hit), or when no marker table exists;
-otherwise it is `not_detected`.
+`unresolved_refinement` when a protein whose accepted KO is that feature's gate
+KO got no GraftM decision (unresolved or no hit, and not refined by another
+package), or when no marker table exists; otherwise it is `not_detected`.
 
 ## 5. Marker refinement with GraftM
 
@@ -193,7 +193,10 @@ The method follows the temporal-paper workflow
   (`excluded`: the mmoX outgroup `Homologues_mmoX`, i.e. sHMO homologues, and
   `Nod`, nitric oxide dismutase) loses its accepted gate KO, so it no longer
   supports e.g. methanotrophy. Unresolved and unplaced proteins change nothing:
-  the shared KO stays, and rules needing a refined feature ignore it.
+  the shared KO stays, and rules needing a refined feature ignore it. mmoX is
+  the exception by design: its feature is its own KO (K16157), so an accepted
+  K16157 that GraftM cannot place still counts, as in AnnoGuild; only an
+  outgroup placement removes it.
 
 Unresolved placements: the root and `unknown*`/`Unknown` clades.
 
@@ -213,7 +216,8 @@ The qNor mapping is a scientific decision recorded here for review.
 `kolach_graftm_markers.tsv` has one row per gated protein and package:
 `gene_id, package, gate_ko, gate_source (accepted|alternative), placement,
 marker, feature, status (refined|excluded|unresolved|superseded|not_placed),
-unresolved_reason`. GraftM's logs are kept in `kolach_graftm_markers.tsv.log`.
+unresolved_reason`. GraftM's logs are kept in `kolach_graftm_markers.tsv.log`,
+also when placement fails.
 The assessment report counts each status per genome (rows, i.e. protein and
 package pairs).
 

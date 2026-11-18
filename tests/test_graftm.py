@@ -181,6 +181,14 @@ class TestGraftmRun(unittest.TestCase):
         self.assertEqual({got["g2", p]["unresolved_reason"] for p in ("narG_nxrA", "narH_nxrB")},
                          {"competing_packages"})
 
+    def test_logs_are_kept_when_graftm_fails(self):
+        fail = self.bin / "graftM"
+        fail.write_text("#!/bin/sh\necho boom\nexit 3\n")
+        with self.assertRaises(Exception):
+            self.run_graftm()
+        log = self.root / "out" / "kolach_graftm_markers.tsv.log"
+        self.assertIn("boom", log.read_text())
+
     def test_missing_package_clade_is_rejected(self):
         taxonomy = self.packages / "dsrA.gpkg" / "dsrA.gpkg.refpkg" / "dsrA_taxonomy.csv"
         taxonomy.write_text(taxonomy.read_text() + "Root|New,Root,rank,New\n")

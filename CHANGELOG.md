@@ -37,7 +37,7 @@
   refined by several paralogous packages.
 - The temporal-paper lookup mapped bare `Root` placements in any package to
   norB, and qNor clades to norB; qNor now maps to norZ (K045611). `Nod`
-  placements are unresolved.
+  (NO dismutase) placements are excluded.
 
 ## Earlier — metabolic specialisation development branch
 

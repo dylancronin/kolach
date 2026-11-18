@@ -31,6 +31,11 @@ from kolach.metabolism.specialise import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def read_rows(path):
+    with open(path, newline="") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))
+
+
 class TestEvaluator(unittest.TestCase):
     def test_all_legacy_pathway_calls_and_coverage(self):
         fixture = json.loads((ROOT / "tests/fixtures/annoguild_parity.json").read_text())
@@ -291,14 +296,14 @@ class TestInputsAndOutputs(unittest.TestCase):
         self.assertTrue(product["MAG"]["CAZy-Chitin"])
         self.assertEqual(sum(value for name, value in product["MAG"].items() if name.startswith("CAZy")), 3)
         self.assertIn("MAG\tgeneralist", paths["specialisations"].read_text())
-        assessment = next(csv.DictReader(open(paths["assessment"]), delimiter="\t"))
+        assessment = read_rows(paths["assessment"])[0]
         # All three pairs are unique to one substrate, so the signature-only
         # comparison agrees; a shared pair (GH18;EC:3.2.1.200) would not count.
         self.assertEqual(assessment["specialisation_cazy_signature_only"], "generalist")
         shared = self.write("s.tsv", "gene_id\taccepted_ko\tdbcan_family_ec\n" + "\n".join(rows[:-1])
                             + "\nc3\t-\tGH18;EC:3.2.1.200\n")
         paths = specialise(shared, self.tmp / "shared", genome_id="MAG", cazy_from_dbcan=True)
-        assessment = next(csv.DictReader(open(paths["assessment"]), delimiter="\t"))
+        assessment = read_rows(paths["assessment"])[0]
         self.assertIn("MAG\tgeneralist", paths["specialisations"].read_text())
         self.assertNotEqual(assessment["specialisation_cazy_signature_only"], "generalist")
         self.assertIn("dbcan", paths["assessment"].read_text())
@@ -333,11 +338,20 @@ class TestInputsAndOutputs(unittest.TestCase):
                              "g1\tamoA_pmoA\tK10944\taccepted\tRoot\t\t\tunresolved\troot_placement\n"
                              "g2\tamoB_pmoB\tK10945\taccepted\t\t\t\tnot_placed\tno_graftm_hit\n")
         paths = specialise(annotations, self.tmp / "out", genome_id="MAG", markers=markers)
-        rows = {r["pathway"]: r["assessment"] for r in csv.DictReader(open(paths["pathways"]), delimiter="\t")}
+        rows = {r["pathway"]: r["assessment"] for r in read_rows(paths["pathways"])}
         self.assertEqual(rows["carbon_redox-dissimilatory_methanotrophy"], "unresolved_refinement")
         self.assertEqual(rows["sulfur_redox-dissimilatory_sulfate_reduction"], "not_detected")
-        assessment = next(csv.DictReader(open(paths["assessment"]), delimiter="\t"))
+        assessment = read_rows(paths["assessment"])[0]
         self.assertEqual((assessment["graftm_unresolved"], assessment["graftm_not_placed"]), ("1", "1"))
+        # A protein already refined by its accepted package, with an unplaced
+        # alternative, leaves nothing unresolved.
+        annotations = self.write("b.tsv", "gene_id\taccepted_ko\talternative_kos\ng1\tK00370\tK00371\n")
+        markers = self.write("n.tsv", "gene_id\tpackage\tgate_ko\tgate_source\tplacement\tmarker\tfeature\tstatus\tunresolved_reason\n"
+                             "g1\tnarG_nxrA\tK00370\taccepted\tRoot; NarG_Mixed\tnarG\tK003700\trefined\t\n"
+                             "g1\tnarH_nxrB\tK00371\talternative\t\t\t\tnot_placed\tno_graftm_hit\n")
+        paths = specialise(annotations, self.tmp / "out2", genome_id="MAG", markers=markers)
+        rows = {r["pathway"]: r["assessment"] for r in read_rows(paths["pathways"])}
+        self.assertNotIn("unresolved_refinement", rows.values())
 
     def test_import_existing_product_and_cazy(self):
         annotation = self.write("a.tsv", "gene_id\tko_id\tgenome\ng1\tK109440\tMAG\n")
@@ -410,6 +424,9 @@ class TestInputsAndOutputs(unittest.TestCase):
         check_gene_genome_map(mapping, ["g1"])
         with self.assertRaisesRegex(ValueError, "no genome"):
             check_gene_genome_map(mapping, ["g1", "g2"])
+        for text in ["gene_id\tgenome\ng1\tA\ng1\tB\n", "gene_id\tgenome\n\tA\ng1\tA\n"]:
+            with self.subTest(text=text), self.assertRaisesRegex(ValueError, "duplicate"):
+                check_gene_genome_map(self.write("bad.tsv", text), ["g1"])
 
     def test_annotate_config_for_specialisations(self):
         from kolach.cli import annotate_config, build_parser
@@ -477,6 +494,7 @@ else:
             (database / "dbcan" / "fam-substrate-mapping.tsv").write_text(
                 "Family\tSubstrate_curated\tEC_Number\nGH13\tstarch\t3.2.1.1\n")
             fake_packages(database / "graftm")
+            (database / "graftm" / "manifest.json").write_text(json.dumps({"bundle_version": "test"}))
             (database / "graftm" / ".download_complete").touch()
             (database / "kofam").mkdir()
             (database / "kofam" / "profiles.hmm").write_text("fixture")
@@ -514,6 +532,7 @@ else:
             self.assertIn("K109440", pathways)
             metadata = json.loads((out / "kolach_specialisation_metadata.json").read_text())
             self.assertEqual(metadata["genome_id"], "001")
+            self.assertEqual(metadata["graftm_bundle"], {"bundle_version": "test"})
             self.assertTrue((out / "kolach_cazy_substrates.tsv").is_file())
             stamp = (out / "kolach_specialisations.tsv").stat().st_mtime_ns
             run()

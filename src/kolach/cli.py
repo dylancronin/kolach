@@ -496,7 +496,12 @@ def check_gene_genome_map(path, gene_ids) -> None:
     columns, rows = read_tsv(path)
     if not {"gene_id", "genome"} <= set(columns):
         raise ValueError(f"{path} needs gene_id and genome columns")
-    mapped = {row["gene_id"] for row in rows if row["genome"]}
+    mapped = set()
+    for row in rows:
+        # Same per-row rules as specialisation, so a bad map fails up front.
+        if not row["gene_id"] or not row["genome"] or row["gene_id"] in mapped:
+            raise ValueError(f"Empty or duplicate gene ID in {path}: {row['gene_id']!r}")
+        mapped.add(row["gene_id"])
     missing = [gene for gene in gene_ids if gene not in mapped]
     if missing:
         raise ValueError(f"{len(missing)} FASTA gene(s) have no genome in {path}, e.g. {missing[:3]}")
@@ -614,10 +619,10 @@ def main(argv=None):
                 if not path.is_file():
                     raise FileNotFoundError(f"{path} not found; run `kolach annotate --add-specialisations` first")
             genome_id, genome_map = args.genome_id, args.gene_genome_map
+            metadata = directory / "kolach_specialisation_metadata.json"
+            recorded = json.loads(metadata.read_text(encoding="utf-8")) if metadata.is_file() else {}
             if genome_id is None and genome_map is None:
                 # Reuse the grouping the annotate run recorded.
-                metadata = directory / "kolach_specialisation_metadata.json"
-                recorded = json.loads(metadata.read_text(encoding="utf-8")) if metadata.is_file() else {}
                 genome_id = recorded.get("genome_id")
                 genome_map = (recorded.get("inputs", {}).get("genome_map") or {}).get("path")
                 if genome_id is None and genome_map is None:
@@ -628,6 +633,7 @@ def main(argv=None):
                 markers=markers, cazy_from_dbcan=True,
                 reaction_threshold=args.reaction_threshold, ko_threshold=args.ko_threshold,
                 reactions_file=args.reactions_file, pathways_file=args.pathways_file,
+                graftm_bundle=recorded.get("graftm_bundle"),
             )
         except (ValueError, OSError, KeyError) as error:
             parser.exit(1, f"kolach specialise: error: {error}\n")

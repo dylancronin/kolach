@@ -215,6 +215,8 @@ def add_markers(genomes: dict, marker_table) -> None:
         candidates = [row["genome"]] if "genome" in columns else locations.get(row["gene_id"], [])
         if len(candidates) != 1 or row["gene_id"] not in genomes.get(candidates[0], {}):
             raise ValueError(f"Unknown or ambiguous marker gene: {row['gene_id']!r}; supply its genome")
+        if not row.get("gate_ko"):
+            raise ValueError("Excluded marker rows need a gate_ko column")
         genomes[candidates[0]][row["gene_id"]].discard(row["gate_ko"])
     for (genome, gene), features in updates.items():
         # Mirrors AnnoGuild's replacement, rather than keeping both AMO and pMMO
@@ -251,17 +253,24 @@ GRAFTM_STATUSES = ("refined", "excluded", "unresolved", "superseded", "not_place
 
 def marker_summary(marker_table, genomes: dict) -> tuple[dict, dict]:
     """Per-genome GraftM outcome counts (one per protein and package), and the
-    gate KOs of proteins left unrefined (unresolved or not placed)."""
+    accepted gate KOs of proteins GraftM left without any decision.
+
+    A protein counts as unrefined only when its accepted gate KO was unresolved
+    or not placed and no package refined, superseded or excluded it; an
+    alternative KO that GraftM did not confirm is simply not evidence.
+    """
     columns, rows = read_tsv(marker_table)
     gene_genome = {gene: genome for genome, genes in genomes.items() for gene in genes}
     counts = {genome: dict.fromkeys(GRAFTM_STATUSES, 0) for genome in genomes}
     unrefined = {genome: set() for genome in genomes}
     if "status" in columns:
+        decided = {row["gene_id"] for row in rows if row["status"] in ("refined", "superseded", "excluded")}
         for row in rows:
             genome = row.get("genome") or gene_genome.get(row["gene_id"])
             if genome in counts and row["status"] in counts[genome]:
                 counts[genome][row["status"]] += 1
-                if row["status"] in ("unresolved", "not_placed") and row.get("gate_ko"):
+                if (row["status"] in ("unresolved", "not_placed") and row.get("gate_ko")
+                        and row.get("gate_source", "accepted") == "accepted" and row["gene_id"] not in decided):
                     unrefined[genome].add(row["gate_ko"])
     return counts, unrefined
 
@@ -270,7 +279,7 @@ def specialise(annotation_table, output_dir, *, genome_id=None, genome_column=No
                gene_genome_map=None, ko_column="accepted_ko", markers=None,
                cazy_from_dbcan=False, product_table=None, cazy_product=None,
                reaction_threshold=0.7, ko_threshold=0.6, reactions_file=None,
-               pathways_file=None, graftm_manifest=None) -> dict[str, Path]:
+               pathways_file=None, graftm_manifest=None, graftm_bundle=None) -> dict[str, Path]:
     """Run the complete genome-level analysis; no databases or network required.
 
     `kolach annotate --add-specialisations` supplies `markers` (the GraftM table)
@@ -407,7 +416,7 @@ def specialise(annotation_table, output_dir, *, genome_id=None, genome_column=No
         "cazy_polymer_groups": {name: list(aliases) for name, aliases in cazy_rules.POLYMER_GROUPS.items()}
                                if cazy_from_dbcan else None,
         "graftm_bundle": (json.loads(Path(graftm_manifest).read_text(encoding="utf-8"))
-                          if graftm_manifest and Path(graftm_manifest).is_file() else None),
+                          if graftm_manifest and Path(graftm_manifest).is_file() else graftm_bundle),
         "pathway_evaluation": "imported_product" if product_table else "legacy_compatible",
         "inputs": {name: {"path": str(Path(path).resolve()), "sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest()}
                    for name, path in {**inputs, **rule_inputs}.items() if path is not None},
