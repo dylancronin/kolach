@@ -1,62 +1,68 @@
-# Metabolic specialisation: walkthrough
+# Metabolic specialisation
 
-`kolach specialise` aggregates accepted KOs by genome, evaluates EMERGE pathway
-rules, and applies AnnoGuild's guild priorities. It runs offline without new
-dependencies or rerunning annotation. `kolach pathway` remains a separate
-gene-level KEGG BRITE lookup.
+`kolach annotate --add-specialisations` predicts genome-level metabolism and
+AnnoGuild's guild labels from Kolach's own outputs. It needs no manual inputs:
 
-The implementation has two commented modules: `metabolism/evaluate.py` parses
-and scores rules; `metabolism/specialise.py` handles inputs, classification, and
-outputs. Bundled rules contain 225 reactions and 55 pathways, pinned to AnnoGuild
-commit `291b232907e6568597178e21384ff0f964993a82`.
+1. KO annotation and consensus (KOfam/eggNOG/DeepKOALA, as selected).
+2. dbCAN, added automatically, for CAZy substrate evidence.
+3. GraftM, which refines KOs shared by several functions (pmoA/amoA,
+   dsrA/rdsrA, narG/nxrA, ...).
+4. EMERGE pathway rules and AnnoGuild's guild priorities, per genome.
 
-## 1. Feed in annotations and assign genomes
+`kolach pathway` remains a separate gene-level KEGG BRITE lookup.
 
-For one MAG:
+Code: `methods/graftm.py` (marker refinement), `metabolism/cazy.py` (CAZy
+substrates), `metabolism/evaluate.py` (rule parsing and scoring) and
+`metabolism/specialise.py` (inputs, classification, outputs). Bundled pathway
+rules contain 225 reactions and 55 pathways, pinned to AnnoGuild commit
+`291b232907e6568597178e21384ff0f964993a82`.
+
+## 1. Run it
 
 ```bash
-kolach specialise \
-  --annotation-table results/kolach_annotations.tsv \
-  --genome-id MAG001 --output-dir results/specialisation
+kolach download --database-dir kolach-db --databases kofam dbcan graftm
+kolach annotate --protein-fasta MAG001.faa --database-dir kolach-db \
+  --output-dir results --add-specialisations --threads 8
 ```
 
-For a combined table, use its `genome` column automatically, or select another
-column with `--genome-column bin_id`. Example input:
+The genome is named after the FASTA file (`MAG001` here; `.gz` and one FASTA
+suffix are removed). Use `--genome-id` to choose another name. For a FASTA
+holding several genomes, give `--gene-genome-map` (columns `gene_id`, `genome`);
+every gene must be mapped. Names are never guessed from gene IDs. Running a
+directory of genome FASTAs in one call is planned.
+
+`--add-specialisations` adds `dbcan` to `--databases` if it is missing. The
+GraftM tools (`graftM`, `pplacer`, `guppy`, `hmmsearch`, `hmmalign`) are in the
+kolach environment. GraftM is pip-installed so HMMER stays at 3.4; its bioconda
+recipe pins 3.2.1.
+
+To re-evaluate a finished run, e.g. with other thresholds, without repeating
+any search:
+
+```bash
+kolach specialise --annotation-dir results --genome-id MAG001 --ko-threshold 0.5
+```
+
+It reads `kolach_annotations.tsv` (with its dbCAN columns) and
+`kolach_graftm_markers.tsv` from that directory and writes there unless
+`--output-dir` is given.
+
+## 2. Which KOs count
+
+Each gene contributes its `accepted_ko`. `alternative_kos` are not confirmed and
+are not used directly; an alternative KO counts only after GraftM places the
+protein in a functional clade (section 5).
 
 ```tsv
-genome	gene_id	accepted_ko	alternative_kos
-MAG001	gene_1	K00001	-
-MAG001	gene_2	K00003	-
-MAG001	gene_3	-	K00002
-MAG002	gene_4	-	-
+gene_id	accepted_ko	alternative_kos
+gene_1	K00001	-
+gene_2	K00003	-
+gene_3	-	K00002
 ```
 
-This becomes:
+gives genome evidence `{K00001, K00003}`.
 
-```python
-{"MAG001": {"K00001", "K00003"}, "MAG002": set()}
-```
-
-`alternative_kos` are not confirmed functions and are never added to evidence.
-The default `accepted_ko` column must contain at most one KO per gene. For an
-intentional legacy import, `--ko-column ko_id` supports comma/semicolon-separated
-calls but does not independently resolve their ambiguity.
-
-Alternatively, provide `--gene-genome-map genes_to_genomes.tsv`:
-
-```tsv
-gene_id	genome
-gene_1	MAG001
-gene_2	MAG001
-gene_3	MAG002
-```
-
-Choose one grouping method. Names are never guessed by trimming gene identifiers.
-All annotation genes must have a mapping. Duplicate map IDs are rejected;
-genomes present only in the map remain in the output with no evidence. Gene IDs
-may repeat across genomes when the annotation itself has a genome column.
-
-## 2. Feed in reaction and pathway rules
+## 3. Reaction and pathway rules
 
 The small included reaction example (`examples/specialisation/reactions.tsv`):
 
@@ -93,7 +99,7 @@ Rules are parsed once per run. Invalid syntax, duplicate IDs, and missing
 reaction references are rejected. The implementation uses expressions and count
 combinations, with no graph library, graph rendering, process pool, or `eval`.
 
-## 3. Calculate coverage from example evidence
+## 4. Coverage, using example evidence
 
 Feed `{K00001, K00003}` into the three example reactions:
 
@@ -108,14 +114,13 @@ observed KOs out of the three required KOs in reactions having some evidence.
 The entirely absent reaction 3 is excluded from the KO denominator.
 
 Default requirements are 0.7 reaction coverage and 0.6 KO coverage, so the call
-is **False**. Run the included small example:
+is **False**. Run the included small example with the Python API:
 
-```bash
-kolach specialise \
-  --annotation-table examples/specialisation/small_annotations.tsv \
-  --reactions-file examples/specialisation/reactions.tsv \
-  --pathways-file examples/specialisation/pathways.tsv \
-  --output-dir small_output
+```python
+from kolach.metabolism.specialise import specialise
+specialise("examples/specialisation/small_annotations.tsv", "small_output",
+           reactions_file="examples/specialisation/reactions.tsv",
+           pathways_file="examples/specialisation/pathways.tsv")
 ```
 
 Expected product:
@@ -125,7 +130,7 @@ genome	example_degradation-all
 SMALL	False
 ```
 
-With `--reaction-threshold 0.66`, the call becomes True. This demonstrates a
+With `reaction_threshold=0.66` the call becomes True. This demonstrates a
 threshold change; it is not a recommendation to alter the scientific method.
 
 Legacy choices deliberately preserved:
@@ -137,89 +142,116 @@ Legacy choices deliberately preserved:
   may come from different routes; the report explicitly labels `ko_coverage_route`.
 - A required signature must pass regardless of coverage.
 
-The evaluator combines distinct `(observed, required)` counts across reactions,
-avoiding enumeration of every full enzyme-alternative combination. The
-`missing_features` report lists missing KOs in the selected KO-coverage route.
-For an entirely absent reaction it lists all alternative candidates, without
-adding them to the denominator. With no observed route it lists all pathway
-candidates. Missing signature features likewise include missing alternatives;
-an OR signature can pass while some alternatives are absent.
+The `missing_features` report lists missing KOs in the selected KO-coverage
+route. For an entirely absent reaction it lists all alternative candidates,
+without adding them to the denominator. With no observed route it lists all
+pathway candidates. A failed pathway that needs a refined feature is labelled
+`unresolved_refinement` only when no marker table was available; with GraftM
+results it is `not_detected`.
 
-## 4. Feed in refined marker evidence
+## 5. Marker refinement with GraftM
 
-AnnoGuild used GraftM-derived custom IDs to distinguish functions sharing a KO.
-These are preserved internally; six-digit custom IDs are not official KOs.
+Some KOs cover several functions. EMERGE GraftM packages place a protein in a
+curated tree, and the clade names its function. Refined features use AnnoGuild's
+encoding (shared KO + 0/1); they are not official KOs.
 
-Before refinement:
+| Package | Gate KO | Functions (feature IDs) |
+|---|---|---|
+| amoA_pmoA | K10944 | pmoA K109440 / amoA K109441 |
+| amoB_pmoB | K10945 | pmoB K109450 / amoB K109451 |
+| amoC_pmoC | K10946 | pmoC K109460 / amoC K109461 |
+| narG_nxrA | K00370 | narG K003700 / nxrA K003701 |
+| narH_nxrB | K00371 | narH K003710 / nxrB K003711 |
+| dsrA | K11180 | dsrA K111800 / rdsrA K111801 |
+| dsrB | K11181 | dsrB K111810 / rdsrB K111811 |
+| norZ_norB | K04561 | cNor: norB K045610 / qNor: norZ K045611 |
+| mmoX_sMMO | K16157 | mmoX K16157 |
 
-```tsv
-genome	gene_id	accepted_ko
-MAG001	pmo_gene	K10944
-MAG002	amo_gene	K10944
-```
+The method follows the temporal-paper workflow
+(`GraftM-analysis/update_annotations.R`), not AnnoGuild's `process_graftm.py`:
 
-Supply `--markers markers.tsv`:
+- **Gating.** A protein is placed with a package only if the gate KO is its
+  accepted KO or one of its alternative KOs. AnnoGuild placed every protein with
+  every package, letting a package's HMM classify unrelated enzymes.
+- **Exact lookup.** Every clade of every package is listed in
+  `metabolism/data/graftm_placements.tsv` with its function, or a reason it has
+  none. Placements are matched exactly by (package, placement). Installing the
+  packages checks that the packages and the table list the same clades.
+- **Effect on evidence.** A refined accepted KO is replaced by its feature
+  (K10944 becomes K109440). A protein confirmed from an alternative KO gains the
+  feature beside its accepted KO. Unresolved and unplaced proteins change
+  nothing: the shared KO stays, and rules needing a refined feature ignore it.
 
-```tsv
-genome	gene_id	feature
-MAG001	pmo_gene	marker:pmoA
-MAG002	amo_gene	marker:amoA
-```
+Unresolved placements: the root; `unknown*`/`Unknown` clades; the mmoX outgroup
+(`Homologues_mmoX`, sHMO homologues); and `Nod` (nitric oxide dismutase) in the
+norZ/norB package.
 
-Internal features become `K109440` and `K109441`. The ambiguous parent `K10944`
-is replaced for each gene, mirroring AnnoGuild; the original annotation file
-stays unchanged. This prevents an AMO refinement retaining ambiguous methane
-monooxygenase evidence via its parent KO.
+Corrections relative to earlier code:
 
-| Names | Legacy IDs |
+| Source | Problem | Now |
+|---|---|---|
+| AnnoGuild substring matching | `"dsrA" in "Root; rdsrA; …"`, so every rdsrA/rdsrB became dsrA/dsrB (249 of the temporal-paper placements) | rdsrA/rdsrB |
+| AnnoGuild substring matching | `Root; Homologues_mmoX` (outgroup) became mmoX | unresolved |
+| AnnoGuild substring matching | Clades absent from the EMERGE set (e.g. `NarG_Archaea`) worked only if a substring happened to match | every clade listed |
+| Temporal-paper lookup | Joined on placement alone, so a bare `Root` in any package became norB | unresolved |
+| Temporal-paper lookup | qNor clades mapped to norB (K045610). The norB reaction requires norC (K02305), which single-subunit qNor lacks; the qNor reaction is K045611 alone | qNor → norZ (K045611) |
+
+The qNor mapping is a scientific decision recorded here for review.
+
+`kolach_graftm_markers.tsv` has one row per gated protein and package:
+`gene_id, package, gate_ko, gate_source (accepted|alternative), placement,
+marker, feature, status (refined|unresolved|not_placed), unresolved_reason`.
+The assessment report counts each status per genome.
+
+Packages: eight EMERGE packages from the temporal paper and the public GraftM
+`7.60.mmoX_sMMO` package, distributed as one reproducible bundle
+(`scripts/build_graftm_bundle.py`; SHA-256 pinned in `methods/graftm.py`).
+
+## 6. CAZy substrates from dbCAN
+
+Substrate definitions are DRAM2's current CAZy rules (`rules_common.tsv` from
+[dram-rules](https://github.com/BortonWrightonLabs/dram-rules) at
+`3257b8604ab6e40c00e811d6ba0211b44dcf5648`, MIT licence), not AnnoGuild's
+legacy `DRAM_CAZy_definitions.tsv`. Each rule is an OR list of
+`FAMILY;EC:x.x.x.x` pairs. A genome has a substrate when any protein carries
+one of those pairs in its `dbcan_family_ec` column.
+
+- Pairs come from one dbCAN-sub domain. DRAM2 instead pairs every family on a
+  protein with every EC on it.
+- Subfamilies are reduced to families (GH5_2 → GH5), as in Kolach's dbCAN parser.
+- Otherwise matching is exact and case-insensitive, as in DRAM2. `3.2.1.-`
+  matches only `3.2.1.-`; provisional ECs such as `2.4.1.n2` are accepted.
+
+Only polymer substrates count toward the generalist (three or more) and
+macromolecule-degrader labels. Subcategories of one polymer are merged so they
+cannot count twice. **This grouping is provisional.**
+
+| Product column | DRAM2 rules |
 |---|---|
-| pmoA / amoA | K109440 / K109441 |
-| pmoB / amoB | K109450 / K109451 |
-| pmoC / amoC | K109460 / K109461 |
-| narG / nxrA | K003700 / K003701 |
-| narH / nxrB | K003710 / K003711 |
-| dsrA / rdsrA | K111800 / K111801 |
-| dsrB / rdsrB | K111810 / K111811 |
-| norB / norZ | K045610 / K045611 |
-| mmoX | K16157 |
+| CAZy-Cellulose | Cellulose |
+| CAZy-Hemicellulose | Hemicellulose-Xylan, Hemicellulose-Other |
+| CAZy-Pectin | Pectin |
+| CAZy-Arabinogalactan | Arabinogalactan |
+| CAZy-Cutin | Cutin |
+| CAZy-Fructan | Fructan |
+| CAZy-Starch_glycogen | StarchSpecific, StarchGlycogen |
+| CAZy-Chitin | Chitin |
+| CAZy-Microbial_cell_wall | Microbially-derived |
 
-`feature` accepts `marker:pmoA`, `pmoA`, or `K109440`. The genome column is
-optional only for globally unique gene IDs. Unknown genes/features and
-contradictory refinements of one parent KO on one gene are rejected.
+Not counted: `PlantPolymerMixed` (not substrate-specific), oligosaccharides,
+disaccharides, β-glucosides and oligosaccharide oxidation. They still appear in
+`kolach_cazy_substrates.tsv` as `CAZy_other-*` rows. DRAM2 rules that mix KOs
+with family/EC pairs (cellobiose, sucrose, trehalose, lactose, other
+disaccharides) are not evaluated. AnnoGuild's generalist threshold was three of
+18 legacy categories; three of nine is stricter.
 
-This imports already interpreted GraftM or equivalent calls. It does not run
-GraftM or interpret raw taxonomy strings. Use the exact Kolach gene IDs and
-provide complete results for the assessed genomes. A header-only marker table
-explicitly means refinement was assessed with no positive results.
+`kolach_cazy_substrates.tsv` lists every substrate per genome with the matched
+pairs and genes, plus `called_signature_only`: the call using only pairs unique
+to one polymer group and outside AnnoGuild's low-matching families (GH63, GH49,
+GH127, CE2, GH23, PL30, PL8, PL33, GH88, GH67, GH98, CE4). That column is for
+comparison and never affects the guild labels.
 
-Without refinements, an unsupported pathway needing custom IDs is labelled
-`unresolved_refinement` in the detailed report; its legacy product cell remains
-False. A pathway with enough available alternative evidence remains supported.
-
-## 5. Feed in verified CAZy calls
-
-The original generalist/macromolecule-degrader decisions require CAZy evidence.
-Supply `--cazy-product` with the verified Boolean CAZy columns from AnnoGuild's
-`product_refined_with_CAZy.tsv`. The full old matrix is accepted: only CAZy
-columns are imported. Example:
-
-```tsv
-genome	CAZy-Starch	CAZy-Chitin	CAZy-Pectin
-MAG001	True	True	True
-MAG002	False	False	False
-```
-
-The table must contain exactly the assessed genomes, preventing missing CAZy
-assessments being silently interpreted as negatives. Raw dbCAN family presence
-is insufficient: AnnoGuild also uses its verified signature-family checks and
-DRAM product cutoff. This feature imports the completed calls; running dbCAN
-and reconstructing its distillation layer are outside this implementation.
-
-Without CAZy input, the assessment report says `unassessed`. Other primary labels
-may still be returned, but CAZy-dependent guild priorities remain incompletely
-assessed. Do not interpret the legacy False cells as demonstrated absence.
-
-## 6. Convert supported pathways to guild labels
+## 7. Convert supported pathways to guild labels
 
 Primary priority remains:
 
@@ -227,9 +259,9 @@ Primary priority remains:
    excluding a supported dissimilatory methanotrophy pathway.
 2. Methanotroph: dissimilatory methanotrophy plus the original monooxygenase check.
 3. Homoacetogen: Wood–Ljungdahl acetogen pathway.
-4. Generalist: three CAZy calls and three degradation calls.
+4. Generalist: three CAZy substrate calls and three degradation calls.
 5. Fermenter: two fermentation pathway calls.
-6. Macromolecule degrader: any CAZy call.
+6. Macromolecule degrader: any CAZy substrate call.
 7. Monomer degrader: any degradation call.
 8. Otherwise an empty primary cell.
 
@@ -237,8 +269,6 @@ The methanogen heuristic retains some Mcr/Hdr evidence plus four Fwd/Fmd KOs,
 or RamA with a methyltransferase, or four acetoclastic-route KOs. Its original
 monooxygenase exclusion is retained. These are historical metabolic-potential
 heuristics, not a newly validated biological classifier.
-
-Example function input and output:
 
 ```python
 classify_specialisation(
@@ -255,17 +285,33 @@ reducer, nitrite oxidiser, then nitrogen fixer. Sulfate reduction retains
 priority over sulfur oxidation. All supported N/S roles appear separately
 in the assessment report.
 
-## 7. Run the full included example and inspect outputs
+## 8. Outputs
 
-The synthetic example profiles illustrate the rules; they are not reference
-genomes or biological benchmarks. The CAZy calls are illustrative supplied calls.
+| File | Contents |
+|---|---|
+| `kolach_product_refined.tsv` | Legacy Boolean matrix: genome, 55 pathways, nine CAZy polymer columns |
+| `kolach_specialisations.tsv` | Exactly genome, specialisation, nitrogen_specialisation, sulfur_specialisation |
+| `kolach_metabolic_pathways.tsv` | Coverage, signatures, route, supporting/missing evidence and assessment |
+| `kolach_specialisation_assessment.tsv` | Evidence sources, GraftM status counts, supported pathways, all N/S roles, heuristic flags |
+| `kolach_cazy_substrates.tsv` | Every DRAM2 substrate per genome, with matched pairs and genes |
+| `kolach_graftm_markers.tsv` | GraftM outcome per gated protein and package |
+| `kolach_specialisation_metadata.json` | Source/version, thresholds, policies and SHA-256 hashes of inputs and rules |
 
-```bash
-kolach specialise \
-  --annotation-table examples/specialisation/annotations.tsv \
-  --markers examples/specialisation/markers.tsv \
-  --cazy-product examples/specialisation/cazy_product.tsv \
-  --output-dir example_output
+Booleans remain `True`/`False`. Missing primary and sulfur labels are empty;
+missing nitrogen retains `None detected`. Legacy schemas are preserved; the
+additional reports are separate files.
+
+## 9. Bundled examples and legacy imports (Python API)
+
+The synthetic profiles illustrate the rules; they are not reference genomes.
+Their marker and CAZy inputs are supplied by hand. The Python API still allows
+that for comparison with AnnoGuild; the CLI always computes both.
+
+```python
+from kolach.metabolism.specialise import specialise
+specialise("examples/specialisation/annotations.tsv", "example_output",
+           markers="examples/specialisation/markers.tsv",
+           cazy_product="examples/specialisation/cazy_product.tsv")
 ```
 
 | Genome | Primary | Nitrogen | Sulfur |
@@ -281,92 +327,40 @@ kolach specialise \
 | NITROGEN | Empty | comammox | Empty |
 | SULFATE | Empty | None detected | sulfate_reducer |
 
-| File | Contents |
-|---|---|
-| `kolach_product_refined.tsv` | Legacy Boolean matrix: genome, 55 original pathways, optional CAZy columns |
-| `kolach_specialisations.tsv` | Exactly genome, specialisation, nitrogen_specialisation, sulfur_specialisation |
-| `kolach_metabolic_pathways.tsv` | Coverage, signatures, route, supporting/missing evidence and assessment |
-| `kolach_specialisation_assessment.tsv` | Supplemental assessment status, supported pathways, all N/S roles, heuristic flags |
-| `kolach_specialisation_metadata.json` | Source/version, thresholds, policy and SHA-256 hashes of inputs and rules |
-
-Booleans remain `True`/`False`. Missing primary and sulfur labels are empty;
-missing nitrogen retains `None detected`. File names have a Kolach prefix;
-legacy schemas are preserved and additional reports are separate.
-Expected legacy tables under `examples/specialisation/expected/` are checked
-byte-for-byte against the new outputs.
-
-## 8. Import an old product or run after annotation
-
-To compare classifiers independently, prepare legacy annotations with `gene_id`,
-`genome`, and `ko_id`, retaining custom six-digit IDs. Rename the DRAM index
-column to `gene_id`. If old genome IDs end in `_annotate`, remove that suffix
-consistently to match the product; Kolach uses explicit IDs without auto-trimming.
-
-```bash
-kolach specialise \
-  --annotation-table legacy_annotations_normalized.tsv --ko-column ko_id \
-  --product EMERGE_product_refined_with_CAZy.tsv --output-dir comparison
-```
-
-`--product` preserves product order, accepts `#genome`, and skips pathway
-recalculation. Product genomes must exist in the annotation inventory;
-annotation-only genomes are excluded, matching the old left join. The detailed
-pathway file has only a header because no coverage was calculated. Metadata
-records the import mode.
-
-To run after protein annotation:
-
-```bash
-kolach annotate \
-  --protein-fasta MAG001.faa --database-dir kolach-db --output-dir results \
-  --add-specialisations --genome-id MAG001
-```
-
-For a mixed FASTA replace `--genome-id` with `--gene-genome-map`. Optional markers
-and CAZy inputs work here too. Snakemake tracks those files, annotations, and
-rules, along with genome grouping parameters. Changing the genome ID triggers
-regeneration; IDs such as `001` retain their leading zeros. Its `all` rule is
-explicitly the default target. Supplemental paths are resolved before execution.
+The expected tables under `examples/specialisation/expected/` are checked
+byte-for-byte. `product_table=` classifies an existing AnnoGuild product matrix
+and `cazy_product=` imports AnnoGuild's verified CAZy columns; both exist for
+parity checks. A `markers=` table needs `gene_id` and `feature` (`pmoA`,
+`marker:pmoA` or `K109440`); with a `status` column only `refined` rows count.
+Other options: `genome_column=` for a table with a genome column,
+`ko_column="ko_id"` for legacy DRAM tables (comma/semicolon-separated KOs).
 
 ## Corrections and validation
 
-[CHANGELOG.md](../CHANGELOG.md) records the comma, methylotrophic naming,
-methanotrophy exclusion, misleading `ko_fdh` name, signature node collisions,
-and explicit Boolean parsing corrections. No broader scientific thresholds,
-guild priorities, denominators, or default route policies were changed.
+[CHANGELOG.md](../CHANGELOG.md) records the classifier corrections (comma,
+methylotrophic naming, methanotrophy exclusion, `ko_fdh` name, signature node
+collisions, explicit Boolean parsing) and the GraftM corrections above. No
+pathway thresholds, guild priorities, denominators or route policies changed.
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s tests -p test_metabolism.py -v
+PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
-The standard-library tests cover 27 profiles across 55 original pathways (1,485
-Boolean comparisons), coverage, the corrected original classifier, errors,
-markers, ambiguity, CLI configuration and example outputs. Comammox signature
-diagnostics fix the old node-collision bug; all captured default Boolean calls
-agree. Changing thresholds can expose a corrected signature call difference.
+The pathway tests cover 27 profiles across 55 original pathways (1,485 Boolean
+comparisons) captured from AnnoGuild; `scripts/verify_annoguild_parity.py`
+re-checks them against a pinned AnnoGuild checkout with its real libraries.
 
-Snapshots were generated by executing the original RuleParser source unchanged
-with minimal adapters for graph, scalar-array, and lookup operations, because
-the build environment could not install pandas/numpy/networkx. Fixture provenance
-records that limitation. `scripts/verify_annoguild_parity.py` independently verifies
-the snapshots with the real upstream libraries. The full existing suite requires
-the usual installed Kolach environment: `python -m unittest discover -s tests -v`.
-
-Final validation on 2026-10-05 verified all 1,485 snapshots against the pinned
-AnnoGuild checkout with actual dependencies. The full local suite passed 89 tests
-(61 tracked and 28 pre-existing local tests); wheel assets and extracted-wheel
-example execution also passed. No editable reinstall was needed.
-
-To reproduce the controlled offline workflow test:
+The offline workflow test runs the real Snakemake DAG with stand-in `run_dbcan`
+and `graftM` executables:
 
 ```bash
 python -m unittest tests.test_metabolism.TestSpecialisationWorkflow -v
 ```
 
-It supplies one protein and a captured KOfam call (`g1`, `K10944`), imports the
-`pmoA` marker, and runs the real integration and specialisation jobs. It checks
-that genome `001` appears exactly in the product, an unchanged dry run has no
-work, and changing the genome to `002` reruns the reports and changes the output
-ID. Annotation tools and databases are unnecessary for this fixture test. The
-test skips when Snakemake is unavailable; the core feature tests remain
-standard-library-only.
+A captured KOfam call (K10944) on protein `001` in `001.faa` is placed as pmoA,
+dbCAN evidence gives a starch substrate, and the genome is named `001` from the
+FASTA. An unchanged rerun does nothing; `--genome-id 002` regenerates the reports.
+GraftM gating, lookup, bundle reproducibility and archive safety are covered by
+`tests/test_graftm.py`; CAZy matching by `tests/test_metabolism.py`.
+
+Real-data checks are under `tests/annoguild_validation/` (see its README).

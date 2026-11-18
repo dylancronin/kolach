@@ -30,9 +30,10 @@ of the separate multi-method recommendation. Family/EC pairs are extracted only
 within a subfamily domain; unrelated domains are never cross-joined. Evidence
 is distinct from KO consensus and does not add a fourth KO voter.
 
-These outputs are intended for future DRAM2 specialisation rules. CAZy families
-alone do not establish substrate usage, and this feature does not reconstruct
-AnnoGuild's verified CAZy product or import its specialisation classifier.
+`kolach annotate --add-specialisations` uses the `dbcan_family_ec` pairs to call
+CAZy substrates with DRAM2's current rules (see
+[specialisation](specialisation.md#6-cazy-substrates-from-dbcan)). CAZy families
+alone do not establish substrate usage.
 
 ## Usage
 
@@ -152,9 +153,8 @@ tables' gene inventories are combined. Duplicate summary gene IDs are rejected, 
 and merged evidence must report the same methods per gene as the overview.
 KEGG pathway enrichment preserves the supplementary columns.
 
-The specialisation engines are not included on this branch. The DRAM2-compatible
-columns and correlated features are the interface for a later integration;
-raw CAZy family presence must not be treated as a verified AnnoGuild CAZy product.
+Specialisation reads the correlated `dbcan_family_ec` pairs, not raw family
+presence.
 
 ## Validation
 

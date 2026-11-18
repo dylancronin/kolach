@@ -16,3 +16,26 @@ Kolach files retain their previous licensing status.
 The evaluator is rewritten around expressions rather than graphs. Reaction
 data have explicit IDs. Corrections and preserved assumptions are recorded
 in CHANGELOG.md and docs/specialisation.md.
+
+# DRAM2 CAZy substrate rules
+
+`src/kolach/metabolism/data/dram_rules/rules_common.tsv` is copied unchanged
+from [BortonWrightonLabs/dram-rules](https://github.com/BortonWrightonLabs/dram-rules)
+at `3257b8604ab6e40c00e811d6ba0211b44dcf5648`
+(`src/dram_rules/data/rules_common.tsv`). It is distributed under the MIT
+licence included as `src/kolach/metabolism/data/dram_rules/LICENSE.MIT`.
+Kolach evaluates only its CAZy family/EC substrate rules.
+
+# GraftM and GraftM packages
+
+GraftM (GPL-3.0-or-later) is a runtime dependency installed in the
+environment; no GraftM code is copied into Kolach.
+
+The GraftM package bundle downloaded by `kolach download --databases graftm`
+contains eight packages built for the EMERGE temporal paper
+(`temporal_paper_202505/GraftM-analysis`) and the public GraftM package
+`7.60.mmoX_sMMO` (https://data.ace.uq.edu.au/public/graftm/7/). The placement
+lookup in `src/kolach/metabolism/data/graftm_placements.tsv` lists every clade
+of those packages and is derived from the temporal paper's
+`update_annotations.R`, with the corrections described in
+docs/specialisation.md.

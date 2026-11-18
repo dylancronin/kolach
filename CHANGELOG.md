@@ -1,6 +1,40 @@
 # Changelog
 
-## Unreleased — metabolic specialisation development branch
+## Unreleased — AnnoGuild specialisation on main
+
+### Changed
+
+- `annotate --add-specialisations` now computes marker refinements (GraftM)
+  and CAZy substrates (dbCAN) itself. `--markers`, `--cazy-product` and
+  `specialise --product` were removed from the CLI; the Python API keeps the
+  legacy imports for parity checks.
+- The genome is named after the protein FASTA by default (`--genome-id`
+  overrides it). `dbcan` is added to `--databases` automatically.
+- `kolach specialise` re-evaluates a finished `--annotation-dir`.
+- Specialisation settings travel in the JSON workflow config.
+
+### Added
+
+- GraftM marker refinement (`methods/graftm.py`): proteins are placed only
+  when the package's KO is their accepted or alternative KO; placements are
+  interpreted by an exact lookup of every package clade. `kolach download
+  --databases graftm` installs a reproducible, checksum-pinned bundle of the
+  eight EMERGE packages plus the public mmoX package.
+- CAZy substrate calls (`metabolism/cazy.py`) from Kolach's dbCAN family/EC
+  pairs using DRAM2's `rules_common.tsv` (dram-rules `3257b86`). Nine polymer
+  groups feed the guild labels (provisional grouping); every substrate is
+  reported in `kolach_cazy_substrates.tsv`.
+- GraftM installed in the kolach environment via pip, keeping HMMER 3.4.
+
+### Corrected
+
+- AnnoGuild substring matching called every rdsrA/rdsrB placement dsrA/dsrB
+  and the mmoX outgroup (`Homologues_mmoX`) mmoX.
+- The temporal-paper lookup mapped bare `Root` placements in any package to
+  norB, and qNor clades to norB; qNor now maps to norZ (K045611). `Nod`
+  placements are unresolved.
+
+## Earlier — metabolic specialisation development branch
 
 ### Added
 

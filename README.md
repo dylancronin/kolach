@@ -9,11 +9,12 @@ domain-level evidence in `kolach_evidence.tsv`, with an overview-style summary
 in `dbcan_overview.tsv`. Raw files are optional (`--dbcan-keep-raw`).
 See [dbCAN usage and validation](docs/dbcan.md).
 
-Genome-level metabolic specialisation is available with `kolach specialise` or
-`kolach annotate --add-specialisations`. It evaluates the original AnnoGuild
-EMERGE rules and writes compatible pathway/guild tables with the documented
-classifier bugs corrected. See the [step-by-step walkthrough](docs/specialisation.md),
-[example inputs and expected outputs](examples/specialisation), and
+Genome-level metabolic specialisation is available with
+`kolach annotate --add-specialisations`. It evaluates AnnoGuild's EMERGE pathway
+rules and guild priorities on Kolach's KOs, refines shared KOs (pmoA/amoA,
+dsrA/rdsrA, ...) with lineage-aware GraftM placement, and calls CAZy substrates
+from dbCAN using DRAM2's current rules. Download `dbcan` and `graftm` databases
+first. See the [walkthrough](docs/specialisation.md) and
 [update history](CHANGELOG.md).
 
 `kolach` provides unified workflows to download databases and assign KO identifiers to protein sequences using three complementary methods:
