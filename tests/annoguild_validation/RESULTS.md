@@ -1,8 +1,11 @@
 # Results — 2026-11-17
 
-Kolach commit for the final specialisation run: `f0ed054` (annotation searches
-from the same run at `41affce`; only the GraftM and specialisation jobs were
-re-run, as a dry run confirmed). Compute: 26.6 allocated CPU-hours over three jobs
+Annotation searches ran at Kolach `41affce` (`run_syncomm.sh`). The GraftM and
+specialisation jobs were then re-run alone with the final code
+(`rerun_specialisation.sh`, which regenerates its workflow config and records
+the commit in `syncomm/kolach_commit.txt`); a Snakemake dry run listed only
+`annotate_graftm` and `specialise_genomes`. The final re-run used `5a6d08b`; an earlier re-run at `f0ed054` gave identical
+comparison tables. Compute: 26.7 allocated CPU-hours over four jobs
 (`accounting.tsv`).
 
 ## 1. GraftM with HMMER 3.4 (`graftm_hmmer_check.json`)
@@ -13,7 +16,7 @@ was recorded with HMMER 3.2.1:
 | Check | Placements | Identical |
 |---|---:|---:|
 | Temporal-paper test sets (`emerge_read_tax.tsv`, 8 packages) | 546 | 546 |
-| SynComm, all 29,327 proteins, 9 packages (AnnoGuild's run) | 105 | 105 |
+| SynComm, all 29,327 proteins, 9 packages (AnnoGuild's run) | 103 | 103 |
 
 ## 2. Logic parity with AnnoGuild on real data
 
@@ -45,8 +48,9 @@ NADH nitrite reductase (K00362), DMSO/thiosulfate reductases and urease
 (K01429). These are the off-target hits the gating removes.
 
 The 4 differences: three proteins that AnnoGuild called both narG and narH
-(Kolach: narG only, its accepted package), and one qNor protein (AnnoGuild:
-norB; Kolach: norZ, by design).
+(Kolach: narG only; their KOs gate only the narG_nxrA package, so the narH
+package never placed them), and one qNor protein (AnnoGuild: norB; Kolach:
+norZ, by design).
 
 ### Pathways (`syncomm_E3_pathways.tsv`)
 
@@ -82,6 +86,13 @@ are compared only through the labels.
 - Six genomes only; no methanogens, methanotrophs, comammox or reverse-dsr
   organisms, so those GraftM refinements and labels were not exercised on
   real data beyond the temporal-paper placement checks.
+- Much of the new GraftM logic was not exercised on real data: no package KO
+  appeared among SynComm `alternative_kos`, and all 7 gated proteins were
+  accepted-gated and refined. Alternative gating, `superseded`, `excluded`,
+  `unresolved`/`not_placed` and `unresolved_refinement` are covered by unit
+  and workflow tests only.
+- GraftM check A grafted only sequences already placed under HMMER 3.2.1, so it
+  cannot reveal new placements; check B (all SynComm proteins) can, and found none.
 - `kolach download --databases graftm` from the GitHub release URL is untested
   (the release does not exist yet); the bundle was installed from the local
   file through the same code path.
