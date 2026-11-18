@@ -76,5 +76,27 @@ class TestWorkflowDryRun(unittest.TestCase):
             self.assertIn(target, out)
 
 
+    def test_download_graftm_and_kegg(self):
+        out = self.dry_run("download.smk", {
+            "database_dir": str(self.dir / "empty_db"), "databases": ["graftm"],
+        })
+        for target in ("download_graftm", "download_kegg_hierarchy", "graftm/manifest.json"):
+            self.assertIn(target, out)
+
+    def test_specialisations_require_dbcan(self):
+        config_path = self.dir / "config.json"
+        config_path.write_text(json.dumps({
+            "database_dir": str(self.db), "protein_fasta": str(self.fasta),
+            "output_dir": str(self.dir / "out"), "databases": ["kofam"], "add_specialisations": True,
+        }))
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join(filter(None, [str(SRC), os.environ.get("PYTHONPATH")])))
+        result = subprocess.run(
+            ["snakemake", "-n", "-s", str(WORKFLOWS / "annotate.smk"), "--cores", "1",
+             "--configfile", str(config_path), "--directory", str(self.dir)],
+            capture_output=True, text=True, env=env)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires dbcan", result.stdout + result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

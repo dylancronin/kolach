@@ -12,6 +12,11 @@ if "dbcan" in SELECTED_DBS:
     targets.extend(f"{DBCAN_DIR}/{name}" for name in ASSETS)
     include: "rules/download_dbcan.smk"
 
+if "graftm" in SELECTED_DBS:
+    GRAFTM_DIR = str(DB_DIR / "graftm")
+    targets.extend([f"{GRAFTM_DIR}/.download_complete", f"{GRAFTM_DIR}/manifest.json"])
+    include: "rules/download_graftm.smk"
+
 if "eggnog" in SELECTED_DBS:
     EGGNOG_DIR = str(DB_DIR / "eggnog")
     targets.append(f"{EGGNOG_DIR}/.download_complete")

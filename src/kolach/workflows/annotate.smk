@@ -37,6 +37,10 @@ if targets:
         include: "rules/pathway.smk"
     all_targets = targets + supplementary_targets + [f"{OUTDIR}/kolach_annotations.tsv", f"{OUTDIR}/kolach_evidence.tsv"]
     if ADD_SPECIALISATIONS:
+        if "dbcan" not in SELECTED_DBS:
+            raise ValueError("add_specialisations requires dbcan in databases (CAZy substrate evidence)")
+        GRAFTM_DIR = str(DB_DIR / "graftm")
+        include: "rules/annotate_graftm.smk"
         include: "rules/specialise.smk"
         all_targets += [f"{OUTDIR}/{filename}" for filename in SPECIALISATION_FILES]
 else:

@@ -1,16 +1,15 @@
 from kolach.metabolism.specialise import specialise
 from kolach.metabolism.evaluate import DATA_DIR
 
-# Register supplemental files as inputs so Snakemake reruns when they change.
 SPECIALISATION_FILES = [
     "kolach_product_refined.tsv", "kolach_specialisations.tsv",
     "kolach_metabolic_pathways.tsv", "kolach_specialisation_assessment.tsv",
-    "kolach_specialisation_metadata.json",
+    "kolach_specialisation_metadata.json", "kolach_cazy_substrates.tsv",
 ]
-SPECIALISATION_INPUTS = {name: str(Path(config[name]).expanduser().resolve())
-                         for name in ("gene_genome_map", "markers", "cazy_product")
-                         if config.get(name)}
-SPECIALISATION_RULES = list(DATA_DIR.glob("*.tsv")) + [DATA_DIR / "manifest.json"]
+GENE_GENOME_MAP = (str(Path(config["gene_genome_map"]).expanduser().resolve())
+                   if config.get("gene_genome_map") else None)
+# Rule data are inputs so edits to bundled definitions trigger a rerun.
+SPECIALISATION_RULES = sorted(str(path) for path in DATA_DIR.rglob("*") if path.is_file())
 GENOME_ID = config.get("genome_id")
 # The CLI passes a JSON config file, so string IDs such as '001' stay strings.
 if GENOME_ID is not None:
@@ -19,22 +18,20 @@ if GENOME_ID is not None:
 rule specialise_genomes:
     input:
         annotations=f"{OUTDIR}/kolach_annotations.tsv",
-        supplemental=list(SPECIALISATION_INPUTS.values()),
-        rules=[str(path) for path in SPECIALISATION_RULES]
+        markers=f"{OUTDIR}/kolach_graftm_markers.tsv",
+        genome_map=[GENE_GENOME_MAP] if GENE_GENOME_MAP else [],
+        rules=SPECIALISATION_RULES
     output:
         [f"{OUTDIR}/{filename}" for filename in SPECIALISATION_FILES]
     params:
         # Config used only inside run is invisible to Snakemake's change tracking.
-        # Track grouping and input roles as well as the input files themselves.
         genome_id=GENOME_ID,
-        genome_map=SPECIALISATION_INPUTS.get("gene_genome_map"),
-        markers=SPECIALISATION_INPUTS.get("markers"),
-        cazy_product=SPECIALISATION_INPUTS.get("cazy_product")
+        genome_map=GENE_GENOME_MAP
     run:
         specialise(
             input.annotations, OUTDIR,
             genome_id=params.genome_id,
             gene_genome_map=params.genome_map,
-            markers=params.markers,
-            cazy_product=params.cazy_product,
+            markers=input.markers,
+            cazy_from_dbcan=True,
         )

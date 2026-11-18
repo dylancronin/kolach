@@ -12,6 +12,9 @@ import math
 from pathlib import Path
 import re
 
+from kolach.methods.graftm import MARKER_FEATURES, PLACEMENTS_FILE
+
+from . import cazy as cazy_rules
 from .evaluate import DATA_DIR, evaluate_pathway, load_rules, read_tsv
 
 
@@ -28,13 +31,7 @@ KO_METHANOTROPHY = {"K10944", "K10945", "K10946", "K109440", "K109450", "K109460
 
 # Custom IDs are AnnoGuild's refined features, not official six-digit KOs.
 # Keep them internally for rule compatibility, while allowing named marker input.
-MARKER_IDS = {
-    "dsrA": "K111800", "rdsrA": "K111801", "dsrB": "K111810", "rdsrB": "K111811",
-    "narG": "K003700", "nxrA": "K003701", "narH": "K003710", "nxrB": "K003711",
-    "pmoA": "K109440", "amoA": "K109441", "pmoB": "K109450", "amoB": "K109451",
-    "pmoC": "K109460", "amoC": "K109461", "norB": "K045610", "norZ": "K045611",
-    "mmoX": "K16157",
-}
+MARKER_IDS = MARKER_FEATURES
 NITROGEN_ROLES = [
     ("nitrogen_redox-comammox", "comammox"),
     ("nitrogen_redox-ammonia_oxidation", "ammonia_oxidiser"),
@@ -177,13 +174,20 @@ def read_annotations(annotation_table, ko_column="accepted_ko", genome_id=None,
 def add_markers(genomes: dict, marker_table) -> None:
     """Import gene-level marker calls, replacing the corresponding ambiguous KO.
 
-    TSV columns are gene_id, feature, and optionally genome. A missing genome is
-    allowed only for globally unique gene IDs. feature accepts marker:pmoA, pmoA,
-    or the legacy K109440. The source annotation table is never modified.
+    TSV columns are gene_id, feature, and optionally genome and status. Kolach's
+    GraftM table (kolach_graftm_markers.tsv) has a status column; only its
+    `refined` rows are used. A missing genome is allowed only for globally unique
+    gene IDs. feature accepts marker:pmoA, pmoA, or the legacy K109440.
+
+    A refined marker replaces its parent KO when that KO is the gene's accepted
+    call. A marker confirmed from an alternative KO is added beside the accepted
+    call. The source annotation table is never modified.
     """
     columns, rows = read_tsv(marker_table)
     if not {"gene_id", "feature"} <= set(columns):
         raise ValueError("Marker table requires gene_id and feature columns")
+    if "status" in columns:
+        rows = [row for row in rows if row["status"] == "refined"]
     locations = {}
     for genome, genes in genomes.items():
         for gene in genes:
@@ -233,11 +237,32 @@ def write_tsv(path, columns, rows):
         writer.writerows(rows)
 
 
+def marker_summary(marker_table, genomes: dict) -> dict:
+    """Per-genome counts of GraftM outcomes (refined/unresolved/not_placed)."""
+    columns, rows = read_tsv(marker_table)
+    gene_genome = {gene: genome for genome, genes in genomes.items() for gene in genes}
+    counts = {genome: {"refined": 0, "unresolved": 0, "not_placed": 0} for genome in genomes}
+    if "status" in columns:
+        for row in rows:
+            genome = row.get("genome") or gene_genome.get(row["gene_id"])
+            if genome in counts and row["status"] in counts[genome]:
+                counts[genome][row["status"]] += 1
+    return counts
+
+
 def specialise(annotation_table, output_dir, *, genome_id=None, genome_column=None,
                gene_genome_map=None, ko_column="accepted_ko", markers=None,
-               product_table=None, cazy_product=None, reaction_threshold=0.7,
-               ko_threshold=0.6, reactions_file=None, pathways_file=None) -> dict[str, Path]:
-    """Run the complete genome-level analysis; no databases or network required."""
+               cazy_from_dbcan=False, product_table=None, cazy_product=None,
+               reaction_threshold=0.7, ko_threshold=0.6, reactions_file=None,
+               pathways_file=None) -> dict[str, Path]:
+    """Run the complete genome-level analysis; no databases or network required.
+
+    `kolach annotate --add-specialisations` supplies `markers` (the GraftM table)
+    and `cazy_from_dbcan=True`. `product_table` and `cazy_product` import legacy
+    AnnoGuild matrices; they are kept for parity tests and the Python API only.
+    """
+    if cazy_from_dbcan and cazy_product:
+        raise ValueError("Choose dbCAN-derived CAZy calls or an imported CAZy product, not both")
     for threshold in (reaction_threshold, ko_threshold):
         if not math.isfinite(threshold) or not 0 <= threshold <= 1:
             raise ValueError("Coverage thresholds must be finite and within [0, 1]")
@@ -272,9 +297,19 @@ def specialise(annotation_table, output_dir, *, genome_id=None, genome_column=No
                 products[genome][rule.pathway_id] = result["called"]
                 details.append({"genome": genome, **result})
 
-    # 3. CAZy calls must come from the legacy verified-signature matrix. They
-    # cannot be inferred reliably from KO-only evidence or raw family presence.
-    if cazy_product:
+    # 3. CAZy substrates: DRAM2 family/EC rules on dbCAN evidence, or an
+    # imported legacy matrix (API only).
+    cazy_details = None
+    if cazy_from_dbcan:
+        gene_genomes = {gene: genome for genome, genes in genomes.items() for gene in genes}
+        calls, cazy_details = cazy_rules.call_substrates(
+            cazy_rules.read_gene_pairs(annotation_table, gene_genomes, genomes))
+        for name in cazy_rules.POLYMER_GROUPS:
+            if name not in pathway_names:
+                pathway_names.append(name)
+        for genome in products:
+            products[genome].update(calls[genome])
+    elif cazy_product:
         names, cazy = read_product(cazy_product)
         names = [name for name in names if name.startswith("CAZy")]
         if not names or set(products) != set(cazy):
@@ -288,14 +323,20 @@ def specialise(annotation_table, output_dir, *, genome_id=None, genome_column=No
     # 4. Apply the original priorities; preserve empty cells and 'None detected'.
     specialisations = []
     assessments = []
-    cazy_assessed = any(name.startswith("CAZy") for name in pathway_names)
+    cazy_assessment = ("dbcan" if cazy_from_dbcan else "imported_product" if cazy_product
+                       or any(name.startswith("CAZy") for name in pathway_names) else "unassessed")
+    marker_counts = marker_summary(markers, genomes) if markers else {}
     for genome, calls in products.items():
         labels = classify_specialisation(calls, features[genome])
         specialisations.append({"genome": genome, **labels})
+        counts = marker_counts.get(genome, {})
         assessments.append({
             "genome": genome,
-            "cazy_assessment": "assessed" if cazy_assessed else "unassessed",
+            "cazy_assessment": cazy_assessment,
             "refinement_assessment": "imported_product" if product_table else "assessed" if markers is not None else "partial_or_unassessed",
+            "graftm_refined": counts.get("refined", ""),
+            "graftm_unresolved": counts.get("unresolved", ""),
+            "graftm_not_placed": counts.get("not_placed", ""),
             "supported_pathways": ";".join(name for name, call in calls.items() if call),
             "nitrogen_roles": ";".join(role for name, role in NITROGEN_ROLES if calls.get(name)),
             "sulfur_roles": ";".join(role for name, role in SULFUR_ROLES if calls.get(name)),
@@ -312,6 +353,7 @@ def specialise(annotation_table, output_dir, *, genome_id=None, genome_column=No
         "pathways": "kolach_metabolic_pathways.tsv",
         "assessment": "kolach_specialisation_assessment.tsv",
         "metadata": "kolach_specialisation_metadata.json",
+        "cazy": "kolach_cazy_substrates.tsv",
     }.items()}
     write_tsv(paths["product"], ["genome", *pathway_names],
               [{"genome": genome, **calls} for genome, calls in products.items()])
@@ -319,15 +361,24 @@ def specialise(annotation_table, output_dir, *, genome_id=None, genome_column=No
     write_tsv(paths["pathways"], DETAIL_COLUMNS, details)
     assessment_columns = list(assessments[0]) if assessments else ["genome"]
     write_tsv(paths["assessment"], assessment_columns, assessments)
+    if cazy_details is not None:
+        cazy_rules.write_details(paths["cazy"], cazy_details)
+    else:
+        del paths["cazy"]
     provenance = json.loads((DATA_DIR / "manifest.json").read_text(encoding="utf-8"))
     inputs = {"annotations": annotation_table, "genome_map": gene_genome_map, "markers": markers,
-              "product": product_table, "cazy_product": cazy_product}
+              "product": product_table, "cazy_product": cazy_product,
+              "cazy_rules": cazy_rules.RULES_FILE if cazy_from_dbcan else None,
+              "graftm_placements": PLACEMENTS_FILE if markers else None}
     rule_inputs = {} if product_table else {"reactions": reactions_file or DATA_DIR / "reactions.tsv",
                                            "pathways": pathways_file or DATA_DIR / "pathways.tsv"}
     provenance.update({
         "reaction_threshold": reaction_threshold, "ko_threshold": ko_threshold,
         "ko_column": ko_column, "genome_id": genome_id, "genome_column": genome_column,
-        "evidence_policy": "selected KO column only; alternative_kos are never added",
+        "evidence_policy": ("selected KO column; an alternative KO contributes only as a GraftM-refined marker"
+                            if markers else "selected KO column only; alternative_kos are never added"),
+        "cazy_policy": ("DRAM2 family/EC substrate rules on dbCAN evidence; polymer groups only"
+                        if cazy_from_dbcan else "imported_product" if cazy_product else "unassessed"),
         "pathway_evaluation": "imported_product" if product_table else "legacy_compatible",
         "inputs": {name: {"path": str(Path(path).resolve()), "sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest()}
                    for name, path in {**inputs, **rule_inputs}.items() if path is not None},

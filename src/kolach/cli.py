@@ -137,10 +137,10 @@ def build_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--databases",
         nargs="+",
-        choices=["eggnog", "kofam", "deepkoala", "dbcan"],
+        choices=["eggnog", "kofam", "deepkoala", "dbcan", "graftm"],
         required=True,
         help="Databases to download. The KEGG Orthology hierarchy (ko00001.json) used by "
-        "--add-pathways is always fetched alongside them.",
+        "--add-pathways is always fetched alongside them. Specialisation needs dbcan and graftm.",
     )
 
     download_parser.add_argument(
@@ -285,14 +285,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_integration_options(annotate_parser)
 
-    # Genome grouping is explicit: a protein file may represent one MAG or many.
-    annotate_parser.add_argument("--add-specialisations", action="store_true",
-                                 help="Evaluate genome-level pathways and AnnoGuild guilds after annotation.")
+    annotate_parser.add_argument(
+        "--add-specialisations", action="store_true",
+        help="Predict genome-level pathways and AnnoGuild guilds. Also runs dbCAN (CAZy substrates) "
+        "and GraftM (marker refinement); needs `kolach download --databases dbcan graftm`.")
     annotate_group = annotate_parser.add_mutually_exclusive_group()
-    annotate_group.add_argument("--genome-id", help="Genome ID when all input proteins belong to one genome.")
-    annotate_group.add_argument("--gene-genome-map", help="TSV mapping gene_id to genome for mixed inputs.")
-    annotate_parser.add_argument("--markers", help="Optional gene-level refined marker TSV (gene_id, feature, optional genome).")
-    annotate_parser.add_argument("--cazy-product", help="Optional legacy verified CAZy Boolean product matrix.")
+    annotate_group.add_argument(
+        "--genome-id",
+        help="Genome name for specialisation (default: the protein FASTA file name without extension).")
+    annotate_group.add_argument("--gene-genome-map", help="TSV mapping gene_id to genome when the FASTA holds several genomes.")
 
     # ------------------------------------------------------
     # Integrate subcommand
@@ -394,22 +395,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Column name containing KO identifiers to annotate (default: 'accepted_ko').",
     )
 
-    # Specialisation uses the bundled EMERGE rules; it does not download databases.
+    # Re-run specialisation on a finished `annotate --add-specialisations` output
+    # directory, e.g. with other thresholds. It needs no databases.
     specialise_parser = subparsers.add_parser(
-        "specialise", help="Evaluate genome-level metabolic pathways and AnnoGuild specialisations."
+        "specialise",
+        help="Re-evaluate pathways and AnnoGuild specialisations from an `annotate --add-specialisations` output directory.",
     )
-    specialise_parser.add_argument("--annotation-table", required=True)
-    specialise_parser.add_argument("--output-dir", required=True)
-    specialise_group = specialise_parser.add_mutually_exclusive_group()
+    specialise_parser.add_argument(
+        "--annotation-dir", required=True,
+        help="Output directory of `kolach annotate --add-specialisations` (reads kolach_annotations.tsv "
+        "and kolach_graftm_markers.tsv).")
+    specialise_parser.add_argument("--output-dir", help="Where to write results (default: --annotation-dir).")
+    specialise_group = specialise_parser.add_mutually_exclusive_group(required=True)
     specialise_group.add_argument("--genome-id", help="All annotation rows belong to this genome.")
-    specialise_group.add_argument("--genome-column", help="Genome column in a combined table (default: genome).")
     specialise_group.add_argument("--gene-genome-map", help="TSV with gene_id and genome columns.")
-    specialise_parser.add_argument("--ko-column", default="accepted_ko")
-    specialise_parser.add_argument("--markers", help="Refined features: gene_id, feature, optional genome.")
-    specialise_parser.add_argument("--product", help="Classify an existing refined Boolean product instead of evaluating pathways.")
-    specialise_parser.add_argument("--cazy-product", help="Verified legacy CAZy Boolean calls; must include all assessed genomes.")
-    specialise_parser.add_argument("--reaction-threshold", type=fraction, default=0.7)
-    specialise_parser.add_argument("--ko-threshold", type=fraction, default=0.6)
+    specialise_parser.add_argument("--reaction-threshold", type=fraction, default=0.7,
+                                   help="Minimum fraction of a route's reactions present (default: 0.7).")
+    specialise_parser.add_argument("--ko-threshold", type=fraction, default=0.6,
+                                   help="Minimum KO coverage of the best route (default: 0.6).")
     specialise_parser.add_argument("--reactions-file", help="Custom reaction TSV (pathway, reaction_id, definition).")
     specialise_parser.add_argument("--pathways-file", help="Custom EMERGE refined pathway TSV.")
 
@@ -455,18 +458,40 @@ def annotate_config(args) -> dict:
         "add_pathways": args.add_pathways,
         "add_specialisations": args.add_specialisations,
     }
+    if args.add_specialisations:
+        # Specialisation needs dbCAN's CAZy evidence; add it rather than fail.
+        if "dbcan" not in config["databases"]:
+            config["databases"].append("dbcan")
+        if not args.gene_genome_map:
+            config["genome_id"] = args.genome_id or genome_name(args.protein_fasta)
     for key in ("eggnog_sensmode", "eggnog_temp_dir", "eggnog_dmnd_block_size", "eggnog_dmnd_index_chunks",
-                "genome_id", "gene_genome_map", "markers", "cazy_product"):
+                "gene_genome_map"):
         value = getattr(args, key)
         if value is not None:
             config[key] = value
     return config
 
 
-def check_annotation_dependencies(databases) -> None:
+FASTA_SUFFIXES = (".faa", ".fa", ".fasta", ".fas", ".pep", ".aa", ".prot", ".protein")
+
+
+def genome_name(protein_fasta) -> str:
+    """Genome name from the FASTA file name: drop .gz, then one FASTA suffix."""
+    name = Path(protein_fasta).name
+    if name.lower().endswith((".gz", ".gzip")):
+        name = name.rsplit(".", 1)[0]
+    stem, dot, suffix = name.rpartition(".")
+    if dot and stem and f".{suffix.lower()}" in FASTA_SUFFIXES:
+        name = stem
+    return name
+
+
+def check_annotation_dependencies(databases, specialisations=False) -> None:
     """Fail before launching the workflow if a selected method cannot run."""
     for db in databases:
         importlib.import_module(f"kolach.methods.{db}").check_dependencies()
+    if specialisations:
+        importlib.import_module("kolach.methods.graftm").check_dependencies()
 
 
 def run_workflow(snakefile: str, config: dict, cores: int) -> int:
@@ -504,12 +529,10 @@ def main(argv=None):
         parser.error("integrate --add-pathways requires --database-dir")
 
     if args.command == "annotate":
-        if args.add_specialisations and not (args.genome_id or args.gene_genome_map):
-            parser.error("annotate --add-specialisations requires --genome-id or --gene-genome-map")
-        if not args.add_specialisations and any((args.genome_id, args.gene_genome_map, args.markers, args.cazy_product)):
-            parser.error("Genome grouping and supplemental inputs require --add-specialisations")
-    if args.command == "specialise" and args.product and any((args.reactions_file, args.pathways_file)):
-        parser.error("--product cannot be combined with custom rule files")
+        if not args.add_specialisations and (args.genome_id or args.gene_genome_map):
+            parser.error("--genome-id and --gene-genome-map require --add-specialisations")
+        if args.genome_id is not None and not args.genome_id.strip():
+            parser.error("--genome-id cannot be empty")
 
     if args.command == "download":
         returncode = run_workflow("download.smk", download_config(args), cores=1)
@@ -519,14 +542,15 @@ def main(argv=None):
     elif args.command == "annotate":
         from kolach.integrate import read_fasta_ids
 
+        config = annotate_config(args)
         try:
-            check_annotation_dependencies(args.databases)
+            check_annotation_dependencies(config["databases"], args.add_specialisations)
             # Duplicate IDs would only be rejected at the integrate step, after
             # every annotation method has already run.
             read_fasta_ids(args.protein_fasta)
         except (OSError, ImportError, ValueError) as exc:
             parser.exit(1, f"kolach annotate: error: {exc}\n")
-        returncode = run_workflow("annotate.smk", annotate_config(args), cores=args.threads)
+        returncode = run_workflow("annotate.smk", config, cores=args.threads)
         if returncode != 0:
             sys.exit(returncode)
 
@@ -562,12 +586,17 @@ def main(argv=None):
     elif args.command == "specialise":
         from kolach.metabolism.specialise import specialise
 
+        directory = Path(args.annotation_dir)
+        annotations = directory / "kolach_annotations.tsv"
+        markers = directory / "kolach_graftm_markers.tsv"
         try:
+            for path in (annotations, markers):
+                if not path.is_file():
+                    raise FileNotFoundError(f"{path} not found; run `kolach annotate --add-specialisations` first")
             paths = specialise(
-                args.annotation_table, args.output_dir,
-                genome_id=args.genome_id, genome_column=args.genome_column,
-                gene_genome_map=args.gene_genome_map, ko_column=args.ko_column,
-                markers=args.markers, product_table=args.product, cazy_product=args.cazy_product,
+                annotations, args.output_dir or directory,
+                genome_id=args.genome_id, gene_genome_map=args.gene_genome_map,
+                markers=markers, cazy_from_dbcan=True,
                 reaction_threshold=args.reaction_threshold, ko_threshold=args.ko_threshold,
                 reactions_file=args.reactions_file, pathways_file=args.pathways_file,
             )

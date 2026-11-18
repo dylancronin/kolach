@@ -1,0 +1,69 @@
+Root; dsrA; Acidobacteriota	dsrA
+Root; dsrA; Acidobacteriota_2	dsrA
+Root; dsrA; Acidobacteriota_3	dsrA
+Root; dsrA; Bacteroidota	dsrA
+Root; dsrA; Chloroflexota	dsrA
+Root; dsrA; Desulfovibrionales	dsrA
+Root; dsrA; Myxococcota	dsrA
+Root; dsrA; Nitrospirota	dsrA
+Root; dsrA; Syntrophia	dsrA
+Root; dsrA; Syntrophia_2	dsrA
+Root; dsrA; Syntrophobacteria	dsrA
+Root; dsrA; Syntrophorhabdia	dsrA
+Root; dsrA; Verrucomicrobiota	dsrA
+Root; rdsrA; Alphaproteobacteria	rdsrA
+Root; rdsrA; Gammaproteobacteria	rdsrA
+Root; rdsrA; Myxococcota_2	rdsrA
+Root; dsrB	dsrB
+Root; dsrB; Acidobacteriota	dsrB
+Root; dsrB; Acidobacteriota_2	dsrB
+Root; dsrB; Bacteroidota	dsrB
+Root; dsrB; Chloroflexota	dsrB
+Root; dsrB; Desulfovibrionales	dsrB
+Root; dsrB; Myxococcota	dsrB
+Root; dsrB; Nitrospirota	dsrB
+Root; dsrB; Syntrophia	dsrB
+Root; dsrB; Syntrophia_2	dsrB
+Root; dsrB; Syntrophobacteria	dsrB
+Root; dsrB; Syntrophorhabdia	dsrB
+Root; dsrB; Verrucomicrobiota	dsrB
+Root; rdsrB	rdsrB
+Root; rdsrB; Alphaproteobacteria	rdsrB
+Root; rdsrB; Gammaproteobacteria_2	rdsrB
+Root; NarG_Proteobacteria	narG
+Root; NarG_Actinobacteriota	narG
+Root; NarG_Acidobacteriota	narG
+Root; NarG_Cyanobacteria	narG
+Root; NarG_Mixed	narG
+Root; periplasmic_NxrA	nxrA
+Root; cytoplasmic_NxrA_Mixed	nxrA
+Root; NarH_Acidobacteriota	narH
+Root; NarH_Actinobacteriota	narH
+Root; NarH_Desulfobacterota	narH
+Root; NarH_Proteobacteria	narH
+Root; NxrB	nxrB
+Root; NxrB_2	nxrB
+Root; amoA_Nitrospirae	amoA
+Root; amoA_Mixed	amoA
+Root; pmoA_Mixed	pmoA
+Root; pmoA_Mixed_2	pmoA
+Root; pmoA_Mixed_3	pmoA
+Root; pmoA_Rhizobiales	pmoA
+Root; amoB_Nitrospirae	amoB
+Root; amoB_Mixed	amoB
+Root; pmoB_Mixed	pmoB
+Root; pmoB_Methylococcales	pmoB
+Root; amoC_Nitrospirae	amoC
+Root; amoC_Mixed	amoC
+Root; pmoC_Mixed	pmoC
+Root; pmoC_Methylococcales	pmoC
+Root	norB
+Root; cNor_Alphaproteobacteria	norB
+Root; cNor_Bacteroidota	norB
+Root; cNor_Gammaproteobacteria	norB
+Root; cNor_Verrucomicrobiota	norB
+Root; cNor_Mixed	norB
+Root; qNor_Alphaproteobacteria	norB
+Root; qNor_Mixed	norB
+Root; qNor_Mixed_2	norB
+Root; qNor_Planctomycetota	norB

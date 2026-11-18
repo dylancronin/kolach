@@ -1,0 +1,159 @@
+package	placement	marker	unresolved_reason
+amoA_pmoA	Root		root_placement
+amoA_pmoA	Root; amoA_Archaea	amoA	
+amoA_pmoA	Root; amoA_Betaproteobacteria	amoA	
+amoA_pmoA	Root; amoA_Gammaproteobacteria	amoA	
+amoA_pmoA	Root; amoA_Mixed	amoA	
+amoA_pmoA	Root; amoA_Nitrospirae	amoA	
+amoA_pmoA	Root; pmoA_Betaproteobacteria	pmoA	
+amoA_pmoA	Root; pmoA_Methylococcales	pmoA	
+amoA_pmoA	Root; pmoA_Methylomirabilota	pmoA	
+amoA_pmoA	Root; pmoA_Mixed	pmoA	
+amoA_pmoA	Root; pmoA_Mixed_2	pmoA	
+amoA_pmoA	Root; pmoA_Mixed_3	pmoA	
+amoA_pmoA	Root; pmoA_Rhizobiales	pmoA	
+amoA_pmoA	Root; pmoA_Verrucomicrobia	pmoA	
+amoB_pmoB	Root		root_placement
+amoB_pmoB	Root; amoB_Archaea	amoB	
+amoB_pmoB	Root; amoB_Betaproteobacteria	amoB	
+amoB_pmoB	Root; amoB_Gammaproteobacteria	amoB	
+amoB_pmoB	Root; amoB_Mixed	amoB	
+amoB_pmoB	Root; amoB_Nitrospirae	amoB	
+amoB_pmoB	Root; pmoB_Betaproteobacteria	pmoB	
+amoB_pmoB	Root; pmoB_Methylococcales	pmoB	
+amoB_pmoB	Root; pmoB_Mixed	pmoB	
+amoB_pmoB	Root; pmoB_Verrucomicrobia	pmoB	
+amoC_pmoC	Root		root_placement
+amoC_pmoC	Root; Unknown		unknown_clade
+amoC_pmoC	Root; amoC_Archaea	amoC	
+amoC_pmoC	Root; amoC_Betaproteobacteria	amoC	
+amoC_pmoC	Root; amoC_Chromatiales	amoC	
+amoC_pmoC	Root; amoC_Mixed	amoC	
+amoC_pmoC	Root; amoC_Nitrospirae	amoC	
+amoC_pmoC	Root; pmoC_Betaproteobacteria	pmoC	
+amoC_pmoC	Root; pmoC_Methylococcales	pmoC	
+amoC_pmoC	Root; pmoC_Mixed	pmoC	
+amoC_pmoC	Root; pmoC_Verrucomicrobia	pmoC	
+dsrA	Root		root_placement
+dsrA	Root; Unknown		unknown_clade
+dsrA	Root; dsrA	dsrA	
+dsrA	Root; dsrA; Acidobacteriota	dsrA	
+dsrA	Root; dsrA; Acidobacteriota_2	dsrA	
+dsrA	Root; dsrA; Acidobacteriota_3	dsrA	
+dsrA	Root; dsrA; Actinobacteria	dsrA	
+dsrA	Root; dsrA; Bacteroidota	dsrA	
+dsrA	Root; dsrA; Chloroflexota	dsrA	
+dsrA	Root; dsrA; Crenarchaeota	dsrA	
+dsrA	Root; dsrA; Desulfovibrionales	dsrA	
+dsrA	Root; dsrA; Euryarchaeota	dsrA	
+dsrA	Root; dsrA; Firmicutes	dsrA	
+dsrA	Root; dsrA; Firmicutes_2	dsrA	
+dsrA	Root; dsrA; Myxococcota	dsrA	
+dsrA	Root; dsrA; Nitrospirota	dsrA	
+dsrA	Root; dsrA; Syntrophia	dsrA	
+dsrA	Root; dsrA; Syntrophia_2	dsrA	
+dsrA	Root; dsrA; Syntrophobacterales	dsrA	
+dsrA	Root; dsrA; Syntrophobacteria	dsrA	
+dsrA	Root; dsrA; Syntrophorhabdia	dsrA	
+dsrA	Root; dsrA; Thermodesulfobacteria	dsrA	
+dsrA	Root; dsrA; Verrucomicrobiota	dsrA	
+dsrA	Root; rdsrA	rdsrA	
+dsrA	Root; rdsrA; Alphaproteobacteria	rdsrA	
+dsrA	Root; rdsrA; Alphaproteobacteria_2	rdsrA	
+dsrA	Root; rdsrA; Betaproteobacteria	rdsrA	
+dsrA	Root; rdsrA; Chlorobi	rdsrA	
+dsrA	Root; rdsrA; Gammaproteobacteria	rdsrA	
+dsrA	Root; rdsrA; Gammaproteobacteria_2	rdsrA	
+dsrA	Root; rdsrA; Myxococcota_2	rdsrA	
+dsrB	Root		root_placement
+dsrB	Root; Unknown		unknown_clade
+dsrB	Root; dsrB	dsrB	
+dsrB	Root; dsrB; Acidobacteriota	dsrB	
+dsrB	Root; dsrB; Acidobacteriota_2	dsrB	
+dsrB	Root; dsrB; Actinobacteria	dsrB	
+dsrB	Root; dsrB; Bacteroidota	dsrB	
+dsrB	Root; dsrB; Chloroflexota	dsrB	
+dsrB	Root; dsrB; Crenarchaeota	dsrB	
+dsrB	Root; dsrB; Desulfovibrionales	dsrB	
+dsrB	Root; dsrB; Euryarchaeota	dsrB	
+dsrB	Root; dsrB; Firmicutes	dsrB	
+dsrB	Root; dsrB; Myxococcota	dsrB	
+dsrB	Root; dsrB; Nitrospirota	dsrB	
+dsrB	Root; dsrB; Syntrophia	dsrB	
+dsrB	Root; dsrB; Syntrophia_2	dsrB	
+dsrB	Root; dsrB; Syntrophobacterales	dsrB	
+dsrB	Root; dsrB; Syntrophobacteria	dsrB	
+dsrB	Root; dsrB; Syntrophorhabdia	dsrB	
+dsrB	Root; dsrB; Thermodesulfobacteria	dsrB	
+dsrB	Root; dsrB; Verrucomicrobiota	dsrB	
+dsrB	Root; rdsrB	rdsrB	
+dsrB	Root; rdsrB; Alphaproteobacteria	rdsrB	
+dsrB	Root; rdsrB; Alphaproteobacteria_2	rdsrB	
+dsrB	Root; rdsrB; Betaproteobacteria	rdsrB	
+dsrB	Root; rdsrB; Chlorobi	rdsrB	
+dsrB	Root; rdsrB; Gammaproteobacteria	rdsrB	
+dsrB	Root; rdsrB; Gammaproteobacteria_2	rdsrB	
+mmoX_sMMO	Root		root_placement
+mmoX_sMMO	Root; Homologues_mmoX		outgroup_homologue
+mmoX_sMMO	Root; likely_mmoX	mmoX	
+mmoX_sMMO	Root; likely_mmoX; Methylococcaceae_mmoX	mmoX	
+mmoX_sMMO	Root; likely_mmoX; Methylococcaceae_mmoX; Methylocaldum_methylococcus_mmoX	mmoX	
+mmoX_sMMO	Root; likely_mmoX; Methylococcaceae_mmoX; Methylomicrobium_mmoX	mmoX	
+mmoX_sMMO	Root; likely_mmoX; Methylococcaceae_mmoX; Methylomonas_mmoX	mmoX	
+mmoX_sMMO	Root; likely_mmoX; Methylococcaceae_mmoX; Methylovulumn_mmoX	mmoX	
+mmoX_sMMO	Root; likely_mmoX; Rhizobiales_mmoX	mmoX	
+mmoX_sMMO	Root; likely_mmoX; Rhizobiales_mmoX; Beijerinckiaceae_mmoX	mmoX	
+mmoX_sMMO	Root; likely_mmoX; Rhizobiales_mmoX; HYP_mmoX	mmoX	
+mmoX_sMMO	Root; likely_mmoX; Rhizobiales_mmoX; Methylocystaceae_mmoX	mmoX	
+mmoX_sMMO	Root; likely_mmoX; Rhizobiales_mmoX; Methylocystaceae_mmoX; Methylocystis_mmoX	mmoX	
+mmoX_sMMO	Root; likely_mmoX; Rhizobiales_mmoX; Methylocystaceae_mmoX; Methylosinus_mmoX	mmoX	
+narG_nxrA	Root		root_placement
+narG_nxrA	Root; NarG_Acidobacteriota	narG	
+narG_nxrA	Root; NarG_Actinobacteriota	narG	
+narG_nxrA	Root; NarG_Archaea	narG	
+narG_nxrA	Root; NarG_Cyanobacteria	narG	
+narG_nxrA	Root; NarG_Desulfobacterota	narG	
+narG_nxrA	Root; NarG_Firmicutes	narG	
+narG_nxrA	Root; NarG_Mixed	narG	
+narG_nxrA	Root; NarG_Proteobacteria	narG	
+narG_nxrA	Root; cytoplasmic_NxrA_Gammaproteobacteria	nxrA	
+narG_nxrA	Root; cytoplasmic_NxrA_Mixed	nxrA	
+narG_nxrA	Root; periplasmic_NxrA	nxrA	
+narG_nxrA	Root; unknown		unknown_clade
+narG_nxrA	Root; unknown_2		unknown_clade
+narG_nxrA	Root; unknown_3		unknown_clade
+narG_nxrA	Root; unknown_4		unknown_clade
+narG_nxrA	Root; unknown_5		unknown_clade
+narG_nxrA	Root; unknown_6		unknown_clade
+narH_nxrB	Root		root_placement
+narH_nxrB	Root; NarH_Acidobacteriota	narH	
+narH_nxrB	Root; NarH_Actinobacteriota	narH	
+narH_nxrB	Root; NarH_Deferribacterota	narH	
+narH_nxrB	Root; NarH_Desulfobacterota	narH	
+narH_nxrB	Root; NarH_Firmicutes	narH	
+narH_nxrB	Root; NarH_Halobacteriota	narH	
+narH_nxrB	Root; NarH_Proteobacteria	narH	
+narH_nxrB	Root; NarH_Thermoproteota	narH	
+narH_nxrB	Root; NxrB	nxrB	
+narH_nxrB	Root; NxrB_2	nxrB	
+narH_nxrB	Root; NxrB_Gammaproteobacteria	nxrB	
+narH_nxrB	Root; unknown_1		unknown_clade
+narH_nxrB	Root; unknown_2		unknown_clade
+narH_nxrB	Root; unknown_3		unknown_clade
+narH_nxrB	Root; unknown_4		unknown_clade
+narH_nxrB	Root; unknown_5		unknown_clade
+norZ_norB	Root		root_placement
+norZ_norB	Root; Nod		nitric_oxide_dismutase
+norZ_norB	Root; Unknown		unknown_clade
+norZ_norB	Root; cNor_Alphaproteobacteria	norB	
+norZ_norB	Root; cNor_Bacteroidota	norB	
+norZ_norB	Root; cNor_Firmicutes	norB	
+norZ_norB	Root; cNor_Gammaproteobacteria	norB	
+norZ_norB	Root; cNor_Mixed	norB	
+norZ_norB	Root; cNor_Verrucomicrobiota	norB	
+norZ_norB	Root; qNor_Alphaproteobacteria	norZ	
+norZ_norB	Root; qNor_Archaea	norZ	
+norZ_norB	Root; qNor_Firmicutes	norZ	
+norZ_norB	Root; qNor_Mixed	norZ	
+norZ_norB	Root; qNor_Mixed_2	norZ	
+norZ_norB	Root; qNor_Planctomycetota	norZ	
