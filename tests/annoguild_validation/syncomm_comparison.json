@@ -1,0 +1,107 @@
+{
+  "L1_pathways": {
+    "genomes": 6,
+    "pathways": 55,
+    "compared": 330,
+    "mismatches": 0
+  },
+  "L2_labels": {
+    "genomes": 6,
+    "compared": 18,
+    "mismatches": 0
+  },
+  "E1_graftm": {
+    "genes_refined_by_either": 68,
+    "outcomes": {
+      "annoguild_only": 61,
+      "same": 3,
+      "different": 4
+    },
+    "kolach_status_counts": {
+      "refined": 7,
+      "excluded": 0,
+      "unresolved": 0,
+      "superseded": 0,
+      "not_placed": 0
+    }
+  },
+  "E2_ko": {
+    "both_same": 11582,
+    "both_different": 4516,
+    "kolach_only": 3049,
+    "annoguild_only": 1861,
+    "neither": 8319
+  },
+  "E3_pathways": {
+    "compared": 330,
+    "differences": 34
+  },
+  "E3_labels": [
+    {
+      "genome": "Afacilis_DSM649_renamed_contigs",
+      "annoguild_specialisation": "fermenter",
+      "annoguild_nitrogen_specialisation": "nitrate_reducer",
+      "annoguild_sulfur_specialisation": "sulfur_oxidiser",
+      "kolach_specialisation": "fermenter",
+      "kolach_nitrogen_specialisation": "nitrate_reducer",
+      "kolach_sulfur_specialisation": "sulfur_oxidiser",
+      "annoguild_cazy": "CAZy-Amorphous_Cellulose;CAZy-Chitin;CAZy-Polyphenolics",
+      "kolach_cazy": "CAZy-Cellulose"
+    },
+    {
+      "genome": "Blathyri_DSM26656_renamed_contigs",
+      "annoguild_specialisation": "generalist",
+      "annoguild_nitrogen_specialisation": "denitrifier",
+      "annoguild_sulfur_specialisation": "",
+      "kolach_specialisation": "fermenter",
+      "kolach_nitrogen_specialisation": "denitrifier",
+      "kolach_sulfur_specialisation": "",
+      "annoguild_cazy": "CAZy-Chitin;CAZy-Pectin;CAZy-Polyphenolics;CAZy-Starch",
+      "kolach_cazy": "CAZy-Starch_glycogen"
+    },
+    {
+      "genome": "Dlutea_DSM19970_renamed_contigs",
+      "annoguild_specialisation": "generalist",
+      "annoguild_nitrogen_specialisation": "None detected",
+      "annoguild_sulfur_specialisation": "sulfur_oxidiser",
+      "kolach_specialisation": "generalist",
+      "kolach_nitrogen_specialisation": "None detected",
+      "kolach_sulfur_specialisation": "sulfur_oxidiser",
+      "annoguild_cazy": "CAZy-Amorphous_Cellulose;CAZy-Arabinan;CAZy-Arabinose_cleavage;CAZy-Fucose_Cleavage;CAZy-Polyphenolics;CAZy-Starch",
+      "kolach_cazy": "CAZy-Arabinogalactan;CAZy-Hemicellulose;CAZy-Starch_glycogen"
+    },
+    {
+      "genome": "Gtundricola_DSM23138_renamed_contigs",
+      "annoguild_specialisation": "generalist",
+      "annoguild_nitrogen_specialisation": "nitrate_reducer",
+      "annoguild_sulfur_specialisation": "",
+      "kolach_specialisation": "generalist",
+      "kolach_nitrogen_specialisation": "None detected",
+      "kolach_sulfur_specialisation": "",
+      "annoguild_cazy": "CAZy-Arabinan;CAZy-Arabinose_cleavage;CAZy-Chitin;CAZy-Fucose_Cleavage;CAZy-Mixed_Linkage_glucans;CAZy-Pectin;CAZy-Polyphenolics;CAZy-Starch;CAZy-Xylans;CAZy-Xyloglucan",
+      "kolach_cazy": "CAZy-Arabinogalactan;CAZy-Cellulose;CAZy-Chitin;CAZy-Starch_glycogen"
+    },
+    {
+      "genome": "Troseus_DSM18391_renamed_contigs",
+      "annoguild_specialisation": "generalist",
+      "annoguild_nitrogen_specialisation": "nitrite_oxidiser",
+      "annoguild_sulfur_specialisation": "",
+      "kolach_specialisation": "generalist",
+      "kolach_nitrogen_specialisation": "None detected",
+      "kolach_sulfur_specialisation": "",
+      "annoguild_cazy": "CAZy-Arabinan;CAZy-Arabinose_cleavage;CAZy-Chitin;CAZy-Fucose_Cleavage;CAZy-Mixed_Linkage_glucans;CAZy-Pectin;CAZy-Polyphenolics;CAZy-Starch;CAZy-Sulf_Polysachharides;CAZy-Xylans",
+      "kolach_cazy": "CAZy-Arabinogalactan;CAZy-Cellulose;CAZy-Chitin;CAZy-Hemicellulose;CAZy-Starch_glycogen"
+    },
+    {
+      "genome": "run1_barcode_06_metabat2_refined_bins.tsv.001_renamed_contigs",
+      "annoguild_specialisation": "generalist",
+      "annoguild_nitrogen_specialisation": "nitrate_reducer",
+      "annoguild_sulfur_specialisation": "",
+      "kolach_specialisation": "generalist",
+      "kolach_nitrogen_specialisation": "nitrate_reducer",
+      "kolach_sulfur_specialisation": "",
+      "annoguild_cazy": "CAZy-Amorphous_Cellulose;CAZy-Chitin;CAZy-Polyphenolics;CAZy-Starch",
+      "kolach_cazy": "CAZy-Arabinogalactan;CAZy-Cellulose;CAZy-Starch_glycogen"
+    }
+  ]
+}

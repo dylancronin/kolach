@@ -1,0 +1,35 @@
+genome	pathway	annoguild	kolach	kolach_reaction_coverage	kolach_ko_coverage	kolach_supporting	annoguild_supporting
+run1_barcode_06_metabat2_refined_bins.tsv.001_renamed_contigs	nitrogen_redox-nitrite_oxidation	True	False	0.0	0.0		K003701;K003711
+run1_barcode_06_metabat2_refined_bins.tsv.001_renamed_contigs	sulfur_redox-assimilatory_sulfate_reduction	False	True	0.75	1.0	K00380;K00381;K00390;K00860	K00380;K00390
+run1_barcode_06_metabat2_refined_bins.tsv.001_renamed_contigs	phosphorous_redox-phosphite_oxidation	True	False	0.0	0.0		K18916
+run1_barcode_06_metabat2_refined_bins.tsv.001_renamed_contigs	xylose_degradation-xylonate_hydratase_pathway	False	True	1.0	1.0	K00117;K22186	K00117
+run1_barcode_06_metabat2_refined_bins.tsv.001_renamed_contigs	ethanol_fermentation-all	True	False	0.6666666666666666	1.0	K00001;K00121;K00163;K00627;K13979	K00121;K00163;K00627;K13979
+run1_barcode_06_metabat2_refined_bins.tsv.001_renamed_contigs	mannose_degradation-all	False	True	1.0	1.0	K01809;K02793;K16011	K01809;K16011
+run1_barcode_06_metabat2_refined_bins.tsv.001_renamed_contigs	galacturonic_acid_degradation-all	False	True	0.8	1.0	K00041;K00874;K01625;K16849;K16850	K00041;K01625
+Troseus_DSM18391_renamed_contigs	nitrogen_redox-nitrite_oxidation	True	False	0.0	0.0		K003701;K003711
+Troseus_DSM18391_renamed_contigs	nitrogen_redox-nitric_oxide_oxidation	False	True	1.0	1.0	K05916	
+Troseus_DSM18391_renamed_contigs	nitrogen_redox-assimilatory_nitrate_reduction	False	True	1.0	1.0	K00366;K00367	K00367
+Troseus_DSM18391_renamed_contigs	sulfur_redox-assimilatory_sulfate_reduction	False	True	0.75	1.0	K00380;K00390;K00392;K00860	K00380;K00390
+Troseus_DSM18391_renamed_contigs	phosphorous_redox-assimilatory_phosphonate_oxidation	False	True	1.0	1.0	K19670	
+Troseus_DSM18391_renamed_contigs	xylose_degradation-isomerase_pathway	False	True	1.0	1.0	K00854;K01805	K01805
+Troseus_DSM18391_renamed_contigs	xylose_degradation-xylonate_hydratase_pathway	False	True	1.0	1.0	K00117;K22396	
+Troseus_DSM18391_renamed_contigs	fructose_degradation-all	False	True	1.0	1.0	K00847	
+Troseus_DSM18391_renamed_contigs	reductive_glycine-serine_pathway	True	False	0.6666666666666666	1.0	K00282;K00283;K00382;K00600;K00605;K01491;K01752;K01754;K02437	K00282;K00283;K00382;K00600;K00605;K01491;K01752;K01754;K02437;K05299
+Blathyri_DSM26656_renamed_contigs	nitrogen_redox-nitrite_oxidation	True	False	0.0	0.0		K003701;K003711
+Blathyri_DSM26656_renamed_contigs	nitrogen_redox-assimilatory_nitrate_reduction	False	True	1.0	0.6666666666666666	K00366;K00372	
+Blathyri_DSM26656_renamed_contigs	sulfur_redox-assimilatory_sulfate_reduction	True	False	0.5	1.0	K00380;K00381;K00390	K00380;K00390;K00955
+Blathyri_DSM26656_renamed_contigs	galacturonic_acid_degradation-all	True	False	0.6	1.0	K00874;K01625;K01812	K00874;K01625;K01685;K01812
+Blathyri_DSM26656_renamed_contigs	Calvin_Benson-all	True	False	0.8	1.0	K00134;K00615;K00927;K01624;K01807;K01808;K11532	K00134;K00615;K00927;K01601;K01624;K01807;K01808
+Gtundricola_DSM23138_renamed_contigs	nitrogen_redox-nitrate_reduction	True	False	0.0	0.0		K00363;K003700;K003710
+Gtundricola_DSM23138_renamed_contigs	nitrogen_redox-nitrite_oxidation	True	False	0.0	0.0		K003701;K003711
+Gtundricola_DSM23138_renamed_contigs	nitrogen_redox-assimilatory_nitrate_reduction	False	True	1.0	1.0	K00366;K00367	
+Gtundricola_DSM23138_renamed_contigs	ethanol_fermentation-all	False	True	1.0	1.0	K00001;K00002;K00163;K00627;K01568;K12957;K13953;K13979	K00001;K00163;K12957;K13953;K13979
+Gtundricola_DSM23138_renamed_contigs	butanoate_fermentation-acetyl_coa_pathway	False	True	0.8333333333333334	1.0	K00074;K00163;K00626;K00627;K01035;K01715;K07516;K17865	K00074;K00163;K00626;K01715;K07516;K17865
+Afacilis_DSM649_renamed_contigs	nitrogen_redox-nitrite_oxidation	True	False	0.0	0.0		K003701;K003711
+Afacilis_DSM649_renamed_contigs	sulfur_redox-assimilatory_sulfate_reduction	False	True	0.75	1.0	K00380;K00381;K00390;K00860	K00380;K00860
+Afacilis_DSM649_renamed_contigs	fructose_degradation-all	False	True	1.0	1.0	K00847	
+Afacilis_DSM649_renamed_contigs	mannose_degradation-all	False	True	1.0	1.0	K02793;K16011	K16011
+Dlutea_DSM19970_renamed_contigs	galacturonic_acid_degradation-all	True	False	0.6	1.0	K00874;K01625;K01812	K00874;K01625;K01685;K01812
+Dlutea_DSM19970_renamed_contigs	glycerol_degradation-glycerone	True	False	0.5	1.0	K01803	K00863;K01803
+Dlutea_DSM19970_renamed_contigs	reductive_glycine-serine_pathway	True	False	0.6666666666666666	1.0	K00281;K00382;K00600;K00605;K01491;K01754;K02437	K00281;K00382;K00600;K00605;K01491;K01754;K02437;K15022
+Dlutea_DSM19970_renamed_contigs	reductive_glycine-acetyl_pathway	True	False	0.625	1.0	K00281;K00382;K00605;K00925;K01491;K01895;K02437;K03737;K13788	K00281;K00382;K00605;K00925;K01491;K01895;K02437;K03737;K13788;K15022

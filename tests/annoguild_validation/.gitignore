@@ -1,0 +1,11 @@
+# Large or reproducible artefacts; scripts, summaries and mismatch tables are tracked.
+env/
+code/
+db/
+syncomm/
+graftm_hmmer_work/
+*.tar.gz
+*.log
+clone.log
+install.log
+pip.log

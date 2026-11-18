@@ -1,0 +1,109 @@
+{
+  "A_temporal": {
+    "amoA_pmoA": {
+      "expected": 13,
+      "observed": 13,
+      "identical": 13,
+      "compared": 13
+    },
+    "amoB_pmoB": {
+      "expected": 13,
+      "observed": 13,
+      "identical": 13,
+      "compared": 13
+    },
+    "amoC_pmoC": {
+      "expected": 24,
+      "observed": 24,
+      "identical": 24,
+      "compared": 24
+    },
+    "dsrA": {
+      "expected": 65,
+      "observed": 65,
+      "identical": 65,
+      "compared": 65
+    },
+    "dsrB": {
+      "expected": 64,
+      "observed": 64,
+      "identical": 64,
+      "compared": 64
+    },
+    "narG_nxrA": {
+      "expected": 78,
+      "observed": 78,
+      "identical": 78,
+      "compared": 78
+    },
+    "narH_nxrB": {
+      "expected": 66,
+      "observed": 66,
+      "identical": 66,
+      "compared": 66
+    },
+    "norZ_norB": {
+      "expected": 223,
+      "observed": 223,
+      "identical": 223,
+      "compared": 223
+    }
+  },
+  "B_syncomm": {
+    "amoA_pmoA": {
+      "expected": 0,
+      "observed": 0,
+      "identical": 0,
+      "compared": 0
+    },
+    "amoB_pmoB": {
+      "expected": 2,
+      "observed": 2,
+      "identical": 2,
+      "compared": 2
+    },
+    "amoC_pmoC": {
+      "expected": 2,
+      "observed": 2,
+      "identical": 2,
+      "compared": 2
+    },
+    "dsrA": {
+      "expected": 9,
+      "observed": 9,
+      "identical": 9,
+      "compared": 9
+    },
+    "dsrB": {
+      "expected": 23,
+      "observed": 23,
+      "identical": 23,
+      "compared": 23
+    },
+    "narG_nxrA": {
+      "expected": 31,
+      "observed": 31,
+      "identical": 31,
+      "compared": 31
+    },
+    "narH_nxrB": {
+      "expected": 31,
+      "observed": 31,
+      "identical": 31,
+      "compared": 31
+    },
+    "norZ_norB": {
+      "expected": 5,
+      "observed": 5,
+      "identical": 5,
+      "compared": 5
+    },
+    "mmoX_sMMO": {
+      "expected": 0,
+      "observed": 0,
+      "identical": 0,
+      "compared": 0
+    }
+  },
+  "hmmer": "HMMER 3.4 (Aug 2023); http://hmmer.org/"
+}
