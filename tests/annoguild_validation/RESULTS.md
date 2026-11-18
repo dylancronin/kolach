@@ -93,6 +93,6 @@ are compared only through the labels.
   and workflow tests only.
 - GraftM check A grafted only sequences already placed under HMMER 3.2.1, so it
   cannot reveal new placements; check B (all SynComm proteins) can, and found none.
-- `kolach download --databases graftm` from the GitHub release URL is untested
-  (the release does not exist yet); the bundle was installed from the local
-  file through the same code path.
+- The bundle was published on 2026-11-18 as GitHub release `graftm-packages-v1`
+  (dylancronin/kolach). `download_graftm()` with the pinned URL and SHA-256
+  installed it and validated all nine packages against the placement table.
