@@ -255,8 +255,18 @@ class TestInputsAndOutputs(unittest.TestCase):
 
     def test_cazy_rules_and_matching(self):
         rules = cazy.load_cazy_rules()
-        self.assertEqual(len(rules), 23)
-        self.assertEqual(len(cazy.POLYMER_GROUPS), 8)
+        # 23 common rules plus 25 from the gut, aquatic and eng_sys sheets.
+        self.assertEqual(len(rules), 48)
+        self.assertEqual(len(cazy.POLYMER_GROUPS), 16)
+        # The aquatic sheet omits the EC: prefix; it is normalised on load.
+        self.assertIn("GH16;EC:3.2.1.81", rules["Agarose"])
+        self.assertEqual(cazy.normalise("pl24;4.2.2.-"), "PL24;EC:4.2.2.-")
+        self.assertEqual(rules["Mucin-O-glycan"], frozenset({"GH101;EC:3.2.1.97", "GH109;EC:3.2.1.49",
+                                                              "GH129;EC:3.2.1.49", "GH89;EC:3.2.1.50"}))
+        grouped = {alias for aliases in cazy.POLYMER_GROUPS.values() for alias in aliases}
+        self.assertTrue(grouped <= set(rules))
+        for reported_only in ("Human milk oligosaccharide", "Sialic-acid-release", "Agarose-Associated"):
+            self.assertNotIn(reported_only, grouped)
         # Peptidoglycan lytic enzymes are housekeeping; reported but not counted.
         self.assertNotIn("Microbially-derived", {a for aliases in cazy.POLYMER_GROUPS.values() for a in aliases})
         # Signature uniqueness spans every substrate: GH18;EC:3.2.1.200 is in
@@ -270,12 +280,19 @@ class TestInputsAndOutputs(unittest.TestCase):
         with self.assertRaises(ValueError):
             cazy.gene_pairs("GH13")
         products, signature_products, details = cazy.call_substrates({
-            "A": {"g1": {"GH13;EC:3.2.1.1"}, "g2": {"GH9;EC:3.2.1.4"}},
+            "A": {"g1": {"GH13;EC:3.2.1.1"}, "g2": {"GH9;EC:3.2.1.4"}, "g3": {"GH101;EC:3.2.1.97"},
+                  "g4": {"GH16;EC:3.2.1.81"}, "g5": {"GH117;EC:3.2.1.159"}},
             # A partial EC matches only the same partial EC; family alone is not enough.
             "B": {"g1": {"GH13;EC:3.2.1.-"}, "g2": {"GH5;EC:3.2.1.4"}},
         }, rules)
         self.assertTrue(products["A"]["CAZy-Starch_glycogen"])
         self.assertTrue(products["A"]["CAZy-Cellulose"])
+        self.assertTrue(products["A"]["CAZy-Mucin"])
+        self.assertTrue(products["A"]["CAZy-Red_algal_galactans"])
+        # An oligomer-only enzyme (neoagarobiose hydrolase) is reported, not counted.
+        oligo = next(row for row in details if row["genome"] == "A" and row["substrate"] == "CAZy_other-Agarose-Associated")
+        self.assertTrue(oligo["called"])
+        self.assertFalse(oligo["counts_toward_guild"])
         self.assertFalse(any(products["B"].values()))
         self.assertEqual(set(products["A"]), set(cazy.POLYMER_GROUPS))
         starch = next(row for row in details if row["genome"] == "A" and row["substrate"] == "CAZy-Starch_glycogen")

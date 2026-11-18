@@ -227,12 +227,20 @@ Packages: eight EMERGE packages from the temporal paper and the public GraftM
 
 ## 6. CAZy substrates from dbCAN
 
-Substrate definitions are DRAM2's current CAZy rules (`rules_common.tsv` from
+Substrate definitions are DRAM2's current CAZy rules from
 [dram-rules](https://github.com/BortonWrightonLabs/dram-rules) at
-`3257b8604ab6e40c00e811d6ba0211b44dcf5648`, MIT licence), not AnnoGuild's
-legacy `DRAM_CAZy_definitions.tsv`. Each rule is an OR list of
-`FAMILY;EC:x.x.x.x` pairs. A genome has a substrate when any protein carries
-one of those pairs in its `dbcan_family_ec` column.
+`3257b8604ab6e40c00e811d6ba0211b44dcf5648` (MIT licence):
+
+- `rules_common.tsv`, the alias sheet every DRAM2 ecosystem sheet builds on;
+- the ecosystem sheets that define CAZy substrates of their own: `rules_gut.tsv`
+  (host glycans, β-glucans), `rules_aquatic.tsv` (marine algal polysaccharides)
+  and `rules_eng_sys.tsv` (galactomannan).
+
+These replace AnnoGuild's legacy `DRAM_CAZy_definitions.tsv`, which DRAM2 keeps
+only as its opt-in `legacy` sheet (`rules.tsv`, family-only rules). Each rule
+used is an OR list of family/EC pairs (the aquatic sheet omits the `EC:` prefix;
+both spellings are accepted, as in DRAM2). A genome has a substrate when any
+protein carries one of those pairs in its `dbcan_family_ec` column.
 
 - Pairs come from one dbCAN-sub domain. DRAM2 instead pairs every family on a
   protein with every EC on it.
@@ -247,23 +255,36 @@ cannot count twice. **This grouping is provisional.**
 | Product column | DRAM2 rules |
 |---|---|
 | CAZy-Cellulose | Cellulose |
-| CAZy-Hemicellulose | Hemicellulose-Xylan, Hemicellulose-Other |
+| CAZy-Hemicellulose | Hemicellulose-Xylan, Hemicellulose-Other; Galactomannan (eng_sys) |
 | CAZy-Pectin | Pectin |
 | CAZy-Arabinogalactan | Arabinogalactan |
 | CAZy-Cutin | Cutin |
 | CAZy-Fructan | Fructan |
 | CAZy-Starch_glycogen | StarchSpecific, StarchGlycogen |
 | CAZy-Chitin | Chitin |
+| CAZy-Beta_glucan | Beta-Glucan Other (gut); Laminarin (aquatic) |
+| CAZy-Mucin | Mucin-O-glycan, Blood-group-glycan (gut) |
+| CAZy-Glycosaminoglycans | Hyaluronan, Chondroitin-sulfate, Dermatan-sulfate, Keratan-sulfate, Heparin-heparan-sulfate, Mixed heparan/dermatan sulfate (gut) |
+| CAZy-Host_N_glycan | Host-N-glycan (gut) |
+| CAZy-Alginate | Alginate (aquatic) |
+| CAZy-Fucoidan | Fucoidan (aquatic) |
+| CAZy-Ulvan | Ulvan (aquatic) |
+| CAZy-Red_algal_galactans | Agarose, Carrageenan, Porphyran, Funoran (aquatic) |
 
 Not counted: `Microbially-derived` (peptidoglycan; it includes GH23/GH102–104
 lytic transglycosylases that nearly every bacterium uses on its own cell wall,
 so it would make almost every genome a macromolecule degrader),
 `PlantPolymerMixed` (not substrate-specific), oligosaccharides,
-disaccharides, β-glucosides and oligosaccharide oxidation. They still appear in
-`kolach_cazy_substrates.tsv` as `CAZy_other-*` rows. DRAM2 rules that mix KOs
-with family/EC pairs (cellobiose, sucrose, trehalose, lactose, other
-disaccharides) are not evaluated. AnnoGuild's generalist threshold was three of
-18 legacy categories; three of eight is stricter.
+disaccharides, β-glucosides and oligosaccharide oxidation; and, from the
+ecosystem sheets, host glycosphingolipids, milk glycans and human milk
+oligosaccharides, sialic-acid release, and the alginate/agarose rules DRAM2
+classes as oligomers. They still appear in `kolach_cazy_substrates.tsv` as
+`CAZy_other-*` rows. DRAM2 rules that mix KOs with family/EC pairs
+(cellobiose, sucrose, trehalose, lactose, other disaccharides) and the
+KO-defined polyphenol oxidase rule (`rules_ag.tsv`) are not evaluated.
+AnnoGuild's generalist threshold was three of 19 legacy categories; current
+DRAM2 has no rules for α-mannan or arabinose/fucose/rhamnose side-chain
+cleavage, which existed only in the legacy sheet.
 
 `kolach_cazy_substrates.tsv` lists every substrate per genome with the matched
 pairs and genes, plus `called_signature_only`: the call using only pairs unique
@@ -311,7 +332,7 @@ in the assessment report.
 
 | File | Contents |
 |---|---|
-| `kolach_product_refined.tsv` | Legacy Boolean matrix: genome, 55 pathways, eight CAZy polymer columns |
+| `kolach_product_refined.tsv` | Legacy Boolean matrix: genome, 55 pathways, 16 CAZy polymer columns |
 | `kolach_specialisations.tsv` | Exactly genome, specialisation, nitrogen_specialisation, sulfur_specialisation |
 | `kolach_metabolic_pathways.tsv` | Coverage, signatures, route, supporting/missing evidence and assessment |
 | `kolach_specialisation_assessment.tsv` | Evidence sources, GraftM status counts, signature-only CAZy label, supported pathways, all N/S roles, heuristic flags |

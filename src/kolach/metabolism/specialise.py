@@ -401,7 +401,8 @@ def specialise(annotation_table, output_dir, *, genome_id=None, genome_column=No
     provenance = json.loads((DATA_DIR / "manifest.json").read_text(encoding="utf-8"))
     inputs = {"annotations": annotation_table, "genome_map": gene_genome_map, "markers": markers,
               "product": product_table, "cazy_product": cazy_product,
-              "cazy_rules": cazy_rules.RULES_FILE if cazy_from_dbcan else None,
+              **({f"cazy_rules_{name}": path for name, path in cazy_rules.RULE_SHEETS.items()}
+                 if cazy_from_dbcan else {}),
               "graftm_placements": PLACEMENTS_FILE if markers else None}
     rule_inputs = {} if product_table else {"reactions": reactions_file or DATA_DIR / "reactions.tsv",
                                            "pathways": pathways_file or DATA_DIR / "pathways.tsv"}

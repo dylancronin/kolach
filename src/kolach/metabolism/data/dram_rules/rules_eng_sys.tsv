@@ -1,0 +1,135 @@
+﻿name	rule	rule_options	module	group		notes
+Calvin Cycle	@Calvin		Carbon Transformations	Carbon Fixation
+Hydroxypropionate-Hydroxybutyrate Cycle	@HydroxypropionateHydroxybutylate		Carbon Transformations	Carbon Fixation
+Dicarboxylate Hydroxybutyrate Cycle	@DicarboxylateHydroxybutyrate		Carbon Transformations	Carbon Fixation
+Wood–Ljungdahl Pathway	@ReductiveAcetylCoAWoodLjungdahl		Carbon Transformations	Carbon Fixation
+PAH – Anaerobic	NmsA		Carbon Transformations	Hydrocarbon
+PAH – Aerobic	NdoB|NdoC|non_NdoB_type|K27540		Carbon Transformations	Hydrocarbon
+BTEX – Anaerobic	AbcA_1|AbcA_2|EbdA|CmdA|BssA		Carbon Transformations	Hydrocarbon
+BTEX – Aerobic	TmoA_BmoA|TmoB_BmoB|TmoE|TomA1|TomA3|TomA4|DmpO|MAH_alpha|MAH_beta		Carbon Transformations	Hydrocarbon
+Alkane – Anaerobic	AssA		Carbon Transformations	Hydrocarbon
+Alkane Long-Chain – Aerobic	AlkB|AlmA_GroupI|AlmA_GroupIII|CYP153|LadA_alpha|LadA_beta|LadB		Carbon Transformations	Hydrocarbon
+Alkane Short-Chain – Aerobic	pBmoA|pBmoB|pBmoC|sBmoX|sBmoY|sBmoZ|PrmA|PrmC		Carbon Transformations	Hydrocarbon
+Flavones	at_least(2, [D00001,K26178,D00003,K26177,EC:5.5.1.6,D00006,K22906,EC:3.7.1.4,D00009,K26176])		Carbon Transformations	Oxygenated Aromatic
+Ferulic-Acid	at_least(1, [D00038,K12508,EC:6.2.1.34,K18383])		Carbon Transformations	Oxygenated Aromatic
+Caffeic-Acid	at_least(2, [D00014,K22432,D00015,K22431,D00016,K22430,EC:1.3.1.108,D00017,D00018])		Carbon Transformations	Oxygenated Aromatic
+Syringate	K15064		Carbon Transformations	Oxygenated Aromatic
+Vanillate	K03862|K03863|K15066		Carbon Transformations	Oxygenated Aromatic
+Gallic-Acid	at_least(2, [K22958, K22959, K22960])		Carbon Transformations	Oxygenated Aromatic
+Coumarate	D00039		Carbon Transformations	Oxygenated Aromatic
+Protocatechuic-Acid	[at_least(1, [K04100,K04101]) & at_least(2, [K10219, EC:1.1.1.312, K10221, K10220, K16515,  K10218, K16514 ])] | [at_least(1, [K00448,EC:1.13.11.3, K00449]) & at_least(2, [K01607, EC:4.1.1.44, K01857, EC:5.5.1.2, K01055, EC:3.1.1.24, K01031])]		Carbon Transformations	Oxygenated Aromatic
+4-Methoxybenzoate	K22553		Carbon Transformations	Oxygenated Aromatic
+4-Hydroxybenzoate	[K00481|EC:1.14.13.2|K04105|K20458|EC:6.2.1.27|EC:6.2.1.25|K04107|EC:1.1.7.11|K04108|K04109]		Carbon Transformations	Oxygenated Aromatic
+Catechol	[[K03381|EC:1.13.11.1] & at_least(2, [K01856, EC:5.5.1.1,K03464,EC:5.3.3.4,K01055,EC:3.1.1.24,K01031])] | [at_least(1, [K00446,K07104]) & [K10216 | at_least(1, [K10217,K01617,K01821]) ] & at_least(1, [K02554,K01666,K18364,K18365])]		Carbon Transformations	Oxygenated Aromatic
+Cellulose	@Cellulose		Carbon Transformations	Polysaccharides
+Hemicellulose	@Hemicellulose-Xylan | @Hemicellulose-Other		Carbon Transformations	Polysaccharides
+Galactomannan (e.g., Guar-Gum)	GH5;EC:3.2.1.78 | GH27;EC:3.2.1.22 | GH36;EC:3.2.1.22		Carbon Transformations	Polysaccharides
+Xylan or Xylobiose (mixed size)	@XylanXylobiose		Carbon Transformations	Polysaccharides
+Pectin	@Pectin		Carbon Transformations	Polysaccharides
+Multiple Plant Polysaccharides	@PlantPolymerMixed		Carbon Transformations	Polysaccharides		can act on multiple plant polymers of hemicellulose, pectin, and cellulose
+Starch/Glycogen	@StarchGlycogen		Carbon Transformations	Polysaccharides
+Chitin	@Chitin		Carbon Transformations	Polysaccharides
+Cellulose-Associated	@BetaGlucosides		Carbon Transformations	Oligosaccharide		β-Glucoside hydrolysis; may support cellulose-derived oligosaccharide utilization
+Hemicellulose-Associated	@Xylooligosaccharides | @XyloglucanMannooligosaccharides		Carbon Transformations	Oligosaccharide		xylooligosaccharides and xyloglucan- or mannan-related oligosaccharides, potentially supporting hemicellulose-derived carbohydrate utilization.
+Pectin-Associated	@PecticOligosaccharides		Carbon Transformations	Oligosaccharide		pectic oligosaccharides, potentially supporting utilization of pectin breakdown products.
+Starch/Glycogen Associated	@MaltooligosaccharidesAlphaGlucosides		Carbon Transformations	Oligosaccharide		maltooligosaccharides and α-glucosides, potentially supporting utilization of starch- or glycogen-derived carbohydrates.
+Chitin-Associated	@Chitooligosaccharides | @NAcetylhexosaminides		Carbon Transformations	Oligosaccharide		chitooligosaccharides and N-acetylhexosaminides, potentially supporting chitin-derived carbohydrate utilization. N-acetylhexosaminides may also originate from other glycoconjugates.
+Other oligosaccharides	@OtherGlycosidesOligosaccharides | @OligosaccharideOxidation | @Fructooligosaccharides		Carbon Transformations	Oligosaccharide		Diverse glycoside and oligosaccharide transformations, including fructooligosaccharide utilization and oligosaccharide oxidation, that are not assigned to a single major polymer-associated group.
+Cellobiose	@Cellobiose		Carbon Transformations	Oligosaccharide		Glucose disaccharide produced during cellulose breakdown; utilization does not imply direct cellulose degradation.
+Maltose	@Maltose		Carbon Transformations	Oligosaccharide		Glucose disaccharide associated with starch and glycogen breakdown.
+Sucrose	@Sucrose		Carbon Transformations	Oligosaccharide		Glucose–fructose disaccharide commonly found in plants; important for carbon transport and storage.
+Trehalose	@Trehalose		Carbon Transformations	Oligosaccharide		Glucose disaccharide used for carbon storage and stress protection in many organisms.
+Lactose	@Lactose		Carbon Transformations	Oligosaccharide		Galactose–glucose disaccharide; utilization indicates potential to process lactose or related β-galactosides.
+Mannobiose or Mannose (mixed size)	@Mannose-Mannobiose		Carbon Transformations	Oligosaccharide		Mannose-containing carbohydrates associated with mannan and other glycans; calls may represent monosaccharide or disaccharide processing.
+Glucose	@Glucose		Carbon Transformations	Monosaccharide		Central hexose used in carbohydrate metabolism.
+Xylose	@Xylose		Carbon Transformations	Monosaccharide		Pentose commonly derived from xylan and other plant polysaccharides.
+Arabinose	@Arabinose		Carbon Transformations	Monosaccharide		Pentose commonly found in plant cell-wall polysaccharides, including hemicellulose (e.g., arabinoxylan), arabinan, and pectin.
+Mannose	@Mannose		Carbon Transformations	Monosaccharide		Hexose commonly found in plant cell-wall polysaccharides, including hemicellulose and pectin, as well as diverse glycoconjugates
+Galactose	@Galactose		Carbon Transformations	Monosaccharide		Hexose found in plant cell-wall polysaccharides, including pectin (galactans) and some hemicelluloses, as well as other glycans.
+Fructose	@Fructose		Carbon Transformations	Monosaccharide		Hexose found in sucrose and fructans (e.g., inulin and levan), as well as other carbohydrates.
+Rhamnose	@Rhamnose		Carbon Transformations	Monosaccharide		Deoxyhexose commonly found in pectin (rhamnogalacturonans) and microbial polysaccharides.
+N-Acetylglucosamine (Glc-NAc)	@N-Acetylglucosamine		Carbon Transformations	Monosaccharide		Amino sugar found in chitin (fungal cell walls), bacterial peptidoglycan, and other glycoconjugates.
+SCFA-Propionate	@Propionate-Final		Carbon Transformations	Low Molecular Weight Carbon
+SCFA-Butyrate	@Butyrate-Final		Carbon Transformations	Low Molecular Weight Carbon
+SCFA-Acetate	@Acetate-Final		Carbon Transformations	Low Molecular Weight Carbon
+Succinate	[K00244 | K00245] & [K00246 | K00247]		Carbon Transformations	Low Molecular Weight Carbon		Succinate production via fumarate reductase — catalytic subunits frdA/frdB (K00244, K00245) plus membrane anchor subunits frdC/frdD (K00246, K00247). Note fumarate reductase is also involved in other metabolisms beyond succinate production; interpret in context of broader fermentative metabolism.
+Oxalate	K01577 | K07749		Carbon Transformations	Low Molecular Weight Carbon
+Formate	K00656		Carbon Transformations	Low Molecular Weight Carbon
+Methanol	@Methanol		Carbon Transformations	Low Molecular Weight Carbon
+Ethanol/Alcohol	@Ethanol		Carbon Transformations	Low Molecular Weight Carbon
+Butanol	[K00100 | K00544] & [K00634 & [K00929 | K01896]]		Carbon Transformations	Low Molecular Weight Carbon		Butanol production via ABE fermentation pathway; requires butyryl-CoA formation (thiolase K00634 plus butyryl-CoA acetyltransferase K00929 or K01896) followed by reduction to butanol via butanol dehydrogenase (bdh; K00100) or NADH-dependent butanol dehydrogenase (K00544). Butyryl-CoA intermediate shared with butyrate pathway. Found predominantly in Clostridia.
+Ethylene-Glycol-Degradation	[K00001 | K00121] & [K14085 | K00128 | K00149]		Carbon Transformations	Low Molecular Weight Carbon		Ethylene glycol degradation via glycolate oxidase (K11472) or diol dehydratase (K18394) for initial oxidation, followed by alcohol dehydrogenase (K00001, K00121) and aldehyde dehydrogenase (K14085, K00128, K00149). Ethylene glycol is used as antifreeze in pipelines and gas processing facilities. Note: K11472 and K18394 removed per curation.
+Oxygen - Low Affinity Use	[percent(50,@CytochromeCOxidase)|percent(50,@CytochromeAa3600MenaquinolOxidase)|percent(50,@CytochromeOUbiquinolOxidase)]		Respiratory Redox Processes	Oxygen Reduction
+Oxygen - High Affinity Use	[@percent50CytochromeBDUbiquinolOxidase|@percent50CytochromeCOxidaseCBB3]		Respiratory Redox Processes	Oxygen Reduction
+NO3 To NO2	@NarNitrateReductase|[@NapNitrateReductase]		Respiratory Redox Processes	Nitrogen Reduction
+NO2 To NO	@NitriteReductase		Respiratory Redox Processes	Nitrogen Reduction
+NO To N2O	@NitricOxideReductase		Respiratory Redox Processes	Nitrogen Reduction
+N2O To N2	@NitrousOxideReductase		Respiratory Redox Processes	Nitrogen Reduction
+DNRA, NO3 To NH4	@DNRA		Respiratory Redox Processes	Nitrogen Reduction
+DNRA NrfA only, NO2 To NH4	@nrfA		Respiratory Redox Processes	Nitrogen Reduction
+Aerobic Ammonium Oxidation	@AerobicAmmoniaOxidizer		Respiratory Redox Processes	Nitrogen Oxidation
+Aerobic Nitrite Oxidation	@NitriteOxidoreductase		Respiratory Redox Processes	Nitrogen Oxidation
+Anaerobic Ammonia Oxidation Anammox	@Annamox		Respiratory Redox Processes	Nitrogen Oxidation
+Complete Ammonia Oxidation Comammox	@Comammox		Respiratory Redox Processes	Nitrogen Oxidation
+Iron Oxidation	@IronOxidation		Respiratory Redox Processes	Dissimilatory Metal Reduction and Oxidation		Ferrous iron oxidation for energy conservation. Cyc2 (outer membrane cytochrome, broad iron oxidizers; Fe@Cyc2), MtoAB (neutrophilic iron oxidizers; Fe@MtoA & Fe@MtoB), FoxEYZ (acidophilic iron oxidizers; Fe@FoxE & Fe@FoxY & Fe@FoxZ), PioA (photoferrotrophic iron oxidation; Fe@PioA). HMMs from FeGenie database.
+Iron/Manganese/Selenium-Reduction	@IronReduction		Respiratory Redox Processes	Dissimilatory Metal Reduction and Oxidation		Dissimilatory Fe(III), Mn(IV), and potentially Se(VI) reduction via extracellular electron transfer (EET) systems, including MtrCAB in Shewanella (Fe@MtrA, Fe@MtrB_TIGR03509, Fe@MtrC_TIGR03507), Omc cytochromes in Geobacter (Fe@OmcS, Fe@OmcZ, Fe@OmcF), and ExtABCD in other iron reducers. These systems are not substrate-specific markers, so their presence does not distinguish Fe(III), Mn(IV), or Se(VI) reduction. HMMs from the DRAM Fe@ database
+Arsenate Reduction	@RespiratoryArsenateReduction		Respiratory Redox Processes	Dissimilatory Metal Reduction and Oxidation		ArrAB-mediated dissimilatory arsenate reduction using As(V) as a terminal electron acceptor for anaerobic respiration
+Selenate Reduction	@SelenateReductionSrd		Respiratory Redox Processes	Dissimilatory Metal Reduction and Oxidation		SrdABC-mediated dissimilatory selenate reduction using Se(VI) as a terminal electron acceptor for anaerobic respiration
+Possible Selenate or Chlorate Reduction	@PossibleSelenateReduction		Respiratory Redox Processes	Dissimilatory Metal Reduction and Oxidation		Selenate/chlorate reductase (SerABC/ClrABC; K17050, K17051, K17052) — cannot distinguish selenate from chlorate reduction based on these KOs alone
+Sulfur Oxidation	@sulfateoxidizer		Respiratory Redox Processes	Sulfur Reduction and Oxidation
+Sulfate Reduction	@Sulfatereducer		Respiratory Redox Processes	Sulfur Reduction and Oxidation
+Elemntal Sulfur Reduction 	@ElementalSRed		Respiratory Redox Processes	Sulfur Reduction and Oxidation
+Thiosulfate-Reduction-(Respiratory)	@ThiosulfateRed		Respiratory Redox Processes	Sulfur Reduction and Oxidation
+Thiosulfate-Reduction-(Rhodanese)	K01011 | Rhodanese		Respiratory Redox Processes	Sulfur Reduction and Oxidation
+Tetrathionate-Reduction	@TetrathionateRed		Respiratory Redox Processes	Sulfur Reduction and Oxidation
+Hydrogenotrophic	@hydrogenotrophic		Respiratory Redox Processes	Methane Production and Oxidation		For a few genome to encode potential to oxidize carbon monoxide, it must encode either the aerobic or anaerobic carbon monoxide dehydrogenase and it anaerobic, NOT be an acetogen/use the Wood Ljungdahl pathway
+Acetoclastic	@acetoclastic		Respiratory Redox Processes	Methane Production and Oxidation		For a genome to have hydrogneotrophic methanogenesis potential, it must encode mcrA, at least 4 genes of the methyl branch of the Wood-lungdahl pathway,  part of the MTR complex, and at least one gene for any known hydrgenotrophic hdyrogenase.
+Methylotrophic	@methylotroph		Respiratory Redox Processes	Methane Production and Oxidation		For a genome to have acetoclastic methanogenesis potential, it must encode mcrA, part of the ACS_CODH complex, and either Acetate Kinase and Phosphotransacetylase OR Acetyl CoA Synthetase. There is a MANDATORY taxonomic requirement for this rule to run, and a MAG or genome must also belong to the genus Methanosarcina or the family Methanotrichaceae
+Aerobic Methanotroph	@AerobicMethanotroph		Respiratory Redox Processes	Methane Production and Oxidation		"For a genome to have methyltotrophic methanogenesis potential, it must encode mcrA and at least one substrate-demethylating corrinoid-dependent methyltransferase homolog ""MtxB"""
+Methanogen Or ANME	@Methanogen		Respiratory Redox Processes	Methane Production and Oxidation		A genome that encodes adenylysulfate reductase and dissimilatory sulfite reductase
+Anaerobic Oxidation of Methane	@anaerobic-methanotrophic-Archaea		Respiratory Redox Processes	Methane Production and Oxidation		For a genome to have CH₄ oxidation capability, it must encode at least one methane monooxygenase complex pMMO or sMMO, which catalyzes the conversion of methane to methanol — the key diagnostic step of methanotrophy in soils. It must also encode any genes for denitrifcation narG, napA, nirK, nirS, norB
+Phototroph 	@PhototrophAllTypes		Other Metabolic Traits 	Other Metabolic Traits
+Possible Obligate Fermenter	@Fermenter		Other Metabolic Traits 	Other Metabolic Traits
+Fermentative-H2-(Fefe)	FeFe_groupA | FeFe_groupB | FeFe_groupC | FeFe_groupE | FeFe_groupF		Other Metabolic Traits 	Other Metabolic Traits 		FeFe hydrogenases; primarily fermentative H2 production across all subgroups. Group A is the most common fermentative H2-producing hydrogenase; Group B is electron-bifurcating; Group C is putatively sensory; Groups E and F are found in anaerobic fungi and diverse anaerobes. All subgroups associated with anaerobic fermentative metabolism.
+H2-Metabolism-Nife-Group-1	NiFe_group1		Other Metabolic Traits 	Other Metabolic Traits 		NiFe group 1 hydrogenases; membrane-bound, predominantly H2 uptake linked to respiratory electron transport chain. Most characterized members are H2-consuming; functional inference for uncharacterized members is based on phylogeny. Key for cathodic depolarization MIC and energy conservation in H2-rich systems including underground hydrogen storage.
+H2-Metabolism-Nife-Group-2	NiFe_group2		Other Metabolic Traits 	Other Metabolic Traits 		NiFe group 2 hydrogenases; putative sensory/regulatory function detecting environmental H2 concentrations and regulating expression of other hydrogenases. Do not contribute directly to energy conservation. Functional characterization is limited relative to other NiFe groups.
+H2-Metabolism-Nife-Group-3	NiFe_group3		Other Metabolic Traits 	Other Metabolic Traits 		Cytoplasmic bidirectional NiFe hydrogenases capable of both H2 production and consumption depending on prevailing redox conditions. Involved in NADH and ferredoxin redox balancing during fermentation and anaerobic metabolism. The bidirectional nature means functional direction cannot be inferred from gene presence alone and is condition-dependent.
+H2-Metabolism-Nife-Group-4	NiFe_group4		Other Metabolic Traits 	Other Metabolic Traits 		Membrane-bound energy-conserving NiFe hydrogenases primarily involved in H2 evolution, coupled to ion pumping for energy conservation under anaerobic conditions. Found in strict anaerobes, acetogens, and methanogens. Relevant in anaerobic digesters, shale systems, and underground hydrogen storage where H2 production by microbial communities affects system chemistry and storage integrity.
+Nitrogen Fixation	@nitrogen-fixer		Other Metabolic Traits 	Other Metabolic Traits 		3 types of nitrogenase are covered by this, see trait rule
+Detox Arsenic Reduction	@ArsenateReductionDetox		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		ArsC-mediated detoxification.
+Detox Arsenic Export	@ArseniteExportDetox		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		ArsB/Acr3-mediated arsenite export.
+Broad Arsenic Resistance	@ArsenicResistanceBroad		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		Broad screening for arsenic resistance mechanisms. Overlaps with export intentionally.
+Detox Arsenic Methylation	@ArsenicMethylation		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		Arsenic transformation mechanism with arsM
+Detox or Respiration Arsenite Oxidation 	@ArseniteOxidation 		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		Arsenite oxidation metabolism with aioA, aioB, can be respiratory or detox depends on context
+Detox Mercury Reduction	@MercuryReduction		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		MerA-mediated reduction of Hg(II) to elemental Hg(0) for detoxification
+Detox Mercury Export 	@MercuryExport		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		MerT/MerC/MerE-mediated mercury transport associated with resistance
+Detox Organic Mercury Degradation	@OrganomercuryDegradation		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		MerB-mediated cleavage of carbon–mercury bonds in organomercury compounds
+Mercury Methylation	@MercuryMethylation		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		HgcA-mediated methylation of inorganic mercury to methylmercury; HgcB supports this process
+Detox Copper Export	@CopperEfflux		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		Copper efflux mediated by copper-exporting ATPases and Cus-associated transport systems
+Detox Cadmium/Zinc Export	@CadmiumZincEfflux		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		Cadmium/zinc efflux mediated by a metal-exporting ATPase
+Detox Divalent Metal Export	@DivalentMetalEfflux		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		Divalent metal efflux mediated by a multicomponent RND transport system
+Detox Nickel/Cobalt Export	@NickelCobaltEfflux		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		Nickel/cobalt efflux mediated by metal resistance transporters
+Detox Cobalt/Zinc/Cadmium Export	@CobaltZincCadmiumEfflux		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		CzcD/ZitB-mediated cobalt, zinc, and cadmium efflux
+Detox Silver Export	@SilverEfflux		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		Silver efflux mediated by a silver resistance transporter
+Detox Silver Resistance	@SilverResistance		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance
+Detox Chromate Export	@ChromateEfflux		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance
+Detox Chromate Reductase	@ChromateReductase		Environmental Adaptation	Other Metal and Trace Element Transformation and Resistance		ChrA-mediated chromate efflux for detoxification
+Eps-Production	@EpsProduction		Environmental Adaptation	Biofilms & Attachment		Exopolysaccharide biosynthesis and biofilm matrix structural genes including alginate biosynthesis (alg genes; K16566, K16557, K16556, K16555), Psl polysaccharide biosynthesis (K19290-K19296), PGA/ICA poly-GlcNAc synthesis (pgaABCD/icaABCD; K11936, K11937), and additional EPS biosynthesis genes. Any single gene indicates EPS production capacity. Drives pipeline fouling and MIC in engineered systems.
+Quorum-Sensing	@QuorumSensing		Environmental Adaptation	Biofilms & Attachment		Quorum sensing via three systems: (1) AHL/LuxI-LuxR: LuxI-type AHL synthases lasI (K13060) or rhlI/cepI/tofI homologs (K13061) paired with LuxR-type receptors lasR (K18304) or rhlR homologs (K18099) — both synthase and receptor required; (2) AI-2/LuxS system: LuxS S-ribosylhomocysteine lyase (K07173) — widely conserved but interpret alone cautiously as it has metabolic roles beyond QS; (3) AI-2 import via Lsr ABC transporter: LsrB substrate-binding (K10555), LsrC permease (K10556), LsrD permease (K10557), LsrA ATPase (K10558) — at least 2 subunits required — indicates active AI-2 uptake and response capacity.
+Motility	@Motility		Environmental Adaptation	Biofilms & Attachment		Flagellar motor (MotA K02410 or MotB K02411; at least one required) plus at least 3 structural/assembly genes from the flagellar complex. Required for surface approach and early biofilm attachment. Also relevant for chemotaxis toward carbon/electron donor sources in engineered systems.
+Ion Homeostasis: K+ Uptake and Na+ Exclusion	@IonBalance-saltinpotential		Environmental Adaptation	Osmoregulation		Halophilic salt-in osmoadaptation via K+ accumulation and Na+ exclusion. KdpABC P-type ATPase (K01546-K01548) imports K+; KdpDE (K07646, K07667) sensor-regulator. Mrp/Mnh Na+:H+ antiporter (K05565-K05571; Mrp subunit K05565 required plus at least 3 others). PhaABCDEFG K+ transporter (K05559-K05564; at least 2 of 6). TrkA/TrkH constitutive K+ uptake (K03499 & K03498; both required). NhaC Na+:H+ antiporter (K03315 or K07084). Highly relevant in hypersaline produced waters (TDS >200 g/L).
+Compatible-Solutes: Glycine Betaine Synthesis	@GlycineBetaineSynthesis		Environmental Adaptation	Osmoregulation		Glycine betaine biosynthesis via two routes: (1) choline oxidation pathway — choline dehydrogenase (betA; K00108 or K11440) AND betaine-aldehyde dehydrogenase (betB; K00130); or (2) sequential N-methylation of glycine — glycine/sarcosine methyltransferase (K18896) AND sarcosine/dimethylglycine methyltransferase (K18897).
+Compatible-Solutes: Ectoine Synthesis	@EctoineSynthesis		Environmental Adaptation	Osmoregulation		Ectoine biosynthesis via complete ectABC pathway: diaminobutyrate acetyltransferase (ectA; K06718), diaminobutyrate aminotransferase (ectB; K00836), ectoine synthase (ectC; K06720) — all three required. Ectoine hydroxylase (ectD; K10674) additionally produces hydroxyectoine with enhanced thermostability. Major compatible solute in halophilic bacteria.
+Compatible-Solutes: Sugar Derived Synthesis 	@SugarDerivedCompatibleSoluteSynthesis		Environmental Adaptation	Osmoregulation		Biosynthesis of sugar-derived compatible solutes. Trehalose: OtsAB (K00697 & K01087; both required), TreYZ (K06044 or K01236), TreS (K05343), TreP (K05342). Mannosylglycerate: mpgSP (K05947). Mannitol: mtlD (K00009). Note K05342 and K05343 overlap with Trehalose Use row in Carbon Degradation.
+Compatible-Solutes: Methylated Transport	@MethylatedCompatibleSoluteTransport		Environmental Adaptation	Osmoregulation		Transport of glycine betaine, choline, proline, and related methylated osmoprotectants. BetP/T/S BCCT transporter (K02168), carnitine/betaine antiporter (K05245), OpuD betaine transporter (K05020). ProVWX ABC transporter (K02000 & K02001 & K02002; all three required). OpuABC (K05845, K05846, K05847; at least 2 subunits). Glutamine ABC (K10036, K10037, K10038; at least 2 subunits). ProP MFS transporter (K03762); ProQ effector (K03607).
+Compatible-Solutes: Ectoine Transport	@EctoineTransport		Environmental Adaptation	Osmoregulation		Ectoine/hydroxyectoine uptake via EhuABC ABC transporter (EhuA ATPase K02028, EhuC/D permease K02029, EhuB substrate-binding protein K02030). At least 2 of 3 subunits required for metagenomic data. Organisms with transport but not synthesis genes are ectoine scavengers.
+Superoxide	@Superoxide		Environmental Adaptation	Oxidative defense
+Peroxide-catalase	@Peroxide-catalase		Environmental Adaptation	Oxidative defense
+Peroxide-peroxiredoxin	@Peroxide-peroxiredoxin		Environmental Adaptation	Oxidative defense
+Aldehyde-Resistance	K00149 | K14085		Environmental Adaptation	Biocide Resistance		Resistance to aldehyde biocides (e.g., glutaraldehyde, formaldehyde) mediated by aldehyde oxidoreductases and aldehyde:ferredoxin oxidoreductases (K00149, K14085), which detoxify reactive aldehyde compounds.
+Qac-Resistance	K08167 | K11741		Environmental Adaptation	Biocide Resistance		Resistance to quaternary ammonium compound (QAC) disinfectants mediated by multidrug efflux transporters (K08167, K11741) that export toxic biocides from the cell.
+Biocide-Efflux-(General)	K03585 | K18138 | [K18324 | 2.A.6.2.7_P24177] | [K18142 | 2.A.6.2.2_P31224] | [K03297 | 2.A.7.1] | [[K11814 | 2.A.7.1.6] & [K11815 | 2.A.7.1.6]] | [K18975 | 2.A.7.1.11]		Environmental Adaptation	Biocide Resistance		Broad-spectrum efflux genes for biocide and multidrug resistance. MexA/membrane fusion protein (K03585), MATE efflux (K03400), MexB/RND pump (K18138), AcrD/RND pump (K18324), AcrF/RND pump (K18142), and SMR family pumps: Mmr (K03297), EbrA/EbrB paired SMR pump (K11814 & K11815), Ebr SMR pump (K18975). Aldehyde dehydrogenase (K14085) provides chemical detoxification capacity. RND pumps (2.A.6 TCDB family) provide broad substrate efflux relevant in oil and gas and wastewater systems. General row is superset of Aldehyde Resistance sub-row.
+Beta-Lactam Inactivation	@Beta-lactam-inactivation		Environmental Adaptation	Antibiotic Resistance
+Tetracycline Inactivation	@Tetracycline-inactivation		Environmental Adaptation	Antibiotic Resistance
+Macroglide Inactivation	@Macrolide-inactivation		Environmental Adaptation	Antibiotic Resistance
+Aminoglycoside Inactivation	@Aminoglycoside-inactivation		Environmental Adaptation	Antibiotic Resistance

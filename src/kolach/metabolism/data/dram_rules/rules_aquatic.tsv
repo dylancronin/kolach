@@ -1,0 +1,109 @@
+﻿name	rule	rule_options	module	group
+Fucoidan	GH107;3.2.1.212 | GH168;3.2.1.211 | GH174;3.2.1.- | GH187;3.2.1.- | PL43;4.2.2.- | GH107;3.2.1.211 | GH168;3.2.1.-		Carbon Processing	Polysaccharide Marine Algal
+Ulvan	PL24;4.2.2.- | PL25;4.2.2.- | PL28;4.2.2.-		Carbon Processing	Polysaccharide Marine Algal
+Carrageenan	GH150;3.2.1.162 | GH16;3.2.1.83 | GH82;3.2.1.157		Carbon Processing	Polysaccharide Marine Algal
+Porphyran	GH16;3.2.1.178		Carbon Processing	Polysaccharide Marine Algal
+Funoran	GH96;3.2.1.222		Carbon Processing	Polysaccharide Marine Algal
+Alginate	PL14;4.2.2.3 | PL15;4.2.2.3 | PL17;4.2.2.11 | PL17;4.2.2.3 | PL18;4.2.2.11 | PL18;4.2.2.3 | PL31;4.2.2.3 | PL32;4.2.2.3 | PL36;4.2.2.3 | PL38;4.2.2.3 | PL38;4.2.2.11 | PL39;4.2.2.3 | PL39;4.2.2.11 | PL41;4.2.2.3 | PL5;4.2.2.3 | PL6;4.2.2.11 | PL6;4.2.2.3 | PL7;4.2.2.11 | PL7;4.2.2.3 | PL8;4.2.2.3 | PL44;4.2.2.3		Carbon Processing	Polysaccharide Marine Algal
+Agarose	GH118;3.2.1.81 | GH16;3.2.1.81 | GH50;3.2.1.81 | GH86;3.2.1.81 | GH96;3.2.1.158		Carbon Processing	Polysaccharide Marine Algal
+Laminarin	GH5;3.2.1.39 | GH55;3.2.1.39 | GH5;3.2.1.58 | GH55;3.2.1.58		Carbon Processing	Polysaccharide Marine Algal
+Cellulose	@Cellulose		Carbon Processing	Polysaccharide Other
+Hemicellulose	@Hemicellulose-Xylan | @Hemicellulose-Other		Carbon Processing	Polysaccharide Other
+Arabinogalactan	@Arabinogalactan		Carbon Processing	Polysaccharide Other
+Starch/Glycogen	@StarchGlycogen | @StarchSpecific		Carbon Processing	Polysaccharide Other
+Chitin	@Chitin		Carbon Processing	Polysaccharide Other
+Cellulose-Associated	@BetaGlucosides		Carbon Processing	Oligomer
+Hemicellulose-Associated	@Xylooligosaccharides | @XyloglucanMannooligosaccharides | @XylanXylobiose		Carbon Processing	Oligomer
+Storage-Associated	@Fructooligosaccharides | @MaltooligosaccharidesAlphaGlucosides		Carbon Processing	Oligomer
+Chitin and Related Oligosaccharides	@Chitooligosaccharides | @NAcetylhexosaminides		Carbon Processing	Oligomer
+Alginate-Associated	PL14;4.2.2.26 | PL15;4.2.2.26 | PL17;4.2.2.26 | PL6;4.2.2.26 | PL7;4.2.2.26		Carbon Processing	Oligomer
+Agarose-Associated	GH117;3.2.1.159		Carbon Processing	Oligomer
+Cellobiose	@Cellobiose		Carbon Processing	Oligomer
+Maltose	@Maltose		Carbon Processing	Oligomer
+Sucrose	@Sucrose		Carbon Processing	Oligomer
+Trehalose	@Trehalose		Carbon Processing	Oligomer
+Xylan/Xylobiose	@XylanXylobiose		Carbon Processing	Oligomer
+Mannose/Mannobiose	@Mannose-Mannobiose		Carbon Processing	Oligomer
+Glucose	@Glucose		Carbon Processing	Monosaccharide
+Xylose	@Xylose		Carbon Processing	Monosaccharide
+Arabinose	@Arabinose		Carbon Processing	Monosaccharide
+Mannose	@Mannose		Carbon Processing	Monosaccharide
+Galactose	@Galactose		Carbon Processing	Monosaccharide
+Fructose	@Fructose		Carbon Processing	Monosaccharide
+Rhamnose	@Rhamnose		Carbon Processing	Monosaccharide
+N-Acetylglucosamine (Glc-NAc)	@N-Acetylglucosamine		Carbon Processing	Monosaccharide
+Fucose	@Fucose		Carbon Processing	Monosaccharide
+Acetate	@Acetate-Final		Carbon Processing	Low Molecular Weight Carbon
+Butyrate	@Butyrate-Final		Carbon Processing	Low Molecular Weight Carbon
+Propionate	@Propionate-Final		Carbon Processing	Low Molecular Weight Carbon
+Ethanol/Alcohol	@Ethanol		Carbon Processing	Low Molecular Weight Carbon
+Methanol	@Methanol		Carbon Processing	Low Molecular Weight Carbon
+Hydrogenotrophic	@hydrogenotrophic	"{""include_when"":{""all_columns_present"":[""taxonomy""]}}"	Carbon Processing	One Carbon Metabolism
+Acetoclastic	@acetoclastic	"{""include_when"":{""all_columns_present"":[""taxonomy""]}}"	Carbon Processing	One Carbon Metabolism
+Methylotrophic	@methylotroph	"{""include_when"":{""all_columns_present"":[""taxonomy""]}}"	Carbon Processing	One Carbon Metabolism
+Aerobic Methanotroph	@AerobicMethanotroph		Carbon Processing	One Carbon Metabolism
+Methanogen Or ANME	@Methanogen	"{""include_when"":{""all_columns_absent"":[""taxonomy""]}}"	Carbon Processing	One Carbon Metabolism
+Anaerobic Oxidation of Methane	@anaerobic-methanotrophic-Archaea		Carbon Processing	One Carbon Metabolism
+Rump Pathway (Non-Methanogenic Methylotrophy Type I)	[k08093 | k13831 | k13812] & k08094 & [k00093 | k23995 | k17066 | k14028 | k14029]		Carbon Processing	One Carbon Metabolism
+Serine Pathway (Non-Methanogenic Methylotrophy Type Ii)	k00830 & k00018 & k08691		Carbon Processing	One Carbon
+Calvin Cycle	@Calvin		Carbon Processing	Carbon Fixation
+Hydroxypropionate-Hydroxybutyrate Cycle	@HydroxypropionateHydroxybutylate		Carbon Processing	Carbon Fixation
+Dicarboxylate Hydroxybutyrate Cycle	@DicarboxylateHydroxybutyrate		Carbon Processing	Carbon Fixation
+Wood–Ljungdahl Pathway	@ReductiveAcetylCoAWoodLjungdahl		Carbon Processing	Carbon Fixation
+Phototroph All Types	@PhototrophAllTypes		Phototrophy	Light Sensing and Energy
+Phototroph- Oxygenic	@Phototroph-Oxygenic		Phototrophy	Light Sensing and Energy
+Phototroph- Anoxygenic	@AnoxygenicTypeIISubtype | @AnoxygenicTypeIPscASubtype | @PotentialAnoxygenicDivergentTypeISubtype		Phototrophy	Light Sensing and Energy
+Rhodopsin All Types 	@RhodopsinAllTypes		Phototrophy	Light Sensing and Energy
+Bacteriorhodopsin Proton Pump Subtype 	@Bacteriorhodopsin		Phototrophy	Light Sensing and Energy
+Oxygen - Low Affinity Use	[percent(50,@CytochromeCOxidase)|percent(50,@CytochromeAa3600MenaquinolOxidase)|percent(50,@CytochromeOUbiquinolOxidase)]		Respiratory Redox Processes	Oxygen Reduction
+Oxygen - High Affinity Use	[@percent50CytochromeBDUbiquinolOxidase|@percent50CytochromeCOxidaseCBB3]		Respiratory Redox Processes	Oxygen Reduction
+NO3 To NO2	@NarNitrateReductase|[@NapNitrateReductase]		Respiratory Redox Processes	Nitrogen Reduction
+NO2 To NO	@NitriteReductase		Respiratory Redox Processes	Nitrogen Reduction
+NO To N2O	@NitricOxideReductase		Respiratory Redox Processes	Nitrogen Reduction
+N2O To N2	@NitrousOxideReductase		Respiratory Redox Processes	Nitrogen Reduction
+DNRA, NO3 To NH4	@DNRA		Respiratory Redox Processes	Nitrogen Reduction
+Aerobic Ammonium Oxidation	@AerobicAmmoniaOxidizer		Respiratory Redox Processes	Nitrogen Oxidation
+Aerobic Nitrite Oxidation	@NitriteOxidoreductase		Respiratory Redox Processes	Nitrogen Oxidation
+Anaerobic Ammonia Oxidation Anammox	@Annamox		Respiratory Redox Processes	Nitrogen Oxidation
+Dissimilatory-Sulfate-Reduction	@Sulfatereducer		Respiratory Redox Processes	Sulfur Cycling
+Thiosulfate-Reduction-(Respiratory)	@ThiosulfateRed		Respiratory Redox Processes	Sulfur Cycling
+Thiosulfate-Reduction-(Rhodanese)	K01011 | Rhodanese		Respiratory Redox Processes	Sulfur Cycling
+Sulfur-Oxidation-Sox	@SoxXA & @SoxYZ & @SoxB		Respiratory Redox Processes	Sulfur Cycling
+Sulfur-Oxidation-Reverse-Dsr	@DsrABtypeo		Respiratory Redox Processes	Sulfur Cycling
+Tetrathionate-Reduction	@TetrathionateRed		Respiratory Redox Processes	Sulfur Cycling
+[Fefe] Group_A Hydrogenase	hmm@fefe_group_a_hydrogenase		Other Energy Metabolisms	Hydrogen Metabolism
+[Fefe] Group_B Hydrogenase	hmm@fefe_group_b_hydrogenase		Other Energy Metabolisms	Hydrogen Metabolism
+[Fefe] Group_C Hydrogenase	hmm@fefe_group_c_hydrogenase		Other Energy Metabolisms	Hydrogen Metabolism
+[Fefe] Group_E Hydrogenase	hmm@fefe_group_e_hydrogenase		Other Energy Metabolisms	Hydrogen Metabolism
+[Fefe] Group_F Hydrogenase	hmm@fefe_group_f_hydrogenase		Other Energy Metabolisms	Hydrogen Metabolism
+[Nife] Group_1 Hydrogenase	hmm@nife_group_1_hydrogenase		Other Energy Metabolisms	Hydrogen Metabolism
+[Nife] Group_2 Hydrogenase	hmm@nife_group_2_hydrogenase		Other Energy Metabolisms	Hydrogen Metabolism
+[Nife] Group_3 Hydrogenase	hmm@nife_group_3_hydrogenase		Other Energy Metabolisms	Hydrogen Metabolism
+[Nife] Group_4 Hydrogenase	hmm@nife_group_4_hydrogenase		Other Energy Metabolisms	Hydrogen Metabolism
+Candidate Extracellular Aspartic Peptidases	@ExtracellularAspartic		Nutrient Acquisition 	Nitrogen Assimilation
+Candidate Extracellular Cysteine Peptidases	@ExtracellularCysteine		Nutrient Acquisition 	Nitrogen Assimilation
+Candidate Extracellular Glutamic Peptidases	@ExtracellularGlutamic		Nutrient Acquisition 	Nitrogen Assimilation
+Candidate Extracellular Metallo Peptidases	@ExtracellularMetallo		Nutrient Acquisition 	Nitrogen Assimilation
+Candidate Extracellular Serine Peptidases	@ExtracellularSerine		Nutrient Acquisition 	Nitrogen Assimilation
+Urease	@Urease		Nutrient Acquisition 	Nitrogen Assimilation
+Amidase	K01426		Nutrient Acquisition 	Nitrogen Assimilation
+Formamidase	K01455		Nutrient Acquisition 	Nitrogen Assimilation
+N2 Fixation	@nitrogen-fixer		Nutrient Acquisition 	Nitrogen Assimilation
+Sulfur- DMS/DMSP Cycling	K28073 | K16953 | K28067 | K28068 | K28069 | K28072 | K17486 | [K20034 & K20035 & K20036] | K16967 | K16964 | K18277 | [K07306 & [K07307 | K00184] & [K07308 | K00185]] | K07811		Nutrient Acquisition 	Other Nutrient Assimilations and Transformations
+Phosphorus- C-P Lyase	@C-P-Lyase-Complex		Nutrient Acquisition 	Other Nutrient Assimilations and Transformations
+Phosphorus- Organic Mineralization	@Organic-P-Mineralization		Nutrient Acquisition 	Other Nutrient Assimilations and Transformations
+Phosphorus- Pi Uptake	@High-affinity-Pi-uptake		Nutrient Acquisition 	Other Nutrient Assimilations and Transformations
+Copper Efflux	@CopperEfflux		Environmental Adaptation	Heavy Metal Transformation and Resistance
+Cobalt/Cadmium/Zinc/Ni Efflux	@CadmiumZincEfflux | @DivalentMetalEfflux | @CobaltZincCadmiumEfflux | @NickelCobaltEfflux 		Environmental Adaptation	Heavy Metal Transformation and Resistance
+Mercury Reduction	@MercuryReduction		Environmental Adaptation	Heavy Metal Transformation and Resistance
+Organomercury Degradation	@OrganomercuryDegradation		Environmental Adaptation	Heavy Metal Transformation and Resistance
+Mercury Methylation	@MercuryMethylation		Environmental Adaptation	Heavy Metal Transformation and Resistance
+EpsProduction	@EpsProduction		Environmental Adaptation	Biofilms & Attachment
+QuorumSensing	@QuorumSensing		Environmental Adaptation	Biofilms & Attachment
+Motility	@Motility		Environmental Adaptation	Biofilms & Attachment
+Ion Homeostasis: K+ Uptake and Na+ Exclusion	@IonBalance-saltinpotential		Environmental Adaptation	Osmoregulation
+Compatible-Solutes: Glycine Betaine Synthesis	@GlycineBetaineSynthesis		Environmental Adaptation	Osmoregulation
+Compatible-Solutes: Ectoine Synthesis	@EctoineSynthesis		Environmental Adaptation	Osmoregulation
+Compatible-Solutes: Sugar Derived Synthesis 	@SugarDerivedCompatibleSoluteSynthesis		Environmental Adaptation	Osmoregulation
+Compatible-Solutes: Methylated Transport	@MethylatedCompatibleSoluteTransport		Environmental Adaptation	Osmoregulation
+Compatible-Solutes: Ectoine Transport	@EctoineTransport		Environmental Adaptation	Osmoregulation

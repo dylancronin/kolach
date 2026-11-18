@@ -19,10 +19,11 @@ in CHANGELOG.md and docs/specialisation.md.
 
 # DRAM2 CAZy substrate rules
 
-`src/kolach/metabolism/data/dram_rules/rules_common.tsv` is copied unchanged
-from [BortonWrightonLabs/dram-rules](https://github.com/BortonWrightonLabs/dram-rules)
-at `3257b8604ab6e40c00e811d6ba0211b44dcf5648`
-(`src/dram_rules/data/rules_common.tsv`). It is distributed under the MIT
+`rules_common.tsv`, `rules_gut.tsv`, `rules_aquatic.tsv` and `rules_eng_sys.tsv`
+in `src/kolach/metabolism/data/dram_rules/` are copied unchanged from
+[BortonWrightonLabs/dram-rules](https://github.com/BortonWrightonLabs/dram-rules)
+at `3257b8604ab6e40c00e811d6ba0211b44dcf5648` (`src/dram_rules/data/`).
+They are distributed under the MIT
 licence included as `src/kolach/metabolism/data/dram_rules/LICENSE.MIT`.
 Kolach evaluates only its CAZy family/EC substrate rules.
 

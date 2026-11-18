@@ -1,9 +1,12 @@
 """Genome-level CAZy substrate calls from Kolach's dbCAN family/EC evidence.
 
-Substrate definitions are DRAM2's current CAZy rules (dram-rules
-`rules_common.tsv`, pinned in RULES_SOURCE), not AnnoGuild's legacy
-`DRAM_CAZy_definitions.tsv`. Each DRAM2 substrate rule is an OR list of
-`FAMILY;EC:x.x.x.x` pairs. A genome has a substrate when any of its proteins
+Substrate definitions are DRAM2's current CAZy rules (dram-rules, pinned in
+RULES_SOURCE), not AnnoGuild's legacy `DRAM_CAZy_definitions.tsv` (which DRAM2
+keeps only as its opt-in "legacy" sheet). Rules come from the common alias
+sheet and from the ecosystem sheets that add CAZy substrates of their own (gut:
+host glycans and beta-glucans; aquatic: marine algal polysaccharides; eng_sys:
+galactomannan). Each rule used is an OR list of `FAMILY;EC:x.x.x.x` pairs; rules
+mixing KOs are not evaluated. A genome has a substrate when any of its proteins
 carries one of those pairs in the `dbcan_family_ec` annotation column.
 
 Differences from DRAM2's own evaluator, by design:
@@ -23,13 +26,23 @@ import re
 
 from .evaluate import DATA_DIR
 
-RULES_FILE = DATA_DIR / "dram_rules" / "rules_common.tsv"
+# Vendored unchanged from dram-rules src/dram_rules/data/ (MIT).
+RULE_SHEETS = {
+    "common": DATA_DIR / "dram_rules" / "rules_common.tsv",
+    "gut": DATA_DIR / "dram_rules" / "rules_gut.tsv",
+    "aquatic": DATA_DIR / "dram_rules" / "rules_aquatic.tsv",
+    "eng_sys": DATA_DIR / "dram_rules" / "rules_eng_sys.tsv",
+}
 RULES_SOURCE = {
     "repository": "https://github.com/BortonWrightonLabs/dram-rules",
     "commit": "3257b8604ab6e40c00e811d6ba0211b44dcf5648",
-    "path": "src/dram_rules/data/rules_common.tsv",
-    "sha256": "9b0530148470801987460e46d6508ed5197c4d0177d334584eaedef50a626c41",
     "license": "MIT",
+    "files": {
+        "src/dram_rules/data/rules_common.tsv": "9b0530148470801987460e46d6508ed5197c4d0177d334584eaedef50a626c41",
+        "src/dram_rules/data/rules_gut.tsv": "96fff41adebabcfa2ce9e1eeaed29b8e8b8ddf270041c76822ca127cf51d24af",
+        "src/dram_rules/data/rules_aquatic.tsv": "cbeebf9852e9e8b2d763d6a3cb3c3791be79e24a0ab985a07735c252fd70ffd7",
+        "src/dram_rules/data/rules_eng_sys.tsv": "bc18f6e28c4f586b713f3cc82d34b4e41d0127c36c2bede8edde178a3a2d1f6c",
+    },
 }
 
 # Product column -> DRAM2 rule aliases. Subcategories of one polymer are merged
@@ -39,15 +52,27 @@ RULES_SOURCE = {
 # group: it includes GH23/GH102-104 lytic transglycosylases that nearly every
 # bacterium uses for its own cell wall, which would make almost every genome a
 # macromolecule degrader. It is still reported as CAZy_other-Microbially-derived.
+# Ecosystem rules that DRAM2 classes as oligomers, or that act on oligosaccharides,
+# glycolipids or terminal residues (milk glycans, HMOs, sialic-acid release,
+# host glycosphingolipids, alginate/agarose "Associated"), are reported only.
 POLYMER_GROUPS = {
     "CAZy-Cellulose": ("Cellulose",),
-    "CAZy-Hemicellulose": ("Hemicellulose-Xylan", "Hemicellulose-Other"),
+    "CAZy-Hemicellulose": ("Hemicellulose-Xylan", "Hemicellulose-Other", "Galactomannan (e.g., Guar-Gum)"),
     "CAZy-Pectin": ("Pectin",),
     "CAZy-Arabinogalactan": ("Arabinogalactan",),
     "CAZy-Cutin": ("Cutin",),
     "CAZy-Fructan": ("Fructan",),
     "CAZy-Starch_glycogen": ("StarchSpecific", "StarchGlycogen"),
     "CAZy-Chitin": ("Chitin",),
+    "CAZy-Beta_glucan": ("Beta-Glucan Other", "Laminarin"),
+    "CAZy-Mucin": ("Mucin-O-glycan", "Blood-group-glycan"),
+    "CAZy-Glycosaminoglycans": ("Hyaluronan", "Chondroitin-sulfate", "Dermatan-sulfate", "Keratan-sulfate",
+                                "Heparin-heparan-sulfate", "Mixed-heparan-sulfate/dermatan-sulfate"),
+    "CAZy-Host_N_glycan": ("Host-N-glycan",),
+    "CAZy-Alginate": ("Alginate",),
+    "CAZy-Fucoidan": ("Fucoidan",),
+    "CAZy-Ulvan": ("Ulvan",),
+    "CAZy-Red_algal_galactans": ("Agarose", "Carrageenan", "Porphyran", "Funoran"),
 }
 # Families AnnoGuild judged to match poorly; used only by the signature-only
 # comparison column, never by the guild calls.
@@ -59,26 +84,38 @@ DETAIL_COLUMNS = ["genome", "substrate", "dram2_rules", "counts_toward_guild", "
 
 
 def normalise(pair: str) -> str:
-    return pair.strip().upper()
+    """Upper-case, and add the EC: prefix some sheets omit (GH16;3.2.1.81),
+    as DRAM2's matcher treats both spellings alike."""
+    pair = pair.strip().upper()
+    family, separator, ec = pair.partition(";")
+    if separator and not ec.startswith("EC:"):
+        pair = f"{family};EC:{ec}"
+    return pair
 
 
-def load_cazy_rules(path=RULES_FILE) -> dict[str, frozenset]:
-    """Return every DRAM2 rule made only of family/EC pairs: alias -> pairs."""
-    with open(path, newline="", encoding="utf-8-sig") as handle:
-        rows = list(csv.reader(handle, delimiter="\t"))
-    header = rows[0][:3]
-    if header != ["name", "alias", "rule"]:
-        raise ValueError(f"Unexpected DRAM2 rule header in {path}: {rows[0]}")
+def load_cazy_rules(sheets=None) -> dict[str, frozenset]:
+    """Return every DRAM2 rule made only of family/EC pairs: name -> pairs.
+
+    The common sheet names rules by `alias`; ecosystem sheets by `name`.
+    """
     rules = {}
-    for row in rows[1:]:
-        if len(row) < 3 or ";EC:" not in row[2]:
-            continue
-        alias = row[1].strip()
-        terms = [term.strip() for term in row[2].split("|")]
-        if all(PAIR.match(normalise(term)) for term in terms):
-            if alias in rules:
-                raise ValueError(f"Duplicate DRAM2 CAZy rule {alias!r}")
-            rules[alias] = frozenset(normalise(term) for term in terms)
+    for path in (sheets or RULE_SHEETS).values():
+        with open(path, newline="", encoding="utf-8-sig") as handle:
+            rows = list(csv.reader(handle, delimiter="\t"))
+        header = rows[0]
+        if "rule" not in header or "name" not in header:
+            raise ValueError(f"Unexpected DRAM2 rule header in {path}: {header}")
+        name_column = header.index("alias" if "alias" in header else "name")
+        rule_column = header.index("rule")
+        for row in rows[1:]:
+            if len(row) <= max(name_column, rule_column) or ";" not in row[rule_column]:
+                continue
+            name = row[name_column].strip()
+            terms = [term.strip() for term in row[rule_column].split("|")]
+            if name and all(PAIR.match(normalise(term)) for term in terms):
+                if name in rules:
+                    raise ValueError(f"Duplicate DRAM2 CAZy rule {name!r} ({path})")
+                rules[name] = frozenset(normalise(term) for term in terms)
     for aliases in POLYMER_GROUPS.values():
         for alias in aliases:
             if alias not in rules:

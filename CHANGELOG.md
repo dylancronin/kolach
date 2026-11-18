@@ -24,8 +24,10 @@
   most one function; proteins placed among non-target homologues (sHMO, NO
   dismutase) lose their accepted gate KO.
 - CAZy substrate calls (`metabolism/cazy.py`) from Kolach's dbCAN family/EC
-  pairs using DRAM2's `rules_common.tsv` (dram-rules `3257b86`). Eight polymer
-  groups feed the guild labels (provisional grouping; peptidoglycan excluded);
+  pairs using DRAM2's current rules (dram-rules `3257b86`): the common sheet plus
+  the gut, aquatic and eng_sys sheets' own substrates (host glycans, β-glucans,
+  marine algal polysaccharides, galactomannan). Sixteen polymer groups feed the
+  guild labels (provisional grouping; peptidoglycan and oligomers excluded);
   every substrate is reported in `kolach_cazy_substrates.tsv`, with a
   signature-only comparison label.
 - GraftM installed in the kolach environment via pip, keeping HMMER 3.4.
