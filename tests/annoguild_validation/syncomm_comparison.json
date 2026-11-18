@@ -79,7 +79,7 @@
       "kolach_nitrogen_specialisation": "None detected",
       "kolach_sulfur_specialisation": "",
       "annoguild_cazy": "CAZy-Arabinan;CAZy-Arabinose_cleavage;CAZy-Chitin;CAZy-Fucose_Cleavage;CAZy-Mixed_Linkage_glucans;CAZy-Pectin;CAZy-Polyphenolics;CAZy-Starch;CAZy-Xylans;CAZy-Xyloglucan",
-      "kolach_cazy": "CAZy-Arabinogalactan;CAZy-Cellulose;CAZy-Chitin;CAZy-Starch_glycogen"
+      "kolach_cazy": "CAZy-Arabinogalactan;CAZy-Cellulose;CAZy-Chitin;CAZy-Hemicellulose;CAZy-Starch_glycogen"
     },
     {
       "genome": "Troseus_DSM18391_renamed_contigs",

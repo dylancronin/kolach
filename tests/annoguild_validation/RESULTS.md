@@ -4,9 +4,9 @@ Annotation searches ran at Kolach `41affce` (`run_syncomm.sh`). The GraftM and
 specialisation jobs were then re-run alone with the final code
 (`rerun_specialisation.sh`, which regenerates its workflow config and records
 the commit in `syncomm/kolach_commit.txt`); a Snakemake dry run listed only
-`annotate_graftm` and `specialise_genomes`. The final re-run used `5a6d08b`; an earlier re-run at `f0ed054` gave identical
-comparison tables. Compute: 26.7 allocated CPU-hours over four jobs
-(`accounting.tsv`).
+`annotate_graftm` and `specialise_genomes`. The final re-run used `b1b3963` (CAZy rules extended to DRAM2's ecosystem
+sheets); earlier re-runs at `f0ed054` and `5a6d08b` used the common sheet only.
+Compute: 26.7 allocated CPU-hours over five jobs (`accounting.tsv`).
 
 ## 1. GraftM with HMMER 3.4 (`graftm_hmmer_check.json`)
 
@@ -73,6 +73,13 @@ with nosZ but without nirK/nirS, so denitrification is not called either way.
 | Gtundricola DSM23138 | generalist / nitrate_reducer | generalist / None detected | generalist |
 | Troseus DSM18391 | generalist / nitrite_oxidiser | generalist / None detected | generalist |
 | run1 bin 001 | generalist / nitrate_reducer | generalist / nitrate_reducer | fermenter |
+
+Adding DRAM2's ecosystem-sheet substrates (host glycans, β-glucans, marine
+algal polysaccharides, galactomannan) changed one CAZy call and no label:
+Gtundricola gained CAZy-Hemicellulose through one α-galactosidase pair
+(`GH27;EC:3.2.1.22`, DRAM2's galactomannan rule). No SynComm genome matched any
+host-glycan or marine-polysaccharide rule, so those groups are covered by unit
+tests only.
 
 Nitrogen labels changed only where AnnoGuild relied on off-target GraftM hits.
 Blathyri drops from generalist because DRAM2's family/EC rules give it one
