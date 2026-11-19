@@ -1,0 +1,4 @@
+check	package	sequence	hmmer_3.2.1	hmmer_3.4
+B	narH_nxrB	Troseus_DSM18391_renamed_contigs_Troseus_DSM18391_0_184	Root	Root; NxrB
+B	narH_nxrB	run1_barcode_06_metabat2_refined_bins.tsv.001_renamed_contigs_run1_barcode_06_metabat2_refined_bins.tsv.001_2_739	Root	Root; NxrB
+B	narH_nxrB	run1_barcode_06_metabat2_refined_bins.tsv.001_renamed_contigs_run1_barcode_06_metabat2_refined_bins.tsv.001_2_740	Root; NxrB	Root

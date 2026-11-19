@@ -18,6 +18,30 @@ was recorded with HMMER 3.2.1:
 | Temporal-paper test sets (`emerge_read_tax.tsv`, 8 packages) | 546 | 546 |
 | SynComm, all 29,327 proteins, 9 packages (AnnoGuild's run) | 103 | 103 |
 
+The same check against the shared `kolach` environment after GraftM was added
+to it (2026-11-19) first gave 546/546 and 100/103 with pplacer `1.1.alpha23`,
+which conda chose by default: three borderline narH/nxrB placements moved
+between `Root` and `Root; NxrB` (`graftm_hmmer_mismatches_shared_env_alpha23.tsv`).
+None were proteins Kolach gates. With pplacer pinned to `1.1.alpha19` (as in the
+validation clone and the original GraftM/AnnoGuild environment) the shared
+environment reproduced 546/546 and 103/103 (`graftm_hmmer_check_shared_env.json`).
+`environment.yaml` now pins `pplacer=1.1.alpha19`.
+
+### New-user installation (2026-11-19)
+
+A fresh clone of the branch (`7a123c6`) and `conda env create -f environment.yaml`
+into an empty prefix succeeded in about 4 minutes (packages cached) with
+`pip check` clean. It provides kolach (editable), GraftM 0.15.1, HMMER 3.4,
+pplacer/guppy 1.1.alpha19, mafft 7.526, FastTree 2.2.0, dbCAN 5.2.9,
+Snakemake 9.27.2, eggNOG-mapper and DeepKOALA. Two environment fixes were
+needed: `extern` is installed by pip (the conda-forge build is tagged cp38 and
+fails `pip check`), and `snakemake-interface-common<1.23.1` (1.23.1 requires
+`packaging>=26.1`, Snakemake 9 requires `<26`). In that environment,
+`kolach download --databases graftm` installed the published bundle (SHA-256
+matches), and GraftM on the SynComm proteins reproduced the validated
+`kolach_graftm_markers.tsv` byte for byte. A clean Python 3.11 virtualenv with
+`pip install -e ".[graftm]"` also passed `pip check` and ran `graftM --version`.
+
 ## 2. Logic parity with AnnoGuild on real data
 
 Kolach's evaluator and classifier on AnnoGuild's own SynComm inputs

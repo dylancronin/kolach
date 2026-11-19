@@ -36,8 +36,9 @@ gene/genome map is checked against the FASTA before any search starts.
 `environment.yaml` installs the GraftM tools (`graftM`, `pplacer`, `guppy`,
 `hmmsearch`, `hmmalign`); update an existing environment with
 `conda env update -f environment.yaml`. GraftM is pip-installed so HMMER stays
-at 3.4; its bioconda recipe pins 3.2.1. HMMER 3.4 reproduced all recorded
-HMMER 3.2.1 placements (see `tests/annoguild_validation/`).
+at 3.4; its bioconda recipe pins 3.2.1. pplacer is pinned to 1.1.alpha19. With
+these, all recorded HMMER 3.2.1 placements were reproduced; pplacer 1.1.alpha23
+moved a few borderline ones (see `tests/annoguild_validation/RESULTS.md`).
 
 To re-evaluate a finished run, e.g. with other thresholds, without repeating
 any search:
