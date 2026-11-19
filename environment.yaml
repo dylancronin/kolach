@@ -17,7 +17,9 @@ dependencies:
   # would downgrade the HMMER 3.4 used by KOfam and dbCAN. Its pure-Python
   # dependency `extern` also comes from pip: the conda-forge build is tagged
   # cp38, which `pip check` rejects on Python 3.11.
-  - pplacer
+  # 1.1.alpha19 reproduces all recorded EMERGE/AnnoGuild placements; alpha23
+  # moved 3 of 103 borderline SynComm placements (tests/annoguild_validation).
+  - pplacer=1.1.alpha19
   - mafft
   - fasttree
   - orfm
