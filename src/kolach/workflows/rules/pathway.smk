@@ -1,5 +1,8 @@
 from kolach.pathways import annotate_pathways
 
+# Light step: runs in the controller job under --executor slurm.
+localrules: annotate_pathways
+
 rule annotate_pathways:
     input:
         tsv=f"{OUTDIR}/.kolach_annotations_raw.tsv"

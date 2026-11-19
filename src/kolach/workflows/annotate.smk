@@ -46,6 +46,8 @@ if targets:
 else:
     all_targets = []
 
+localrules: all
+
 rule all:
     default_target: True
     input:

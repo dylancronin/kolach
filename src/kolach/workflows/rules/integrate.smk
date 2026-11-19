@@ -1,5 +1,8 @@
 from kolach.integrate import integrate_annotations
 
+# Light step: runs in the controller job under --executor slurm.
+localrules: integrate_annotations
+
 rule integrate_annotations:
     input:
         fasta=PROTEIN_FASTA,

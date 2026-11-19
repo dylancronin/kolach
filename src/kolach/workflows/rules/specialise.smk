@@ -15,6 +15,9 @@ GENOME_ID = config.get("genome_id")
 if GENOME_ID is not None:
     GENOME_ID = str(GENOME_ID)
 
+# Light step: runs in the controller job under --executor slurm.
+localrules: specialise_genomes
+
 rule specialise_genomes:
     input:
         annotations=f"{OUTDIR}/kolach_annotations.tsv",

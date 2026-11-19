@@ -1,8 +1,12 @@
 """Tests for kolach.cli argument parsing and workflow handoff."""
 import contextlib
+import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -108,6 +112,198 @@ class TestWorkflowConfig(unittest.TestCase):
         self.assertEqual(exit_.exception.code, 1)
         self.assertIn("1 duplicate gene ID(s): g1", err.getvalue())
         run.assert_not_called()
+
+
+class TestSlurmExecutor(unittest.TestCase):
+    BASE = ["annotate", "--protein-fasta", "p.faa", "--database-dir", "db"]
+
+    def run_main(self, argv):
+        """Run cli.main with the workflow mocked; return (run_workflow mock, stderr)."""
+        with mock.patch.object(cli, "check_annotation_dependencies"), \
+                mock.patch("kolach.integrate.read_fasta_ids", return_value=["g1"]), \
+                mock.patch.object(cli, "run_workflow", return_value=0) as run, \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            cli.main(argv)
+        return run, err.getvalue()
+
+    def assert_main_rejected(self, argv, message):
+        with mock.patch.object(cli, "run_workflow") as run, \
+                contextlib.redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit):
+            cli.main(argv)
+        self.assertIn(message, err.getvalue())
+        run.assert_not_called()
+
+    def test_local_is_default_and_unchanged(self):
+        run, _ = self.run_main(self.BASE + ["--threads", "3"])
+        self.assertEqual(run.call_args.kwargs["slurm_args"], None)
+        self.assertEqual(run.call_args.kwargs["cores"], 3)
+
+    def test_slurm_requires_account(self):
+        self.assert_main_rejected(self.BASE + ["--executor", "slurm"], "requires --slurm-account")
+
+    def test_slurm_options_require_slurm_executor(self):
+        self.assert_main_rejected(self.BASE + ["--slurm-account", "A"], "require(s) --executor slurm")
+        self.assert_main_rejected(["download", "--database-dir", "db", "--databases", "kofam",
+                                   "--slurm-partition", "p"], "require(s) --executor slurm")
+
+    def test_slurm_profile_must_contain_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assert_main_rejected(self.BASE + ["--executor", "slurm", "--slurm-account", "A",
+                                                   "--slurm-profile", tmp], "containing config.yaml")
+
+    def test_annotate_slurm_arguments(self):
+        run, _ = self.run_main(self.BASE + ["--executor", "slurm", "--slurm-account", "PDS0325",
+                                            "--slurm-partition", "cpu", "--jobs", "4", "--threads", "2",
+                                            "--output-dir", "out"])
+        args = run.call_args.kwargs["slurm_args"]
+        self.assertEqual(args[:4], ["--executor", "slurm", "--jobs", "4"])
+        self.assertEqual(Path(args[args.index("--workflow-profile") + 1]), cli.SLURM_PROFILE)
+        self.assertTrue((cli.SLURM_PROFILE / "config.yaml").is_file())
+        # Quoted so Snakemake, which evaluates resource values as Python, keeps them literal.
+        self.assertEqual(args[args.index("--default-resources") + 1:],
+                         ["slurm_account='PDS0325'", "slurm_partition='cpu'"])
+        self.assertEqual(run.call_args.kwargs["cores"], 2)
+        self.assertEqual(run.call_args.kwargs["config_dir"], Path("out") / ".kolach")
+
+    def test_download_slurm_arguments(self):
+        with mock.patch.object(cli, "run_workflow", return_value=0) as run:
+            cli.main(["download", "--database-dir", "db", "--databases", "kofam", "eggnog",
+                      "--executor", "slurm", "--slurm-account", "A"])
+        self.assertIn("slurm_account='A'", run.call_args.kwargs["slurm_args"])
+        self.assertEqual(run.call_args.kwargs["config_dir"], Path("db") / ".kolach")
+        self.assertEqual(run.call_args.kwargs["cores"], 1)
+
+    def test_user_profile_replaces_bundled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "config.yaml").write_text("set-threads: {}\n")
+            run, _ = self.run_main(self.BASE + ["--executor", "slurm", "--slurm-account", "A", "--slurm-profile", tmp])
+        args = run.call_args.kwargs["slurm_args"]
+        self.assertEqual(args[args.index("--workflow-profile") + 1], str(Path(tmp).resolve()))
+
+    def test_deepkoala_gpu_only_with_cuda_on_slurm(self):
+        slurm = ["--executor", "slurm", "--slurm-account", "A", "--slurm-partition", "cpu"]
+        cases = [
+            (["--databases", "deepkoala", "--device", "cuda", *slurm, "--slurm-gpu-partition", "gpu"],
+             {"gpu": 1, "slurm_partition": "gpu"}),
+            (["--databases", "deepkoala", "--device", "cuda", *slurm], {"gpu": 1, "slurm_partition": "cpu"}),
+            (["--databases", "deepkoala", "--device", "auto", *slurm], None),
+            (["--databases", "kofam", "--device", "cuda", *slurm], None),
+            (["--databases", "deepkoala", "--device", "cuda"], None),
+        ]
+        for extra, expected in cases:
+            with self.subTest(extra=extra):
+                config = cli.annotate_config(parse(*self.BASE, *extra))
+                self.assertEqual(config.get("deepkoala_resources"), expected)
+
+    def test_slurm_values_stay_literal_strings(self):
+        for value in ("all", "None", "0123", "1e3", "a'b"):
+            args = parse(*self.BASE, "--executor", "slurm", "--slurm-account", value, "--slurm-partition", value)
+            resources = dict(item.split("=", 1) for item in cli.slurm_arguments(args)[7:])
+            self.assertEqual(eval(resources["slurm_account"]), value)
+            self.assertEqual(eval(resources["slurm_partition"]), value)
+
+    def test_user_profile_default_resources_are_kept(self):
+        for body in ("default-resources:\n  mem_mb: 5000\n  slurm_extra: \"'--mail-type=NONE'\"\n  slurm_account: x\n",
+                     "default-resources:\n  - mem_mb=5000\n  - \"slurm_extra='--mail-type=NONE'\"\n"):
+            with self.subTest(body=body), tempfile.TemporaryDirectory() as tmp:
+                (Path(tmp) / "config.yaml").write_text(body)
+                args = parse(*self.BASE, "--executor", "slurm", "--slurm-account", "A", "--slurm-profile", tmp)
+                slurm_args = cli.slurm_arguments(args)
+                resources = slurm_args[slurm_args.index("--default-resources") + 1:]
+                # The profile's defaults survive; --slurm-account wins over its account.
+                self.assertEqual(resources, ["mem_mb=5000", "slurm_extra='--mail-type=NONE'", "slurm_account='A'"])
+
+    @unittest.skipUnless(importlib.util.find_spec("snakemake_executor_plugin_slurm"), "Slurm plugin not installed")
+    def test_profile_slurm_extra_with_managed_option_is_rejected(self):
+        # The plugin only rejects these at submission, and the controller then hangs.
+        bodies = [
+            "default-resources:\n  slurm_extra: \"'--comment=x'\"\n",
+            "set-resources:\n  annotate_kofam:\n    slurm_extra: \"'--qos=debug'\"\n",
+            "set-resources:\n  - \"annotate_kofam:slurm_extra='--mem=4G'\"\n",
+        ]
+        for body in bodies:
+            with self.subTest(body=body), tempfile.TemporaryDirectory() as tmp:
+                (Path(tmp) / "config.yaml").write_text(body)
+                self.assert_main_rejected(self.BASE + ["--executor", "slurm", "--slurm-account", "A",
+                                                       "--slurm-profile", tmp], "which the Slurm executor manages")
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "config.yaml").write_text("default-resources:\n  slurm_extra: \"'--mail-type=NONE'\"\n")
+            run, _ = self.run_main(self.BASE + ["--executor", "slurm", "--slurm-account", "A", "--slurm-profile", tmp])
+            self.assertIn("slurm_extra='--mail-type=NONE'", run.call_args.kwargs["slurm_args"])
+
+    def test_malformed_profile_is_rejected(self):
+        for body in ("- just\n- a list\n", "default-resources:\n  - mem_mb\n", "a: [unclosed\n"):
+            with self.subTest(body=body), tempfile.TemporaryDirectory() as tmp:
+                (Path(tmp) / "config.yaml").write_text(body)
+                self.assert_main_rejected(self.BASE + ["--executor", "slurm", "--slurm-account", "A",
+                                                       "--slurm-profile", tmp], "invalid Slurm profile")
+
+    def test_bundled_profile_has_no_default_resources(self):
+        self.assertEqual(cli.profile_default_resources(cli.SLURM_PROFILE), {})
+
+    def test_jobs_and_gpu_partition_need_their_context(self):
+        self.assert_main_rejected(self.BASE + ["--jobs", "4"], "require(s) --executor slurm")
+        slurm = ["--executor", "slurm", "--slurm-account", "A", "--slurm-gpu-partition", "gpu"]
+        self.assert_main_rejected(self.BASE + ["--databases", "deepkoala", *slurm], "requires --device cuda")
+        self.assert_main_rejected(self.BASE + ["--databases", "kofam", "--device", "cuda", *slurm],
+                                  "requires --device cuda")
+
+    def test_download_slurm_resolves_deepkoala_release_once(self):
+        with mock.patch.object(cli, "run_workflow", return_value=0) as run, \
+                mock.patch("kolach.methods.deepkoala.resolve_release", return_value="202608") as resolve:
+            cli.main(["download", "--database-dir", "db", "--databases", "deepkoala",
+                      "--executor", "slurm", "--slurm-account", "A"])
+        resolve.assert_called_once_with("latest")
+        config = run.call_args.args[1]
+        self.assertEqual((config["deepkoala_release"], config["deepkoala_release_resolved"]), ("202608", True))
+        with mock.patch.object(cli, "run_workflow", return_value=0) as run, \
+                mock.patch("kolach.methods.deepkoala.resolve_release") as resolve:
+            cli.main(["download", "--database-dir", "db", "--databases", "deepkoala"])
+        resolve.assert_not_called()
+        self.assertNotIn("deepkoala_release_resolved", run.call_args.args[1])
+
+    def test_run_workflow_slurm_uses_unique_shared_configfile(self):
+        seen = {}
+
+        def fake_controller(cmd):
+            path = Path(cmd[cmd.index("--configfile") + 1])
+            seen.update(cmd=cmd, path=path, config=json.loads(path.read_text()))
+            return 0
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch("shutil.which", return_value="/bin/snakemake"), \
+                mock.patch.object(cli, "run_controller", fake_controller):
+            config_dir = Path(tmp) / "out" / ".kolach"
+            slurm_args = ["--executor", "slurm", "--jobs", "2", "--default-resources", "slurm_account='A'"]
+            code = cli.run_workflow("annotate.smk", {"threads": 2}, cores=3, slurm_args=slurm_args,
+                                    config_dir=config_dir)
+            first = seen["path"]
+            cli.run_workflow("annotate.smk", {"threads": 2}, cores=3, slurm_args=slurm_args, config_dir=config_dir)
+            self.assertEqual(code, 0)
+            self.assertEqual(first.parent, config_dir.resolve())
+            self.assertTrue(first.name.startswith("annotate_config_"))
+            self.assertNotEqual(first, seen["path"])  # per-run name: a second run cannot overwrite it
+            self.assertEqual(seen["config"], {"threads": 2})
+            self.assertEqual(list(config_dir.iterdir()), [])  # removed once Snakemake returns
+        cmd = seen["cmd"]
+        self.assertNotIn("--cores", cmd)
+        self.assertEqual(cmd[cmd.index("--local-cores") + 1], "3")
+        # The configfile must follow the nargs='+' --default-resources values as its own flag.
+        self.assertLess(cmd.index("slurm_account='A'"), cmd.index("--configfile"))
+
+    def test_controller_turns_sigterm_into_sigint(self):
+        # Snakemake cancels its Slurm jobs and unlocks on SIGINT but not on SIGTERM.
+        child = ("import signal, sys, time\n"
+                 "signal.signal(signal.SIGINT, lambda *a: sys.exit(42))\n"
+                 "print('ready', flush=True)\n"
+                 "time.sleep(30)\n")
+        script = ("import os, signal, subprocess, sys, threading, time\n"
+                  "from kolach import cli\n"
+                  "threading.Timer(2, lambda: os.kill(os.getpid(), signal.SIGTERM)).start()\n"
+                  f"sys.exit(cli.run_controller([sys.executable, '-c', {child!r}]))\n")
+        env = dict(os.environ, PYTHONPATH=str(Path(cli.__file__).parents[1]))
+        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, env=env, timeout=60)
+        self.assertEqual(result.returncode, 42, result.stderr)
 
 
 if __name__ == "__main__":

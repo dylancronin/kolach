@@ -103,6 +103,34 @@ def _add_integration_options(parser, heuristic_note=""):
     )
 
 
+SLURM_PROFILE = Path(__file__).parent / "workflows" / "profiles" / "slurm"
+DEFAULT_SLURM_JOBS = 10
+
+
+def _add_executor_options(parser, gpu=False):
+    """Options for running the workflow's heavy steps as separate Slurm jobs."""
+    group = parser.add_argument_group(
+        "Slurm execution",
+        "Run kolach in one small controller job; each heavy step (each tool or download) is submitted "
+        "as its own Slurm job so they run in parallel.")
+    group.add_argument(
+        "--executor", choices=["local", "slurm"], default="local",
+        help="Where workflow steps run: local (default) or slurm (one Slurm job per heavy step).")
+    group.add_argument("--slurm-account", help="Slurm account charged for submitted jobs (required with --executor slurm).")
+    group.add_argument("--slurm-partition", help="Slurm partition for submitted jobs (default: the cluster default).")
+    group.add_argument(
+        "--jobs", type=positive_int, default=None,
+        help=f"Maximum number of Slurm jobs queued or running at once (default: {DEFAULT_SLURM_JOBS}).")
+    group.add_argument(
+        "--slurm-profile",
+        help="Snakemake profile directory with per-step CPUs, memory and walltime, replacing kolach's bundled "
+        f"one (copy {SLURM_PROFILE / 'config.yaml'} as a template).")
+    if gpu:
+        group.add_argument(
+            "--slurm-gpu-partition",
+            help="Partition for the DeepKOALA job when --device cuda (default: --slurm-partition).")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="kolach",
@@ -151,6 +179,8 @@ def build_parser() -> argparse.ArgumentParser:
         "'latest' is resolved against GenomeNet on each run, so newer releases are downloaded.",
     )
 
+    _add_executor_options(download_parser)
+
     # ------------------------------------------------------
     # Annotate subcommand
     # ------------------------------------------------------
@@ -198,7 +228,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--threads",
         type=positive_int,
         default=1,
-        help="Number of CPU threads to use (default: 1).",
+        help="Number of CPU threads to use (default: 1). With --executor slurm, the CPUs the controller job "
+        "uses for light steps (integration, pathways, specialisation); per-tool CPUs come from the Slurm "
+        "profile's set-threads (a tool missing from a custom profile falls back to this value).",
     )
 
     annotate_parser.add_argument(
@@ -294,6 +326,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--genome-id",
         help="Genome name for specialisation (default: the protein FASTA file name without extension).")
     annotate_group.add_argument("--gene-genome-map", help="TSV mapping gene_id to genome when the FASTA holds several genomes.")
+
+    _add_executor_options(annotate_parser, gpu=True)
 
     # ------------------------------------------------------
     # Integrate subcommand
@@ -472,7 +506,102 @@ def annotate_config(args) -> dict:
         value = getattr(args, key)
         if value is not None:
             config[key] = value
+    if args.executor == "slurm" and args.device == "cuda" and "deepkoala" in config["databases"]:
+        resources = {"gpu": 1}
+        partition = args.slurm_gpu_partition or args.slurm_partition
+        if partition:
+            resources["slurm_partition"] = partition
+        config["deepkoala_resources"] = resources
     return config
+
+
+def load_profile(profile: Path) -> dict:
+    """Settings of a Snakemake profile directory's config.yaml."""
+    import yaml
+
+    with open(profile / "config.yaml", encoding="utf-8") as handle:
+        try:
+            settings = yaml.safe_load(handle) or {}
+        except yaml.YAMLError as exc:
+            raise ValueError(f"invalid YAML in {profile / 'config.yaml'}: {exc}") from exc
+    if not isinstance(settings, dict):
+        raise ValueError(f"{profile / 'config.yaml'} must be a mapping of Snakemake options")
+    return settings
+
+
+def _resource_pairs(value) -> dict:
+    """A profile resource setting (mapping, list or string of name=value) as a dict."""
+    if not value:
+        return {}
+    if isinstance(value, dict):
+        return {str(name): str(item) for name, item in value.items()}
+    if isinstance(value, str):
+        value = value.split()
+    pairs = {}
+    for item in value:
+        name, sep, expression = str(item).partition("=")
+        if not sep:
+            raise ValueError(f"resource setting {item!r} is not name=value")
+        pairs[name] = expression
+    return pairs
+
+
+def profile_default_resources(profile: Path) -> dict:
+    """`default-resources` of a Snakemake profile as {name: expression}."""
+    return _resource_pairs(load_profile(profile).get("default-resources"))
+
+
+def check_slurm_extra(profile: Path) -> None:
+    """Reject `slurm_extra` options the Slurm executor manages itself.
+
+    The plugin raises for these (e.g. --comment, --qos, --mem) only once it tries
+    to submit, and the controller then waits forever instead of exiting.
+    """
+    import re
+
+    try:
+        from snakemake_executor_plugin_slurm.validation import get_forbidden_slurm_options
+    except ImportError:
+        return
+    settings = load_profile(profile)
+    extras = [("default-resources", _resource_pairs(settings.get("default-resources")).get("slurm_extra"))]
+    rule_resources = settings.get("set-resources") or {}
+    if isinstance(rule_resources, dict):
+        for rule, values in rule_resources.items():
+            extras.append((f"set-resources {rule}", _resource_pairs(values).get("slurm_extra")))
+    else:
+        for item in ([rule_resources] if isinstance(rule_resources, str) else rule_resources):
+            target, _, expression = str(item).partition("=")
+            if target.endswith(":slurm_extra"):
+                extras.append((f"set-resources {target.split(':')[0]}", expression))
+    for where, extra in extras:
+        if not extra:
+            continue
+        for pattern, option in get_forbidden_slurm_options().items():
+            if re.search(pattern, extra):
+                raise ValueError(
+                    f"slurm_extra in {where} sets the {option} ({extra}), which the Slurm executor manages; "
+                    "use the matching kolach option or profile resource instead")
+
+
+def slurm_arguments(args) -> list:
+    """Snakemake arguments that submit each non-local rule as its own Slurm job."""
+    profile = Path(args.slurm_profile).expanduser().resolve() if args.slurm_profile else SLURM_PROFILE
+    # A command-line --default-resources replaces the profile's whole map, so the
+    # profile's own defaults are carried over. Snakemake evaluates resource values
+    # as Python, so account and partition are quoted to stay literal strings
+    # (e.g. a partition named 'all' or an account '0123').
+    check_slurm_extra(profile)
+    resources = profile_default_resources(profile)
+    resources["slurm_account"] = repr(args.slurm_account)
+    if args.slurm_partition:
+        resources["slurm_partition"] = repr(args.slurm_partition)
+    return [
+        "--executor", "slurm",
+        "--jobs", str(args.jobs or DEFAULT_SLURM_JOBS),
+        "--workflow-profile", str(profile),
+        "--default-resources", *(f"{name}={value}" for name, value in resources.items()),
+    ]
 
 
 FASTA_SUFFIXES = (".faa", ".fa", ".fasta", ".fas", ".pep", ".aa", ".prot", ".protein")
@@ -515,11 +644,16 @@ def check_annotation_dependencies(databases, specialisations=False) -> None:
         importlib.import_module("kolach.methods.graftm").check_dependencies()
 
 
-def run_workflow(snakefile: str, config: dict, cores: int) -> int:
+def run_workflow(snakefile: str, config: dict, cores: int, slurm_args=None, config_dir=None) -> int:
     """Run a bundled Snakefile with `config` passed as a JSON config file.
 
     A config file (rather than `--config key=value`) keeps values typed and stops
     Snakemake from YAML-parsing paths and strings into other types.
+
+    With `slurm_args`, heavy rules are submitted as Slurm jobs and `cores` only
+    covers the local rules. Those jobs re-read the config file on other nodes, so
+    it is written to `config_dir` (a shared directory) rather than /tmp, under a
+    per-run name so another invocation cannot overwrite it mid-run.
     """
     if not shutil.which("snakemake"):
         raise FileNotFoundError(
@@ -527,19 +661,51 @@ def run_workflow(snakefile: str, config: dict, cores: int) -> int:
             "Please activate the kolach conda environment."
         )
     snakefile_path = Path(__file__).parent / "workflows" / snakefile
-    fd, config_path = tempfile.mkstemp(prefix="kolach_config_", suffix=".json")
+    if slurm_args:
+        config_dir = Path(config_dir).expanduser().resolve()
+        config_dir.mkdir(parents=True, exist_ok=True)
+        fd, config_path = tempfile.mkstemp(prefix=f"{Path(snakefile).stem}_config_", suffix=".json",
+                                           dir=config_dir)
+        os.chmod(config_path, 0o644)
+    else:
+        fd, config_path = tempfile.mkstemp(prefix="kolach_config_", suffix=".json")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(config, handle, indent=2)
-        cmd = [
-            "snakemake",
-            "-s", str(snakefile_path),
-            "--cores", str(cores),
-            "--configfile", config_path,
-        ]
-        return subprocess.run(cmd).returncode
+        cmd = ["snakemake", "-s", str(snakefile_path)]
+        if not slurm_args:
+            cmd += ["--cores", str(cores), "--configfile", config_path]
+            return subprocess.run(cmd).returncode
+        cmd += ["--local-cores", str(cores), *slurm_args, "--configfile", config_path]
+        return run_controller(cmd)
     finally:
         Path(config_path).unlink(missing_ok=True)
+
+
+def run_controller(cmd) -> int:
+    """Run a Slurm-executor Snakemake, cancelling its jobs if kolach is terminated.
+
+    On SIGTERM (scancel, or the controller job reaching its walltime) Snakemake
+    would keep waiting for its submitted jobs. SIGINT makes it cancel them and
+    release its lock, so a later run of the same command can resume.
+    """
+    import signal
+
+    process = subprocess.Popen(cmd)
+
+    def interrupt(signum, frame):
+        process.send_signal(signal.SIGINT)
+
+    previous = signal.signal(signal.SIGTERM, interrupt)
+    try:
+        while True:
+            try:
+                return process.wait()
+            except KeyboardInterrupt:
+                # Ctrl-C reaches Snakemake too; keep waiting for its cleanup.
+                continue
+    finally:
+        signal.signal(signal.SIGTERM, previous)
 
 
 def main(argv=None):
@@ -555,8 +721,39 @@ def main(argv=None):
         if args.genome_id is not None and not args.genome_id.strip():
             parser.error("--genome-id cannot be empty")
 
+    slurm_args = None
+    if args.command in ("download", "annotate"):
+        gpu_partition = getattr(args, "slurm_gpu_partition", None)
+        slurm_only = [flag for flag, value in (
+            ("--slurm-account", args.slurm_account), ("--slurm-partition", args.slurm_partition),
+            ("--slurm-profile", args.slurm_profile), ("--jobs", args.jobs),
+            ("--slurm-gpu-partition", gpu_partition)) if value]
+        if args.executor == "slurm":
+            if not args.slurm_account:
+                parser.error("--executor slurm requires --slurm-account")
+            if args.slurm_profile and not (Path(args.slurm_profile).expanduser() / "config.yaml").is_file():
+                parser.error(f"--slurm-profile must be a directory containing config.yaml: {args.slurm_profile}")
+            if gpu_partition and not (args.device == "cuda" and "deepkoala" in args.databases):
+                parser.error("--slurm-gpu-partition requires --device cuda and deepkoala in --databases")
+            try:
+                slurm_args = slurm_arguments(args)
+            except (OSError, ValueError, AttributeError) as exc:
+                parser.error(f"invalid Slurm profile: {exc}")
+        elif slurm_only:
+            parser.error(f"{', '.join(slurm_only)} require(s) --executor slurm")
+
     if args.command == "download":
-        returncode = run_workflow("download.smk", download_config(args), cores=1)
+        config = download_config(args)
+        if slurm_args and "deepkoala" in config["databases"]:
+            from kolach.methods.deepkoala import resolve_release
+
+            try:
+                config["deepkoala_release"] = resolve_release(args.deepkoala_release)
+            except (OSError, ValueError) as exc:
+                parser.exit(1, f"kolach download: error: {exc}\n")
+            config["deepkoala_release_resolved"] = True
+        returncode = run_workflow("download.smk", config, cores=1, slurm_args=slurm_args,
+                                  config_dir=Path(args.database_dir) / ".kolach")
         if returncode != 0:
             sys.exit(returncode)
 
@@ -573,7 +770,8 @@ def main(argv=None):
                 check_gene_genome_map(args.gene_genome_map, gene_ids)
         except (OSError, ImportError, ValueError) as exc:
             parser.exit(1, f"kolach annotate: error: {exc}\n")
-        returncode = run_workflow("annotate.smk", config, cores=args.threads)
+        returncode = run_workflow("annotate.smk", config, cores=args.threads, slurm_args=slurm_args,
+                                  config_dir=Path(args.output_dir) / ".kolach")
         if returncode != 0:
             sys.exit(returncode)
 

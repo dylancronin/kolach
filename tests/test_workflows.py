@@ -1,6 +1,8 @@
 """Snakemake dry runs of the bundled workflows (skipped when snakemake is unavailable)."""
+import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -29,13 +31,15 @@ class TestWorkflowDryRun(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def dry_run(self, snakefile, config):
+    def dry_run(self, snakefile, config, extra=(), extra_env=None):
         config_path = self.dir / "config.json"
         config_path.write_text(json.dumps(config))
         env = dict(os.environ, PYTHONPATH=os.pathsep.join(filter(None, [str(SRC), os.environ.get("PYTHONPATH")])))
         env["XDG_CACHE_HOME"] = str(self.dir / "cache")
+        env.update(extra_env or {})
+        cores = ["--local-cores", "1"] if extra else ["--cores", "1"]
         result = subprocess.run(
-            ["snakemake", "-n", "-s", str(WORKFLOWS / snakefile), "--cores", "1",
+            ["snakemake", "-n", "-s", str(WORKFLOWS / snakefile), *cores, *extra,
              "--configfile", str(config_path), "--directory", str(self.dir)],
             capture_output=True, text=True, env=env,
         )
@@ -76,12 +80,52 @@ class TestWorkflowDryRun(unittest.TestCase):
             self.assertIn(target, out)
 
 
+    def test_download_deepkoala_uses_release_resolved_by_cli(self):
+        # Under --executor slurm the CLI resolves the release once; submitted jobs
+        # must not query GenomeNet again (a dead proxy makes any lookup fail).
+        dead = "http://127.0.0.1:9"
+        out = self.dry_run("download.smk", {
+            "database_dir": str(self.dir / "empty_db"), "databases": ["deepkoala"],
+            "deepkoala_release": "202608", "deepkoala_release_resolved": True,
+        }, extra_env={"http_proxy": dead, "https_proxy": dead, "HTTP_PROXY": dead, "HTTPS_PROXY": dead})
+        self.assertIn("deepkoala/202608/manifest.json", out)
+
     def test_download_graftm_and_kegg(self):
         out = self.dry_run("download.smk", {
             "database_dir": str(self.dir / "empty_db"), "databases": ["graftm"],
         })
         for target in ("download_graftm", "download_kegg_hierarchy", "graftm/manifest.json"):
             self.assertIn(target, out)
+
+    @unittest.skipUnless(importlib.util.find_spec("snakemake_executor_plugin_slurm"),
+                         "Slurm executor plugin not installed")
+    def test_annotate_slurm_profile_resources_and_localrules(self):
+        out = self.dry_run("annotate.smk", {
+            "database_dir": str(self.db), "protein_fasta": str(self.fasta),
+            "output_dir": str(self.dir / "out"), "databases": ["kofam", "eggnog", "deepkoala"],
+            "add_pathways": True, "deepkoala_resources": {"gpu": 1, "slurm_partition": "gpu"},
+        }, extra=["--executor", "slurm", "--jobs", "4", "--workflow-profile", str(WORKFLOWS / "profiles" / "slurm"),
+                  "--default-resources", "slurm_account=TEST"])
+        blocks = {}
+        for block in re.split(r"^(?:local)?rule ", out, flags=re.M)[1:]:
+            name, _, body = block.partition(":")
+            blocks[name] = body.split("\n[", 1)[0]
+        self.assertIn("mem_mb=64000", blocks["annotate_eggnog"])
+        self.assertIn("runtime=720", blocks["annotate_eggnog"])
+        self.assertIn("mem_mb=32000", blocks["annotate_kofam"])
+        self.assertIn("gpu=1", blocks["annotate_deepkoala"])
+        self.assertIn("slurm_partition=gpu", blocks["annotate_deepkoala"])
+        self.assertNotIn("gpu=", blocks["annotate_kofam"])
+
+    def test_light_rules_are_localrules(self):
+        # Light steps run in the controller job; heavy ones must be submitted.
+        local = set()
+        for path in [WORKFLOWS / "annotate.smk", WORKFLOWS / "download.smk", *WORKFLOWS.glob("rules/*.smk")]:
+            for line in path.read_text().splitlines():
+                if line.startswith("localrules:"):
+                    local.update(name.strip() for name in line.split(":", 1)[1].split(","))
+        self.assertEqual(local, {"all", "integrate_annotations", "annotate_pathways", "specialise_genomes",
+                                 "download_kegg_hierarchy"})
 
     def test_specialisations_require_dbcan(self):
         config_path = self.dir / "config.json"

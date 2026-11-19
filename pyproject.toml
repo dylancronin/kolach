@@ -29,7 +29,7 @@ kolach = "kolach.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"kolach" = ["workflows/*.smk", "workflows/rules/*.smk"]
+"kolach" = ["workflows/*.smk", "workflows/rules/*.smk", "workflows/profiles/*/config.yaml"]
 "kolach.metabolism" = ["data/*.tsv", "data/*.json", "data/LICENSE.GPL-3.0", "data/dram_rules/*"]
 
 [tool.ruff]

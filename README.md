@@ -117,6 +117,47 @@ kolach integrate \
 
 When `--protein-fasta` is given, gene IDs (the first token of each header) must be unique; duplicates are rejected.
 
+### 4. Running on Slurm
+
+`annotate` and `download` can run as one small controller job that submits each heavy step as its own Slurm job, so the tools (or the downloads) run at the same time. Each of these is a separate job: kofam, eggnog, deepkoala, dbcan, graftm, and each database download. Integration, pathways, specialisation and the KEGG hierarchy download are light, so they run inside the controller.
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=kolach
+#SBATCH --account=PDS0325
+#SBATCH --cpus-per-task=2
+#SBATCH --time=24:00:00
+
+source /path/to/miniforge3/bin/activate kolach
+# exec: kolach must be the job's main process to cancel its jobs if this job is cancelled.
+exec kolach annotate \
+    --protein-fasta proteins.faa \
+    --database-dir /path/to/databases \
+    --databases kofam eggnog deepkoala \
+    --output-dir kolach_output \
+    --threads 2 \
+    --executor slurm --slurm-account PDS0325
+```
+
+Slurm options (for both `annotate` and `download`):
+- `--executor`: `local` (default) or `slurm`.
+- `--slurm-account`: Account charged for the submitted jobs (required with `--executor slurm`).
+- `--slurm-partition`: Partition for the submitted jobs (default: the cluster default).
+- `--jobs`: Maximum number of Slurm jobs queued or running at once (default: `10`).
+- `--slurm-profile`: A Snakemake profile directory that replaces the bundled per-step resources.
+- `--slurm-gpu-partition` (`annotate` only): Partition for the DeepKOALA job. A GPU is requested only with `--device cuda`.
+
+With `--executor slurm`, `--threads` sets the controller's CPUs for the light steps. Each tool's CPUs, memory and walltime come from the bundled profile `src/kolach/workflows/profiles/slurm/config.yaml`; for example, eggNOG gets 16 CPUs, 64 GB and 12 h, and KOfam gets 8 CPUs, 32 GB and 6 h. To change them, copy that file into a directory, edit it, and pass the directory with `--slurm-profile`. A custom profile should give every tool `set-threads` and `mem_mb`: a missing tool gets `--threads` CPUs and Snakemake's small default memory. The profile's `default-resources` are kept, and `--slurm-account` / `--slurm-partition` take precedence over it. `slurm_extra` may not set options the executor manages itself (such as `--qos`, `--mem`, `--time` or `--comment`); kolach rejects those before submitting.
+
+Notes:
+- Run from a directory on a shared filesystem. Snakemake keeps its state in `.snakemake/` there, and job logs go to `.snakemake/slurm_logs/`.
+- Each run writes its config to a uniquely named file in `<output-dir>/.kolach/` (or `<database-dir>/.kolach/` for downloads), where the submitted jobs read it. The file is removed when the run ends.
+- Submitted jobs inherit the controller's environment, so activate the kolach environment before calling kolach.
+- When the controller itself runs as a Slurm job, the plugin warns `You are running snakemake in a SLURM job context. This is not recommended`. This setup works, and it keeps the controller off the login node. The alternative is to run the same command on a login node inside `tmux`/`screen`.
+- Give the controller enough walltime for the whole run. If the controller job is cancelled or reaches its walltime, kolach cancels the jobs it submitted. This only works when the batch script starts kolach with `exec`, as in the example: without it, Slurm kills kolach together with the batch shell, and the submitted jobs keep running until you `scancel` them.
+- Slurm usually stops the controller before Snakemake removes its lock, so the re-run fails with `LockException`. First check that no controller is still running for that directory (`squeue -u $USER`), and `scancel` any leftover kolach jobs. Then remove the stale lock with `rm -r .snakemake/locks` in the run directory and re-run; it resumes from finished outputs.
+- The Slurm executor needs `snakemake-executor-plugin-slurm`, which is included in `environment.yaml`.
+
 ---
 
 ## Consensus & Integration Workflow

@@ -32,8 +32,13 @@ if "deepkoala" in SELECTED_DBS:
 
     DEEPKOALA_DIR = str(DB_DIR / "deepkoala")
     # Resolve 'latest' now so a newly published release becomes a new target
-    # instead of being masked by an existing download marker.
-    DEEPKOALA_RELEASE = resolve_release(config.get("deepkoala_release", "latest"))
+    # instead of being masked by an existing download marker. Under --executor
+    # slurm the CLI resolves it once, so submitted jobs neither query GenomeNet
+    # again nor pick up a release published mid-run.
+    if config.get("deepkoala_release_resolved"):
+        DEEPKOALA_RELEASE = str(config["deepkoala_release"])
+    else:
+        DEEPKOALA_RELEASE = resolve_release(config.get("deepkoala_release", "latest"))
     targets.append(f"{DEEPKOALA_DIR}/{DEEPKOALA_RELEASE}/manifest.json")
     include: "rules/download_deepkoala.smk"
 
@@ -43,6 +48,8 @@ if targets:
     KEGG_HIERARCHY = str(DB_DIR / "ko00001.json")
     targets.append(KEGG_HIERARCHY)
     include: "rules/download_kegg.smk"
+
+localrules: all
 
 rule all:
     default_target: True

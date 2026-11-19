@@ -10,6 +10,11 @@ rule annotate_deepkoala:
         tsv=f"{OUTDIR}/deepkoala_annotations.tsv"
     threads:
         int(config.get("threads", 1))
+    resources:
+        # GPU request ({"gpu": 1, "slurm_partition": ...}) set by the CLI for
+        # --executor slurm --device cuda; set here rather than with --set-resources,
+        # which would replace the Slurm profile's per-rule resources.
+        **config.get("deepkoala_resources", {})
     params:
         deepkoala_model=config.get("deepkoala_model", "full"),
         deepkoala_release=str(config.get("deepkoala_release", "latest")),
