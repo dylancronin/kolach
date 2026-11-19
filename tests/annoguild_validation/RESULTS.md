@@ -45,13 +45,13 @@ matches), and GraftM on the SynComm proteins reproduced the validated
 ### Shared environment end to end (2026-11-19)
 
 GraftM packages were installed into the shared database directory
-(, via ; existing
-databases untouched).  then ran
- in the shared 
-environment on 29 Afacilis proteins (job 57663813, 4 CPUs, 00:09:45): real KOfam, dbCAN,
-GraftM and specialisation completed without errors. GraftM refined the same three
-proteins as the full SynComm run (narG, narH, qNor → norZ), and the genome was
-named from the FASTA ().
+(`/fs/scratch/PDS0325/Cronin/kolach-db/graftm`, via `kolach download`; existing
+databases untouched). `shared_env_e2e/run.sh` then ran
+`kolach annotate --databases kofam --add-specialisations` in the shared `kolach`
+environment on 29 Afacilis proteins (job 57663813, 4 CPUs, 00:09:45): real KOfam,
+dbCAN, GraftM and specialisation completed without errors. GraftM refined the
+same three proteins as the full SynComm run (narG, narH, qNor → norZ), and the
+genome was named from the FASTA (`Afacilis_subset`).
 
 ## 2. Logic parity with AnnoGuild on real data
 
