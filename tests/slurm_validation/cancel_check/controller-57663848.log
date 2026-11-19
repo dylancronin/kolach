@@ -1,0 +1,37 @@
+Using workflow specific profile /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_profile for setting default command line arguments.
+
+SNAKEMAKE
+=========
+  Date: 2026-11-19 04:35:09
+  Workflow ID: 5989fb2c-280f-4147-9588-ec7d4f7d93b4
+  Platform: Linux-5.14.0-570.154.1.el9_6.x86_64-x86_64-with-glibc2.34
+  Host: p0220.ten.osc.edu
+  User: osu9433
+  Snakemake version: 9.26.1
+  Python version: 3.11.16 (main, Sep  2 2026, 23:39:52) [GCC 15.3.0]
+  Command: /fs/ess/PDS0325/bioinformatic_tools/miniforge3/envs/kolach/bin/snakemake -s /fs/scratch/PDS0325/Cronin/kolach/src/kolach/workflows/annotate.smk --local-cores 1 --executor slurm --jobs 2 --workflow-profile /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_profile --default-resources slurm_extra='--mail-type=NONE' slurm_account='PDS0325' --configfile /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/cancel_check/final_output/.kolach/annotate_config_0thcihhj.json
+  Snakefile: /fs/scratch/PDS0325/Cronin/kolach/src/kolach/workflows/annotate.smk
+  Base directory: /fs/scratch/PDS0325/Cronin/kolach/src/kolach/workflows
+  Run directory: /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/cancel_check
+  Working directory: /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/cancel_check
+  Config file(s): [PosixPath('/fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/cancel_check/final_output/.kolach/annotate_config_0thcihhj.json')]
+  Config MD5: dbdab6a7e8a53c0858bbe87256135321
+
+Building DAG of jobs...
+You are running snakemake in a SLURM job context. This is not recommended, as it may lead to unexpected behavior. If possible, please run Snakemake directly on the login node.
+SLURM run ID: c1ec8a5f-f0fe-44b3-aadb-746ed0c23526
+MinJobAge 300s (>= 120s). 'squeue' should work reliably for status queries.
+Using shell: /usr/bin/bash
+Provided remote nodes: 2
+Job stats:
+job                      count
+---------------------  -------
+annotate_kofam               1
+integrate_annotations        1
+all                          1
+total                        3
+
+Select jobs to execute...
+Execute 1 jobs...
+Job 1 has been submitted with SLURM jobid 57663849 (log: /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/cancel_check/.snakemake/slurm_logs/rule_annotate_kofam/57663849.log).
+[2026-11-19T04:36:01.137] error: *** JOB 57663848 ON p0220 CANCELLED AT 2026-11-19T04:36:01 DUE to SIGNAL Terminated ***

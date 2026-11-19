@@ -1,0 +1,5 @@
+# Annotation outputs; checksums are recorded in RESULTS.md.
+output/
+final_output/
+local_integrate/
+cancel_check/final_output/

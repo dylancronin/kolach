@@ -1,0 +1,57 @@
+# Default Slurm resources for `kolach annotate/download --executor slurm`.
+#
+# Each heavy rule becomes its own Slurm job with the CPUs (set-threads), memory
+# (mem_mb, about 4 GB per CPU) and walltime (runtime, minutes) below. Light rules
+# (integration, pathways, specialisation, KEGG hierarchy download) are localrules
+# and run inside the controller job instead.
+#
+# To change these, copy this file into a directory of your own, edit it, and pass
+# that directory with --slurm-profile. Memory is set explicitly per rule so
+# Snakemake's small default mem_mb never reaches sbatch --mem.
+
+set-threads:
+  annotate_kofam: 8
+  annotate_eggnog: 16
+  annotate_deepkoala: 8
+  annotate_dbcan: 8
+  annotate_graftm: 4
+  download_kofam: 1
+  download_eggnog: 1
+  download_deepkoala: 1
+  download_dbcan: 1
+  download_graftm: 1
+
+set-resources:
+  annotate_kofam:
+    mem_mb: 32000
+    runtime: 360
+  annotate_eggnog:
+    mem_mb: 64000
+    runtime: 720
+  annotate_deepkoala:
+    mem_mb: 32000
+    runtime: 360
+  annotate_dbcan:
+    mem_mb: 32000
+    runtime: 360
+  annotate_graftm:
+    mem_mb: 16000
+    runtime: 240
+  download_kofam:
+    mem_mb: 8000
+    runtime: 720
+  download_eggnog:
+    mem_mb: 16000
+    runtime: 720
+  download_deepkoala:
+    mem_mb: 8000
+    runtime: 720
+  download_dbcan:
+    mem_mb: 8000
+    runtime: 720
+  download_graftm:
+    mem_mb: 8000
+    runtime: 720
+
+default-resources:
+  slurm_extra: "'--mail-type=NONE'"

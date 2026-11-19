@@ -1,0 +1,67 @@
+Using workflow specific profile /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_profile for setting default command line arguments.
+
+SNAKEMAKE
+=========
+  Date: 2026-11-19 04:35:09
+  Workflow ID: f933b3e0-f468-4246-90e0-5b04ccbb165e
+  Platform: Linux-5.14.0-570.154.1.el9_6.x86_64-x86_64-with-glibc2.34
+  Host: p0220.ten.osc.edu
+  User: osu9433
+  Snakemake version: 9.26.1
+  Python version: 3.11.16 (main, Sep  2 2026, 23:39:52) [GCC 15.3.0]
+  Command: /fs/ess/PDS0325/bioinformatic_tools/miniforge3/envs/kolach/bin/snakemake -s /fs/scratch/PDS0325/Cronin/kolach/src/kolach/workflows/annotate.smk --local-cores 1 --executor slurm --jobs 2 --workflow-profile /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_profile --default-resources slurm_extra='--mail-type=NONE' slurm_account='PDS0325' --configfile /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/.kolach/annotate_config_uh2mfvv_.json
+  Snakefile: /fs/scratch/PDS0325/Cronin/kolach/src/kolach/workflows/annotate.smk
+  Base directory: /fs/scratch/PDS0325/Cronin/kolach/src/kolach/workflows
+  Run directory: /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation
+  Working directory: /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation
+  Config file(s): [PosixPath('/fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/.kolach/annotate_config_uh2mfvv_.json')]
+  Config MD5: d8a828cbc91f78144c4471e9f3f194fc
+
+Building DAG of jobs...
+You are running snakemake in a SLURM job context. This is not recommended, as it may lead to unexpected behavior. If possible, please run Snakemake directly on the login node.
+SLURM run ID: 6358d6fa-59cc-4f8b-a40b-e1701785d860
+MinJobAge 300s (>= 120s). 'squeue' should work reliably for status queries.
+Using shell: /usr/bin/bash
+Provided remote nodes: 2
+Job stats:
+job                      count
+---------------------  -------
+annotate_deepkoala           1
+integrate_annotations        1
+all                          1
+total                        3
+
+Select jobs to execute...
+Execute 1 jobs...
+Job 1 has been submitted with SLURM jobid 57663850 (log: /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/.snakemake/slurm_logs/rule_annotate_deepkoala/57663850.log).
+[Thu Nov 19 04:35:50 2026]
+Finished jobid: 1 (Rule: annotate_deepkoala)
+1 of 3 steps (33%) done
+Select jobs to execute...
+Execute 1 jobs...
+
+[Thu Nov 19 04:35:50 2026]
+localrule integrate_annotations:
+    input: /fs/scratch/PDS0325/Cronin/kolach/tests/anvio_validation/proteins.faa, /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/deepkoala_annotations.tsv
+    output: /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/kolach_annotations.tsv, /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/kolach_evidence.tsv
+    jobid: 2
+    reason: Missing output files: /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/kolach_annotations.tsv, /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/kolach_evidence.tsv; Input files updated by another job: /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/deepkoala_annotations.tsv
+    resources: tmpdir=/tmp, mem_mb=1000, mem=1 GB, mem_mib=954, disk_mb=1000, disk=1 GB, disk_mib=954, slurm_extra=--mail-type=NONE, slurm_account=PDS0325
+[Thu Nov 19 04:35:50 2026]
+Finished jobid: 2 (Rule: integrate_annotations)
+2 of 3 steps (67%) done
+Select jobs to execute...
+Execute 1 jobs...
+
+[Thu Nov 19 04:35:50 2026]
+localrule all:
+    input: /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/deepkoala_annotations.tsv, /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/kolach_annotations.tsv, /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/kolach_evidence.tsv
+    jobid: 0
+    reason: Input files updated by another job: /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/deepkoala_annotations.tsv, /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/kolach_annotations.tsv, /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/kolach_evidence.tsv
+    resources: tmpdir=/tmp, mem_mb=1000, mem=1 GB, mem_mib=954, disk_mb=1000, disk=1 GB, disk_mib=954, slurm_extra=--mail-type=NONE, slurm_account=PDS0325
+[Thu Nov 19 04:35:50 2026]
+Finished jobid: 0 (Rule: all)
+3 of 3 steps (100%) done
+Cleaning up SLURM log files older than 10 day(s).
+Complete log(s): /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/.snakemake/log/2026-11-19T043509.759373.snakemake.log
+Elapsed time: 0:01:20.502872

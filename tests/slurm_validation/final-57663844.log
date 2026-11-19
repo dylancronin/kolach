@@ -1,0 +1,36 @@
+Using workflow specific profile /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_profile for setting default command line arguments.
+
+SNAKEMAKE
+=========
+  Date: 2026-11-19 04:19:41
+  Workflow ID: 9e57cf38-4762-4d95-9af4-4ee149396539
+  Platform: Linux-5.14.0-570.154.1.el9_6.x86_64-x86_64-with-glibc2.34
+  Host: p0220.ten.osc.edu
+  User: osu9433
+  Snakemake version: 9.26.1
+  Python version: 3.11.16 (main, Sep  2 2026, 23:39:52) [GCC 15.3.0]
+  Command: /fs/ess/PDS0325/bioinformatic_tools/miniforge3/envs/kolach/bin/snakemake -s /fs/scratch/PDS0325/Cronin/kolach/src/kolach/workflows/annotate.smk --local-cores 1 --executor slurm --jobs 2 --workflow-profile /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_profile --default-resources slurm_extra='--comment=kolach-final-check' slurm_account='PDS0325' --configfile /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/.kolach/annotate_config_mnex15sm.json
+  Snakefile: /fs/scratch/PDS0325/Cronin/kolach/src/kolach/workflows/annotate.smk
+  Base directory: /fs/scratch/PDS0325/Cronin/kolach/src/kolach/workflows
+  Run directory: /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation
+  Working directory: /fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation
+  Config file(s): [PosixPath('/fs/scratch/PDS0325/Cronin/kolach/tests/slurm_validation/final_output/.kolach/annotate_config_mnex15sm.json')]
+  Config MD5: d8a828cbc91f78144c4471e9f3f194fc
+
+Building DAG of jobs...
+You are running snakemake in a SLURM job context. This is not recommended, as it may lead to unexpected behavior. If possible, please run Snakemake directly on the login node.
+SLURM run ID: ee63091b-7b2e-413d-92aa-e78c409a3c34
+MinJobAge 300s (>= 120s). 'squeue' should work reliably for status queries.
+Using shell: /usr/bin/bash
+Provided remote nodes: 2
+Job stats:
+job                      count
+---------------------  -------
+annotate_deepkoala           1
+integrate_annotations        1
+all                          1
+total                        3
+
+Select jobs to execute...
+Execute 1 jobs...
+[2026-11-19T04:34:14.496] error: *** JOB 57663844 ON p0220 CANCELLED AT 2026-11-19T04:34:14 DUE to SIGNAL Terminated ***
