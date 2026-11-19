@@ -42,6 +42,17 @@ matches), and GraftM on the SynComm proteins reproduced the validated
 `kolach_graftm_markers.tsv` byte for byte. A clean Python 3.11 virtualenv with
 `pip install -e ".[graftm]"` also passed `pip check` and ran `graftM --version`.
 
+### Shared environment end to end (2026-11-19)
+
+GraftM packages were installed into the shared database directory
+(, via ; existing
+databases untouched).  then ran
+ in the shared 
+environment on 29 Afacilis proteins (job 57663813, 4 CPUs, 00:09:45): real KOfam, dbCAN,
+GraftM and specialisation completed without errors. GraftM refined the same three
+proteins as the full SynComm run (narG, narH, qNor → norZ), and the genome was
+named from the FASTA ().
+
 ## 2. Logic parity with AnnoGuild on real data
 
 Kolach's evaluator and classifier on AnnoGuild's own SynComm inputs

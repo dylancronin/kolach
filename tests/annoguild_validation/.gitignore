@@ -10,3 +10,4 @@ clone.log
 install.log
 pip.log
 fresh_install/
+shared_env_e2e/out/
