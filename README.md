@@ -31,8 +31,11 @@ conda env create -f environment.yaml
 conda activate kolach
 ```
 
-The environment includes dbCAN 5.2.9 and the external search tools. To update an
-existing environment from this checkout:
+The environment includes dbCAN 5.2.9, GraftM 0.15.1 with its placement tools
+(pplacer, guppy, mafft, FastTree), and the external search tools. GraftM is
+installed with pip because its bioconda recipe pins HMMER 3.2.1; the
+environment keeps HMMER 3.4. To update an existing environment from this
+checkout:
 
 ```bash
 conda env update -n kolach -f environment.yaml
@@ -42,10 +45,21 @@ python -m pip install -e .
 
 Installing with `python -m pip install .` (or `python -m pip install -e .` for
 development) also installs dbCAN 5.2.9 and its Python dependencies. Pip does not
-install Snakemake, HMMER, DIAMOND, MMseqs2, eggNOG-mapper, or DeepKOALA; use
-`environment.yaml` for the complete tool environment. DeepKOALA's PyTorch
-dependency is available through `python -m pip install "kolach[deepkoala]"`.
-Download annotation databases separately with `kolach download`.
+install Snakemake, HMMER, DIAMOND, MMseqs2, eggNOG-mapper, DeepKOALA, pplacer,
+guppy, mafft or FastTree; use `environment.yaml` for the complete tool
+environment. Optional Python extras: `python -m pip install "kolach[deepkoala]"`
+(PyTorch) and `"kolach[graftm]"` (GraftM, for `--add-specialisations`).
+Download annotation databases separately with `kolach download`; specialisation
+needs `--databases dbcan graftm`.
+
+Check a new environment:
+
+```bash
+kolach --version
+graftM --version          # GraftM v0.15.1
+hmmsearch -h | head -2    # HMMER 3.4
+run_dbcan version         # dbCAN version: 5.2.9
+```
 
 ---
 

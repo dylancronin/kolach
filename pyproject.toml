@@ -18,6 +18,9 @@ dependencies = [
 # Only DeepKOALA inference needs PyTorch; the upstream deepkoala package itself is
 # installed from GitHub (see environment.yaml).
 deepkoala = ["torch>=2.0.0"]
+# GraftM marker refinement for `annotate --add-specialisations`. Its placement
+# tools (pplacer, guppy, mafft, FastTree, HMMER) come from conda; see environment.yaml.
+graftm = ["graftm==0.15.1"]
 
 [project.scripts]
 kolach = "kolach.cli:main"

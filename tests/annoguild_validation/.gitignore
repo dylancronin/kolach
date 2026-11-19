@@ -3,9 +3,10 @@ env/
 code/
 db/
 syncomm/
-graftm_hmmer_work/
+graftm_hmmer_work*/
 *.tar.gz
 *.log
 clone.log
 install.log
 pip.log
+fresh_install/

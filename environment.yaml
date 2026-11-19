@@ -14,7 +14,9 @@ dependencies:
   - dbcan=5.2.9
   # GraftM marker refinement (kolach annotate --add-specialisations). GraftM itself
   # is installed with pip below: its bioconda recipe pins HMMER 3.2.1, which
-  # would downgrade the HMMER 3.4 used by KOfam and dbCAN.
+  # would downgrade the HMMER 3.4 used by KOfam and dbCAN. Its pure-Python
+  # dependency `extern` also comes from pip: the conda-forge build is tagged
+  # cp38, which `pip check` rejects on Python 3.11.
   - pplacer
   - mafft
   - fasttree
@@ -24,7 +26,6 @@ dependencies:
   - taxtastic
   - biom-format
   - dendropy
-  - extern
   - fastalite
   - bird_tool_utils_python
   - snakemake-minimal=9

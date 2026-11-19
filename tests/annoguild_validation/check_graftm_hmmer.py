@@ -16,8 +16,10 @@ HERE = Path(__file__).resolve().parent
 TEMPORAL = Path("/fs/scratch/PDS0325/Cronin/temporal-paper/temporal_git/temporal_paper_202505/GraftM-analysis")
 SYNCOMM = Path("/fs/scratch/PDS0325/Cronin/syncomm/annoguild/graftm_processing")
 PACKAGES = HERE / "db" / "graftm"
-WORK = HERE / "graftm_hmmer_work"
 THREADS = sys.argv[1] if len(sys.argv) > 1 else "4"
+# Optional label, e.g. "shared_env", to keep results from another environment apart.
+LABEL = f"_{sys.argv[2]}" if len(sys.argv) > 2 else ""
+WORK = HERE / f"graftm_hmmer_work{LABEL}"
 
 
 def read_tax(path):
@@ -72,8 +74,10 @@ def main():
         summary["B_syncomm"][package] = compare("B", package, expected, observed, mismatches)
     versions = subprocess.run(["hmmsearch", "-h"], capture_output=True, text=True).stdout.splitlines()[1]
     summary["hmmer"] = versions.strip("# ").strip()
-    (HERE / "graftm_hmmer_check.json").write_text(json.dumps(summary, indent=2) + "\n")
-    with open(HERE / "graftm_hmmer_mismatches.tsv", "w") as handle:
+    summary["pplacer"] = subprocess.run(["pplacer", "--version"], capture_output=True, text=True).stdout.strip()
+    summary["environment"] = sys.prefix
+    (HERE / f"graftm_hmmer_check{LABEL}.json").write_text(json.dumps(summary, indent=2) + "\n")
+    with open(HERE / f"graftm_hmmer_mismatches{LABEL}.tsv", "w") as handle:
         handle.write("check\tpackage\tsequence\thmmer_3.2.1\thmmer_3.4\n")
         for row in mismatches:
             handle.write("\t".join(row) + "\n")
