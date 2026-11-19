@@ -31,6 +31,9 @@ dependencies:
   - fastalite
   - bird_tool_utils_python
   - snakemake-minimal=9
+  # 1.23.1's wheel requires packaging>=26.1 while Snakemake 9 requires packaging<26;
+  # bioconda installs both, leaving `pip check` broken. 1.23.0 is consistent.
+  - snakemake-interface-common<1.23.1
   - pytorch
   - pandas
   - tqdm
